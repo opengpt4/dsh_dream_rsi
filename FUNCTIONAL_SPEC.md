@@ -1,9 +1,17 @@
 # DeepSeek Dream-RSI Harness Plugin 功能規格
 
-**版本**：1.1-draft  
-**狀態**：待確認後實作  
+**版本**：1.1
+**狀態**：Implementation baseline，持續擴充中
 **適用架構**：Cordis Plugin  
 **主要依據**：[requirement1](requirement1)、[requirement2](requirement2)、[requirement3](requirement3)
+
+目前 repository 已驗證 Node.js/TypeScript ESM baseline、Cordis reversible
+tool lifecycle、mock embodied tools/events、Discovery/SQLite storage、Replay、
+Q/C/P/M evaluator、task-level split、Monotonic Gate、immutable snapshot、
+process-isolated evaluator、lease lock 與 validated configuration。`npm test`
+目前通過 24 個測試。Profile/patch adapter、完整 OS/container sandbox、
+candidate generation、canary deployment、tool synthesis 與 real simulator
+adapter 仍屬後續實作範圍。
 
 ## 1. 目的與範圍
 
@@ -60,11 +68,16 @@ Plugin 應採用 Cordis 的 Context、Service、Schema 與 plugin lifecycle 慣�
 
 ### 4.1 Plugin lifecycle
 
-- `apply(ctx, config)`：註冊服務、事件、指令與配置 schema。
+- `apply(ctx, config?)`：先驗證配置，再註冊服務、事件、指令與配置 schema。
 - `ready`：確認資料庫、policy、工具 registry 與沙盒能力可用。
 - `dispose`：停止 worker、關閉資料庫、取消未完成的離線演進。
 
 Plugin 的註冊必須使用 DSH/Cordis 提供的 context 與可逆 effect。正式掛載應支援 Harness profile 與 `cordis.patch.yml`；卸載 plugin 後，tools、events、services 與 worker 不得殘留。
+
+目前 `apply()` 已透過 `ctx.effect()` 管理 embodied tool registration，並在
+disposer 中反向 unregister。`resolveDreamRsiConfig()` 提供安全預設：
+evolution、auto-deploy 與 embodied execution 預設關閉；invalid split ratios
+或 `autoDeploy=true` 但 evolution 未啟用時，會在任何 registration 前失敗。
 
 ### 4.2 建議 Cordis 服務
 
