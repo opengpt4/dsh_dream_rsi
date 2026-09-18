@@ -78,7 +78,7 @@ MVP 完成必須同時滿足：
 | Real profile/patch adapter | Not started | Depends on selected DSH profile contract |
 | Candidate generation, AST guard, deployment registry | Not started | Next implementation track |
 
-Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 20 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox.
+Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 24 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox.
 
 ## 4. Delivery Strategy
 
