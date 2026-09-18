@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -43,4 +44,27 @@ test('single writer lock prevents concurrent ownership and releases safely', () 
   assert.throws(() => second.acquire(), /already held/);
   first.release();
   assert.doesNotThrow(() => second.withLock(() => 'completed'));
+});
+
+test('single writer lock recovers an expired lease', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'dream-rsi-expired-lock-'));
+  const lockPath = join(directory, 'evolution.lock');
+  const first = new SingleWriterLock(lockPath, 300_000);
+  const second = new SingleWriterLock(lockPath, 300_000);
+
+  first.acquire();
+  writeFileSync(join(lockPath, 'lease.json'), JSON.stringify({ expiresAt: Date.now() - 600_000 }));
+  assert.doesNotThrow(() => second.acquire());
+  second.release();
+});
+
+test('heartbeat requires ownership and refreshes a held lease', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'dream-rsi-heartbeat-'));
+  const lockPath = join(directory, 'evolution.lock');
+  const lock = new SingleWriterLock(lockPath, 300_000);
+
+  assert.throws(() => lock.heartbeat(), /not held/);
+  lock.acquire();
+  assert.doesNotThrow(() => lock.heartbeat());
+  lock.release();
 });
