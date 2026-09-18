@@ -1,9 +1,9 @@
 # DeepSeek Dream-RSI Harness Plugin 功能規格
 
-**版本**：1.0-draft  
+**版本**：1.1-draft  
 **狀態**：待確認後實作  
 **適用架構**：Cordis Plugin  
-**主要依據**：[requirement1](requirement1)、[requirement2](requirement2)
+**主要依據**：[requirement1](requirement1)、[requirement2](requirement2)、[requirement3](requirement3)
 
 ## 1. 目的與範圍
 
@@ -15,7 +15,7 @@
 2. **離線做夢**：使用歷史軌跡建立確定性 Replay Simulator，不呼叫模型、不執行沙盒。
 3. **受控部署**：候選 policy 只有在品質不劣化、安全檢查與資源門檻都通過後才可啟用。
 
-Embodied AI 在本規格中指「感知/狀態 -> 決策 -> 行動 -> 環境回饋」的閉環介面。第一期支援數位環境與工具沙盒；實體機器人、真實硬體驅動器與安全認證不在 MVP 範圍內，但介面需可擴充。
+Embodied AI 在本規格中指「感知/狀態 -> 決策 -> 行動 -> 環境回饋」的閉環介面。第一期以 DSH 既有 agent loop 為主，透過 tools、events 與 backend service 接入數位環境；不預設替換整個 loop。實體機器人、真實硬體驅動器與安全認證不在 MVP 範圍內，但介面需可擴充。
 
 ## 2. 目標與非目標
 
@@ -64,11 +64,16 @@ Plugin 應採用 Cordis 的 Context、Service、Schema 與 plugin lifecycle 慣�
 - `ready`：確認資料庫、policy、工具 registry 與沙盒能力可用。
 - `dispose`：停止 worker、關閉資料庫、取消未完成的離線演進。
 
+Plugin 的註冊必須使用 DSH/Cordis 提供的 context 與可逆 effect。正式掛載應支援 Harness profile 與 `cordis.patch.yml`；卸載 plugin 後，tools、events、services 與 worker 不得殘留。
+
 ### 4.2 建議 Cordis 服務
 
 - `ctx.deepseekHarness`：任務執行、LLM 呼叫與 tool dispatch facade。
 - `ctx.dreamRsi`：Discovery Store、Replay、Evaluator、Evolution、Deployment facade。
 - `ctx.dreamRsi.metrics`：成本、品質、版本與失敗指標。
+- `ctx.embodiedBackend`：依 session 提供 observation、action 與 world-state 存取。
+
+Embodied plugin 的預設整合方式是註冊 tools、typed events 與 backend service；只有在需要自訂規劃迴路時，才另外掛載 loop plugin。不得讓 Dream-RSI 核心依賴特定 simulator 或機器人 SDK。
 
 ### 4.3 事件
 
@@ -82,6 +87,10 @@ Plugin 應採用 Cordis 的 Context、Service、Schema 與 plugin lifecycle 慣�
 - `dream-rsi/evolution-result`
 - `dream-rsi/policy-deployed`
 - `dream-rsi/rollback`
+- `embodied/action-started`
+- `embodied/action-completed`
+- `embodied/frame`
+- `embodied/error`
 
 事件 payload 必須包含 `taskId`、`policyVersion`、時間戳與 correlation id；不得在一般 log 中寫入 API key、完整秘密或不必要的個人資料。
 
@@ -119,6 +128,13 @@ Plugin 應採用 Cordis 的 Context、Service、Schema 與 plugin lifecycle 慣�
 3. Policy 只可從已註冊 action/tool schema 選擇行動。
 4. 每個 action 必須有 timeout、取消信號、資源預算與結果狀態。
 5. 感知內容可包含文字、結構化狀態或外部 observation reference；大型二進位資料應使用外部 artifact store。
+6. 每個 Harness session 必須有獨立的 backend context，session 結束時釋放場景、連線與暫存狀態，不得跨 session 洩漏 world state。
+7. MVP 必須註冊以下 model-callable tools：
+  - `embodied_perceive`：依 sensor 類型回傳精簡 observation、物件列表、pose 與 timestamp。
+  - `embodied_act`：執行受 allowlist 保護的高階 action，例如 `move_relative`、`goto`、`pick`、`place`、`open`。
+  - `embodied_query_state`：查詢 room graph、物件、導航節點或其他受控 world model 資訊。
+8. `embodied_act` 必須回傳 `success`、`actionId`、result/error 與最新 state reference；開始、完成及錯誤都必須發布 typed event。
+9. observation 輸出須以模型可用的短文字與結構化 JSON 為主；影像、depth、point cloud 等大型資料應使用 artifact reference，只有明確要求時才內嵌 base64。
 
 ### FR-03 Discovery DAG
 
@@ -133,13 +149,26 @@ Plugin 應採用 Cordis 的 Context、Service、Schema 與 plugin lifecycle 慣�
 
 系統必須支援依 task、policy、時間與結果查詢，並對 `taskId`、`parentId`、`policyVersion` 建立索引。寫入需具備冪等鍵，避免重試造成重複節點。
 
+每個 embodied episode 需額外記錄 `sessionId`、`environmentId`、observation reference、actionId、action type、參數 hash、result reference 與 episode step，讓事件、工具呼叫與 Discovery DAG 可互相重播。
+
 ### FR-04 Replay Simulator
 
 1. Simulator 只讀取已封存的 Discovery DAG 與 artifact，不呼叫 DeepSeek、不啟動 Docker/外部工具。
 2. 相同輸入與相同 simulator snapshot 必須得到相同結果。
-3. 命中已知節點時回傳歷史結果；未命中時回傳 `BOUNDARY_MISS` 並停止該分支。
-4. 必須記錄 hit、miss、visited nodes、模擬成本與關鍵路徑。
-5. Replay snapshot 必須有版本與 hash，評估報告需引用該 snapshot。
+3. Replay 不得只以 `nodeId` 判斷命中。每次 action 必須使用以下 immutable replay key：
+
+  ```text
+  environmentVersion
+  + stateHash
+  + actionType
+  + normalizedActionParams
+  + observationHash
+  ```
+
+4. 命中已知 action 時回傳歷史 transition；未命中時回傳 `BOUNDARY_MISS`，並記錄可用替代 action 與停止原因。
+5. Simulator 必須支援 counterfactual branch：同一 state 可比較多個歷史 action，而不必重跑 LLM 或外部環境。
+6. Replay 結果必須包含 hit、miss、visited nodes、counterfactual branches、模擬成本與關鍵路徑。
+7. Replay snapshot 必須有版本與 hash，評估報告需引用該 snapshot。
 
 ### FR-05 Policy Evolution
 
@@ -173,6 +202,16 @@ S = wq*Q - wc*C + wp*P - lambda*M
 
 「不劣化」與「顯著改善」需分開判定，避免微小噪聲造成頻繁 hot-swap。
 
+評估資料必須依 task 與 episode 分為三組：
+
+- `train`：允許 Evolution Agent 使用，預設 70%。
+- `validation`：用於調整候選參數，預設 15%。
+- `holdout`：候選生成完成後才可使用，預設 15%，不可被候選程式讀取。
+
+候選必須在 holdout 上通過最低品質、成本與安全門檻。評估報告要分別列出每個 task family 的結果、信賴區間與樣本數，不能只依賴全體平均分數。
+
+評估器、baseline policy、holdout 資料與門檻配置必須在候選程式之外的隔離 process/container 執行。候選不得讀取或修改 evaluator、測試資料、deployment registry、秘密或評估內部狀態。評估結果需包含 evaluator version、source hash 與簽章。
+
 ### FR-07 Tool Synthesis
 
 1. 從成功軌跡提出工具候選，不得直接啟用。
@@ -180,6 +219,7 @@ S = wq*Q - wc*C + wp*P - lambda*M
 3. 生成工具先在隔離 runner 執行單元測試、contract test 與 AST guard。
 4. 經管理者核准或明確自動化政策通過後，才寫入 Dynamic Tool Registry。
 5. 工具可被停用、版本化、回滾；policy 不得依賴已停用工具。
+6. 合成的 embodied tool 預設只能使用高階 action primitive，不得直接暴露 joint velocity、raw motor command 或未封裝的硬體通道。
 
 ### FR-08 版本、回滾與故障處理
 
@@ -188,6 +228,8 @@ S = wq*Q - wc*C + wp*P - lambda*M
 - 啟用後若錯誤率、成本或品質超過警戒線，標記 degraded 並可自動回滾。
 - 回滾必須產生事件、原因、操作者與前後版本。
 - 離線演進失敗不可影響線上任務執行。
+- 同一時間只能有一個 evolution/deployment writer；job 需要可恢復、可取消並具備 lease timeout。
+- policy、tool、evaluator 與 replay snapshot 必須透過 immutable artifact reference 綁定，避免評估後輸入被替換。
 
 ## 6. 資料模型
 
@@ -200,8 +242,11 @@ S = wq*Q - wc*C + wp*P - lambda*M
 - `Evaluation`：Q/C/P/M、總分、測試數、通過比例與 guard 結果。
 - `ToolVersion`：schema、source hash、測試結果、權限與狀態。
 - `Deployment`：版本、canary 結果、操作者與 rollback 資訊。
+- `Episode`：session、environment、step、observation、action、transition 與 outcome。
+- `EvaluationSplit`：train/validation/holdout 的 task membership、版本與 hash。
+- `CapabilityProfile`：環境支援的 sensors、actions、座標系、風險等級與安全限制。
 
-MVP 優先使用 SQLite，透過 repository interface 隔離儲存層；多 worker 或多進程部署時再切換 Postgres。不可把資料庫實作細節洩漏到 Cordis command handler。
+MVP 優先使用 SQLite，透過 repository interface 隔離儲存層；多 worker 或多進程部署時再切換 Postgres。SQLite 模式必須使用單一 writer queue 與 deployment lock。不可把資料庫實作細節洩漏到 Cordis command handler。
 
 ## 7. 安全與治理
 
@@ -213,8 +258,15 @@ MVP 優先使用 SQLite，透過 repository interface 隔離儲存層；多 work
 - 每次任務的 CPU、記憶體、時間、網路與輸出大小上限。
 - prompt injection 與 tool output 不得修改 policy、配置或權限。
 - 高風險 action 預設要求人工核准。
+- `embodied_act` 必須依 session、tool 與 action risk 檢查權限；危險 action 要求明確 confirmation，且預設只開放安全 primitive。
+- backend 必須提供 timeout、取消與 emergency stop/disable hook；硬體整合需由 backend 自行完成 fail-safe。
+- `embodied_act` 必須遵守狀態機：`REQUESTED -> AUTHORIZED -> EXECUTING -> COMPLETED|FAILED|CANCELLED|TIMEOUT|EMERGENCY_STOP`。
+- 每個 action 必須有 lease、idempotency key、session-level mutex、rate limit；emergency stop 後禁止自動重試。
+- 所有 embodied backend 必須宣告 capability profile；沒有宣告的 sensor、action、座標系或速度限制不得被呼叫。
 - log redaction、資料保留期限與刪除機制。
 - policy deployment audit trail。
+
+AST guard 不是隔離措施。候選 policy、tool 與 evaluator 必須在最小權限、唯讀輸入、無秘密、受限網路的隔離 runner 執行；部署前需驗證 artifact checksum 與簽章。
 
 ## 8. 可觀測性
 
@@ -230,6 +282,8 @@ log 必須可用 `taskId`、`policyVersion`、`evaluationId` 與 `correlationId`
 
 ## 9. 建議目錄結構
 
+建議拆分為兩個可獨立測試與部署的 capability：`dream-rsi-core` 負責探索策略生命週期，`dsh-embodied` 負責感知/行動 backend。兩者透過 Cordis service、typed event 與通用 action schema 連接。沒有 embodied backend 時，core 仍必須可正常運作。
+
 ```text
 deepseek_dream_rsi/
   index.ts                  # Cordis apply(ctx, config)
@@ -238,6 +292,7 @@ deepseek_dream_rsi/
     deepseek.ts             # Harness LLM adapter
     cordis.ts               # Cordis API 相容層
     environment.ts          # Embodied Environment adapter
+    embodied-backend.ts     # per-session backend facade
   runtime/
     task-runner.ts
     action-loop.ts
@@ -259,6 +314,7 @@ deepseek_dream_rsi/
   tools/
     registry.ts
     synthesizer.ts
+    embodied.ts             # perceive / act / query_state
   deployment/
     version-manager.ts
     canary.ts
@@ -266,6 +322,25 @@ deepseek_dream_rsi/
   commands/
     dream.ts
   metrics/
+  tests/
+```
+
+Embodied capability 可使用獨立 package 或同一 monorepo package：
+
+```text
+dsh-embodied/
+  manifest.json              # DSH plugin manifest
+  index.ts                   # tools/events/services registration
+  backend/
+    simulator.ts
+    session-context.ts
+  tools/
+    perceive.ts
+    act.ts
+    query-state.ts
+  safety/
+    capability-profile.ts
+    action-state-machine.ts
   tests/
 ```
 
@@ -279,6 +354,7 @@ model:
   name: deepseek-chat
   timeout_ms: 60000
   max_retries: 2
+  api_version: pinned
 
 storage:
   url: sqlite:///data/discovery.db
@@ -292,6 +368,22 @@ runtime:
 replay:
   max_nodes: 10000
   miss_rate_max: 0.05
+  key_schema_version: 1
+  require_counterfactuals: true
+
+evaluation:
+  train_ratio: 0.70
+  validation_ratio: 0.15
+  holdout_ratio: 0.15
+  minimum_holdout_samples: 20
+  confidence_level: 0.95
+  evaluator_isolation: required
+
+operations:
+  evolution_lock: data/locks/evolution.lock
+  deployment_lock: data/locks/deployment.lock
+  job_lease_ms: 300000
+  writer_mode: single
 
 evolution:
   enabled: false
@@ -303,19 +395,31 @@ evolution:
 rollback:
   stable_versions: 3
   error_rate_threshold: 0.20
+
+embodied:
+  enabled: false
+  backend: simulator
+  require_action_confirmation: true
+  allow_actions: [move_relative, goto, pick, place, open]
+  observation_artifact_threshold_bytes: 65536
+  action_lease_ms: 30000
+  max_actions_per_minute: 30
+  emergency_stop_on_timeout: true
 ```
 
 ## 11. MVP 實作順序
 
-1. Cordis plugin lifecycle、config schema、權限與 `dream status`。
-2. DeepSeek/Harness adapter 與最小 task/action loop。
-3. SQLite Discovery Repository 與不可變 replay snapshot。
-4. Replay Simulator、Evaluator 與可重現測試。
-5. AST/resource guard、evaluate-only evolution 與報告。
-6. Monotonic Gate、版本管理、人工核准與 rollback。
-7. Tool Registry；最後才加入 Tool Synthesizer。
-8. Embodied Environment adapter 與 canary metrics。
-9. 在離線基準任務上調整權重，避免直接拿單一任務的最佳 policy 宣稱跨任務泛化。
+1. Cordis plugin lifecycle、profile/patch 掛載、manifest/config schema、權限與 `dream status`。
+2. DeepSeek/Harness adapter、既有 agent loop 整合與最小 task/action loop。
+3. Embodied backend、per-session state、capability profile 與 `perceive/act/query_state` tools/events。
+4. SQLite Discovery Repository、單一 writer lock 與不可變 replay snapshot。
+5. ReplayKey、counterfactual Replay Simulator、Evaluator 與可重現測試。
+6. train/validation/holdout split 與隔離 evaluator。
+7. AST/resource guard、evaluate-only evolution 與簽章報告。
+8. Monotonic Gate、版本管理、人工核准與 rollback。
+9. Tool Registry；最後才加入 Tool Synthesizer。
+10. canary metrics、Web UI/trace 可視化與 action state machine。
+11. 在多個 task family 上調整權重，避免直接拿單一任務的最佳 policy 宣稱跨任務泛化。
 
 ## 12. 驗收標準
 
@@ -328,16 +432,26 @@ rollback:
 - deployment、approval、rollback 均有 audit event。
 - 線上 current policy 與離線 evolution worker 隔離；evolution 故障不會中斷任務服務。
 - 停用工具後，任何新任務都不會再選到該工具。
+- DSH session 能看見 `embodied_perceive`、`embodied_act`、`embodied_query_state`，且每個 tool call 都能對應到 session 與 episode trace。
+- `embodied_act` 的開始、完成、錯誤事件可被其他 Cordis plugin 訂閱；action timeout 或拒絕不會留下未完成 worker。
+- 透過 profile 或 `cordis.patch.yml` 載入與卸載 plugin 後，所有註冊項目都能可逆清理。
+- evaluator 與 holdout 資料在候選程式隔離環境中執行；候選無法修改評估器或偽造成本/品質結果。
+- ReplayKey 能區分相同 state 下的不同 action，並能產生可重現的 counterfactual branch。
+- action state machine 能正確處理 authorization、timeout、cancel、emergency stop 與禁止重試。
+- 多 worker 同時要求 evolve/deploy 時，只有一個 job 取得 lock，其餘 job 能排隊或明確失敗。
+- observation artifact 具備 schema version、timestamp、座標系、checksum、retention 與刪除流程。
 - metrics 可區分模型成本、工具成本、回放成本與真實環境成本。
 
 ## 13. 待確認決策
 
 1. 目前使用的 Cordis 版本與 plugin API 是哪一套？需以實際版本補齊 adapter 方法名。
 2. DeepSeek Harness 是現有服務、Python library，或需要一併建立？
-3. 第一個 benchmark task 是程式碼修復、GPU kernel、數學搜尋，還是數位 embodied environment？
+3. 第一個 benchmark task 是程式碼修復、GPU kernel、數學搜尋，還是數位 embodied environment？建議先選 simulator，避免 MVP 綁定硬體。
 4. 自動部署是否永遠需要人工核准？建議 production 預設需要。
 5. 成本貨幣、品質函數與 action risk 分級由哪個上游系統提供？
 6. Discovery DAG 是否包含敏感資料？需先決定 retention、加密與 artifact store。
+7. DSH 實際 plugin manifest、`ctx.tools`、`ctx.events` 與 `ctx.services` API 版本，需依官方 SDK 校準 adapter。
+8. simulator 的 observation schema、座標系、action capability profile 與第一批 task family 需先固定。
 
 ## 14. 實作建議
 
@@ -347,3 +461,8 @@ rollback:
 - 把 `Q`、`C`、`P`、`M` 與總分全部呈現給管理者，避免單一分數掩蓋成本或安全退化。
 - 建立 shadow/canary 模式，先觀察新 policy，再允許熱替換。
 - 只有在工具 schema、測試、權限與回滾機制成熟後，才開啟自動工具合成。
+- 先以 simulator backend 驗證 observation/action/event 契約，再考慮 ROS、Isaac Sim 或其他硬體/模擬器 adapter。
+- 使用 DSH tracing 與 storage plugin 保存 episode artifact，避免將完整影像或 point cloud 塞進 LLM context。
+- 固定 DSH SDK、plugin manifest、Cordis patch 與 profile 的相容性測試，因 requirement3 指出目前仍可能處於 developer preview。
+- 對每個 task family 建立成功、劣化、boundary miss、timeout、取消與安全拒絕的 benchmark fixture。
+- 為 observation artifact 建立 schema version、checksum、加密、retention 與個資遮罩規則。

@@ -1,0 +1,173 @@
+📋 Here’s a thorough rundown: what embodied AI is, followed by a concrete way to expose it via a DeepSeek Harness (DSH) plugin.
+1. What is embodied AI? (The big picture)
+Short definition: Embodied AI is AI that has a “body” (physical or simulated) and interacts with an environment over time through perception, reasoning, and action—rather than just processing static data like images or text. NVIDIA defines it as integrating AI into physical systems so they can interact meaningfully with the physical world, and recent research emphasizes it as a paradigm for agents that perceive, plan, and act within surroundings to achieve goals.
+Key elements:
+Embodiment: the agent is coupled to an environment (robot, drone, vehicle, virtual character, or even a software “bot” in a simulated world).
+Closed-loop interaction: the agent senses, decides, acts, observes the effect, and updates—continuously.
+World modeling: maintaining an internal representation of objects, spatial relationships, physics, and cause–effect to support planning.
+Multimodality: fusing vision, audio, proprioception, lidar, touch, etc., depending on the body and sensors.
+Task/goal orientation: acting to accomplish tasks—navigation, manipulation, search-and-rescue, assembly, dialogue with users, etc.
+Typical components:
+Sensors/cameras/mics (perception)
+State estimation and mapping (localization, SLAM, object discovery)
+Policy/planner (often a learned model or LLM+tools)
+Motor/executive interface (low-level control API, e.g., joint velocities or high-level action primitives)
+Simulator or real hardware backend (Habitat, AI2-THOR, Isaac Sim, ManiSkill, ROS/Gazebo, etc.)
+Why embodied AI matters: it’s a step toward AGI because intelligence isn’t just language or vision; it’s the ability to persist in and affect the world over time, learn from interaction, and generalize across tasks.
+2. Common architectures and building blocks
+Most embodied systems look like a loop:
+Perception → World model/State → Planner/Policy → Action → Environment → new Observations
+In modern “LLM-powered” embodied AI, the planner is often an LLM/VLM that:
+consumes structured observations (JSON bounding boxes, segmentation masks, navigation graphs, text descriptions),
+uses tools/skills (move_to, pick, open, query_knowledge),
+emits actions parameterized for an execution backend.
+Common patterns:
+VLM/LLM-as-controller: a vision-language model interprets images/streams and emits high-level actions, while a lower-level controller ensures feasibility and safety.
+World model + planner: a learned model predicts how the environment changes under actions; a planner searches for action sequences that achieve goals.
+Hybrid: classical robotics modules handle estimation and control; learned models handle semantic understanding and task planning.
+Simulators and frameworks (for reference):
+Habitat, AI2-THOR, ManiSkill, Isaac Sim, Robosuite, etc., provide physics and sensor APIs for embodied agents in simulation.
+3. Quick intro to DeepSeek Harness and plugins
+DeepSeek Harness (DSH, “dsh”) is an open‑source agent runtime built on the Cordis kernel. In DSH, “everything is a plugin”: model adapters, tools, skills, sessions, storage, loops, and even the UI are plugins. A running dsh is a tree of plugins composed at boot via profiles and bundles.
+Key points relevant to building a plugin:
+Plugins expose: services (usable by other plugins), typed events (publish/subscribe), and reversible effects (e.g., registrations that auto‑unwind on unload).
+Profiles: a named composition in your Harness home that lists bundles to stack and where out‑of‑tree plugins live.
+Loading: you can mount plugins via patch files (cordis.patch.yml overlays), local filesystem paths, or published packages. The official docs provide a “Your first plugin” tutorial and a how‑to on writing capabilities with context (ctx), plus debugging guides.
+Given that your agent’s loop and tool registry are themselves swappable plugins, you can:
+keep the existing loop and only add tools that call into an embodied backend, or
+replace the loop entirely to implement an embodied agent planner that interacts with DSH for model calls and logging.
+4. How to implement embodied AI as a DeepSeek Harness plugin
+Goal and scope
+We’ll implement an “embodied AI” capability as a DSH plugin that:
+Connects Harness to a simulator or robot backend (e.g., Habitat or your own API).
+Exposes tool(s) that the model can call to perceive, act, and query state.
+Optionally publishes events so other plugins (e.g., UI) can visualize or monitor.
+You do NOT need to replace the whole Harness runtime. Adding tools/events is often the easiest way to integrate embodied behavior with DSH’s existing loop and session logging.
+High-level plugin design
+Plugin type: Tools + events (and optionally a small service wrapper around your backend).
+Exposed tools:
+perceive: return current observations (image, object list, pose, etc.)
+act: execute a primitive action (move by delta, goto location, pick/place, open door, etc.)
+query_state: ask for world model state (room graph, objects, last observations)
+Events:
+embodied:action_started / embodied:action_completed / embodied:frame / embodied:error
+Step 1: Scaffold a DSH plugin
+Using the official tutorial as a starting point, create a minimal plugin repo (TypeScript is typical for DSH plugins):
+Initialize a repo and dependencies:
+mkdir dsh-embodied-plugin && cd dsh-embodied-plugin
+pnpm init
+pnpm add @deepseek-ai/dsh  # or the appropriate harness version
+pnpm add -D typescript @types/node
+Create package.json with a DSH bundle manifest (dsh fields). See the architecture docs and “Your first plugin” guide for the exact keys (id, version, dsh:capabilities, entry, exports, etc.).
+Configure TypeScript (tsconfig.json) aligned with Harness expectations (module resolution, target, outDir).
+Step 2: Define the plugin entry and Cordis metadata
+Create an entry module that registers services/events/tools with Cordis via the plugin context (ctx):
+In your entry file, export a default function or object that DSH calls at load time. The docs show how capabilities are registered using ctx.services.register, ctx.events.define, and ctx.tools.register.
+Define a short identifier for your plugin in cordis.patch.yml to ensure it mounts into the desired layer and can configure defaults.
+Step 3: Implement the backend client
+Write a client to your embodied backend (simulator or robot):
+For a simulator, import its SDK and set up connection/scene initialization.
+For a robot, implement an HTTP/gRPC/ROS client with authentication and safety wrappers.
+Maintain a per-session context (e.g., a JavaScript Map or WeakMap keyed by session ID) so you can keep backend state per Harness session.
+Step 4: Expose tools the model can call
+In your plugin entry, register tools:
+Tool: embodied_perceive
+Inputs: optional fields like sensor_types, return_format.
+Behavior: query your backend for current observation, encode into a model‑friendly format (e.g., a concise description + base64 image and/or bounding boxes).
+Output: JSON with fields like rgb, depth, object_list, agent_pose, timestamp.
+Tool: embodied_act
+Inputs: action_type (e.g., “move_relative”, “goto”, “pick”, “place”, “open”), parameters (dx, dy, dz, object_id, etc.), optional safety constraints.
+Behavior: send action to backend, await completion or timeout, emit events for start/complete/error.
+Output: success boolean, resulting state snapshot (e.g., new pose, gripper state, errors).
+Tool: embodied_query_state
+Inputs: query (e.g., “list all objects in current room,” “return navigation graph nodes”) or a small DSL.
+Behavior: read from the world model / backend state and return a compact JSON answer.
+Registration pattern (sketch):
+import { PluginContext } from '@deepseek-ai/dsh'; // import names as per docs
+export default async function ({ tools, events, services }: PluginContext) {
+  // define events
+  const ActionStarted = events.define<{ actionId: string; params: any }>('embodied:action_started');
+  const ActionCompleted = events.define<{ actionId: string; result: any }>('embodied:action_completed');
+  tools.register({
+    id: 'embodied_perceive',
+    description: 'Get current observation from the embodied environment (sim/robot). Returns RGB, objects, pose, etc.',
+    schema: {
+      type: 'object',
+      properties: {
+        return_b64_image: { type: 'boolean' },
+        include_objects: { type: 'boolean' }
+      }
+    },
+    async execute({ return_b64_image, include_objects }, ctx) {
+      // ctx provides session/services; e.g., identify which session this is
+      const sessionId = ctx.session?.id;
+      // call your backend client; map result to JSON
+      const obs = await backendClient.observation(sessionId);
+      return {
+        rgb: return_b64_image ? obs.rgbBase64 : undefined,
+        objects: include_objects ? obs.objects : [],
+        pose: obs.pose,
+        timestamp: obs.timestamp
+      };
+    }
+  });
+  tools.register({
+    id: 'embodied_act',
+    description: 'Execute a low-level action in the embodied environment (move/goto/pick/place/open).',
+    schema: {
+      type: 'object',
+      properties: {
+        action_type: { type: 'string' },
+        parameters: { type: 'object' },
+        timeout_ms: { type: 'number' }
+      },
+      required: ['action_type']
+    },
+    async execute({ action_type, parameters, timeout_ms }, ctx) {
+      const actionId = generateId();
+      await ActionStarted.publish({ actionId, params: { action_type, parameters } });
+      try {
+        const result = await backendClient.execute(ctx.session?.id, action_type, parameters, { timeout_ms });
+        await ActionCompleted.publish({ actionId, result });
+        return { success: true, actionId, result };
+      } catch (err: any) {
+        return { success: false, actionId, error: err.message };
+      }
+    }
+  });
+  // similarly register embodied_query_state
+}
+Notes:
+Use ctx to access session, logging, and other services as documented.
+Keep outputs concise to stay within model context; consider summarizing long lists and optionally using DSH’s storage plugin to persist large blobs with references.
+Step 5: (Optional) Expose a service or custom loop
+If you want more than tools:
+Expose a service (EmbodiedBackend) that other plugins can use directly, via ctx.services.register.
+Optionally replace or wrap the agent loop to interleave embodied actions and planning; since the loop itself is a replaceable plugin, you can mount a custom loop plugin that uses the same backend client.
+Step 6: Safety and permissions
+Because embodied AI can act on hardware:
+Add a configuration gate in your plugin to require explicit enable‑per‑session or per‑tool, e.g., a tool field confirm_dangerous_action: boolean.
+Use DSH’s sandboxing/permissions hooks (if available in your profile) to constrain which sessions can call act tools.
+Limit “act” tools to a safe set of primitives by default (e.g., no direct joint commands; use high‑level goto/pick/place).
+Step 7: Wire into a DSH profile and test
+Add your plugin to your Harness profile’s plugin list (or via cordis.patch.yml) as shown in the architecture docs.
+Run the Web UI (npx @deepseek-ai/dsh web) and load a session.
+In the chat, verify tools appear in the model’s tool list and invoke them:
+“Get me a snapshot of the current room.”
+“Move 0.5 meters forward.”
+“Go to the kitchen table and tell me what objects are on it.”
+Check the Harness logs and your emitted events to ensure actions travel to your backend correctly.
+Step 8: Extend and integrate
+Add skills (prompt templates or sub‑agents) that orchestrate perception and action tools for higher‑level tasks (“Find a red mug and bring it to the desk”).
+Integrate with UI plugins to render observation images or action traces.
+Tie into DSH’s session and storage plugins to replay episodes and analyze failures.
+5. Practical tips and gotchas
+Prefer high‑level actions: instead of raw motor commands, expose primitives that ensure safety and abstract the simulator/robot API.
+Keep observations model‑friendly: short text plus small images or lists; avoid dumping full point clouds unless requested.
+Use DSH’s tracing: let Harness log tool calls and responses so you can replay episodes.
+Remember DSH is in developer preview: plugin contracts can evolve; check the docs and architecture notes for breaking changes before you ship.
+6. Recap
+Embodied AI is AI with a body that perceives, plans, and acts in an environment over time.
+DeepSeek Harness is a plugin‑first agent runtime where models, tools, loops, and sessions are all swappable plugins managed by the Cordis kernel.
+To implement embodied AI as a DSH plugin, create a plugin that registers tools (perceive, act, query_state) and optionally events/services to interface with a simulator or robot backend, then mount it via a profile and let the Harness model use those tools to interact with the world.
+For exact manifest schemas, plugin contract details, and how to use ctx.services/events/effects, consult the official Harness docs: “Your first plugin”, the “Develop plugin howto (capabilities with ctx)”, and architecture docs.
