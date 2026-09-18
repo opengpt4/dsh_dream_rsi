@@ -11,6 +11,7 @@ export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { createReplayKey, REPLAY_KEY_SCHEMA_VERSION } from './replay/key.js';
 export { ReplaySimulator } from './replay/simulator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
+export { evaluateReplayIsolated } from './evolution/isolated-evaluator.js';
 export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
 export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG } from './evolution/monotonic-gate.js';
 export { createEvaluationSnapshot } from './evolution/snapshot.js';
