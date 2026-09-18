@@ -13,6 +13,8 @@ export { ReplaySimulator } from './replay/simulator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
 export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
 export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG } from './evolution/monotonic-gate.js';
+export { createEvaluationSnapshot } from './evolution/snapshot.js';
+export { SingleWriterLock } from './operations/single-writer-lock.js';
 
 export const name = 'dream-rsi';
 export const inject: string[] = [];
