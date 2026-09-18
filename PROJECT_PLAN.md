@@ -74,6 +74,7 @@ MVP 完成必須同時滿足：
 | Process-isolated evaluator with timeout | Done | `src/evolution/isolated-evaluator.ts` |
 | Lease/heartbeat single writer lock | Done | `src/operations/single-writer-lock.ts` |
 | Reversible Cordis tool registration | Done | `src/index.ts`, lifecycle test |
+| Configuration defaults and validation | Done | `src/config.ts`, config tests |
 | Real profile/patch adapter | Not started | Depends on selected DSH profile contract |
 | Candidate generation, AST guard, deployment registry | Not started | Next implementation track |
 

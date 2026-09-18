@@ -29,7 +29,7 @@ The design makes five commitments:
 4. **Reversible operations.** Plugin registration, writer ownership, policy deployment, and rollback are explicitly reversible.
 5. **Conservative claims.** Deterministic replay can evaluate behavior inside the recorded experience boundary; it cannot predict an unobserved environment transition.
 
-The current implementation is an engineering baseline rather than a completed empirical study. It contains mock embodied tools, discovery storage, deterministic replay, evaluation, splitting, gating, snapshots, process isolation, writer leases, and lifecycle tests. Candidate generation, AST/resource guards, production sandboxing, canary deployment, and real simulator adapters remain planned work.
+The current implementation is an engineering baseline rather than a completed empirical study. It contains validated configuration defaults, mock embodied tools, discovery storage, deterministic replay, evaluation, splitting, gating, snapshots, process isolation, writer leases, and lifecycle tests. Candidate generation, AST/resource guards, production sandboxing, canary deployment, and real simulator adapters remain planned work.
 
 ## 2. Contributions
 
@@ -463,6 +463,7 @@ The current implementation uses:
 | `src/evolution/snapshot.ts` | immutable content-addressed snapshot | isolation test |
 | `src/evolution/isolated-evaluator.ts` | child-process evaluator and timeout | isolation tests |
 | `src/operations/single-writer-lock.ts` | lease, heartbeat, expiry recovery | lock tests |
+| `src/config.ts` | validated safe defaults and nested configuration | config tests |
 | `src/index.ts` | Cordis entrypoint and reversible tool effect | lifecycle test |
 
 ### 12.3 Reproduction commands
@@ -475,7 +476,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 20 passing tests. These tests validate implementation invariants such as session isolation, action behavior, replay determinism, storage idempotency, evaluator formulas, split determinism, gate rejection, snapshot immutability, process evaluation, lock recovery, and lifecycle disposal.
+The current suite contains 24 passing tests. These tests validate implementation invariants such as configuration safety defaults, session isolation, action behavior, replay determinism, storage idempotency, evaluator formulas, split determinism, gate rejection, snapshot immutability, process evaluation, lock recovery, and lifecycle disposal.
 
 These results should be interpreted correctly. They establish a working software baseline; they do not establish that the system improves an external benchmark, generalizes across task families, or is safe for physical hardware.
 
@@ -562,7 +563,8 @@ The current implementation demonstrates these foundations with a reproducible 20
 
 | Requirement | Current status | Evidence or gap |
 |---|---|---|
-| Cordis plugin entrypoint | Implemented | `apply(ctx)` |
+| Cordis plugin entrypoint | Implemented | `apply(ctx, config?)` |
+| Configuration validation and safe defaults | Implemented | `src/config.ts` |
 | Reversible tool registration | Implemented | lifecycle test |
 | Embodied perception/action/state tools | Implemented with mock backend | embodied tests |
 | Typed action events | Implemented | embodied event module |
