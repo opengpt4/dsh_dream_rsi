@@ -1,0 +1,412 @@
+# DeepSeek Harness 自我學習 Plugin 技術設計規範  
+**代號：Dream-RSI Harness Plugin / deepseek_self_learning**  
+版本：0.1  
+狀態：可作為 DeepSeek Harness 代碼生成與工程落地規格
+
+> 本文根據你提供的 Dream-RSI 討論重寫與工程化。核心思想保留：不修改底層 LLM 權重，只進化 Harness 的「策略編排代碼」與「工具庫」。原文中 Gemini 等示例已泛化為 Harness 中已配置的凍結 LLM；離線評分矩陣做歸一化與安全門化；並補充 DeepSeek Harness 插件接口、目錄結構、驗收標準與代碼生成元提示。
+
+---
+
+## 1. 目標與非目標
+
+### 1.1 目標
+建立一個可載入 DeepSeek Harness 的自我學習 Plugin，使 Agent 能在**不修改底層 LLM 權重**的前提下，透過歷史探索軌跡進行離線「做夢」，遞歸優化：
+
+1. 探索調度策略：分支選擇、剪枝、並行、早停、UCB 權重、動態預算分配。
+2. 動態工具庫：將成功軌跡中的長鏈操作合成為可重用 Tool。
+3. 部署策略：只有新策略在離線評分與安全門上嚴格不差於舊策略時，才熱替換。
+
+### 1.2 非目標
+- 不訓練、不微調、不修改底層 LLM 權重。
+- 不讓 Evolution Agent 用自然語言 Prompt 直接指導搜尋策略，避免語義偏見。
+- 不允許 Plugin 執行任意 `os.system`、未受限網路、未定義自由變數。
+- 不保證模擬器能預測歷史邊界外的結果；邊界外仍須真實執行。
+
+---
+
+## 2. 設計原則
+
+1. **權重凍結，Harness 進化**：變聰明的是「LLM 被調用與組織的方式」。
+2. **歷史軌跡資產化**：所有真實探索寫入 Discovery DAG，成為離線世界。
+3. **確定性回放**：命中歷史節點 O(1) 返回，零 LLM、零 Docker。
+4. **單調不劣化**：新策略必須通過 Monotonic Yield Gate 才部署。
+5. **代碼級進化，非語義級進化**：只改 AST、控制流、調度邏輯，不塞高層自然語言經驗。
+6. **邊界即中斷**：模擬器遇到未命中節點，強制打斷並給邊界懲罰。
+7. **DeepSeek Harness 原生集成**：LLM 調用、工具執行、日誌與沙盒皆走 Harness 既有接口。
+
+---
+
+## 3. 系統架構
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                    DeepSeek Harness                          │
+│  ┌────────────────┐   ┌────────────────┐   ┌──────────────┐  │
+│  │ LLM Client     │   │ Tool Runtime   │   │ Sandbox      │  │
+│  └───────┬────────┘   └───────┬────────┘   └──────┬───────┘  │
+│          │                    │                   │          │
+│          ▼                    ▼                   ▼          │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │        deepseek_self_learning Plugin                   │  │
+│  │  Execution Runtime → Discovery DB → Replay Simulator   │  │
+│  │  Evolution Agent → Evaluator → Guardrails → Hot-Swap   │  │
+│  │  Tool Synthesizer → Dynamic Tool Registry              │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 3.1 核心模組
+| 模組 | 職責 |
+|---|---|
+| Execution Runtime | 載入當前 `policy_vN.py`，驅動任務，記錄 Discovery DAG |
+| Discovery DB | 持久化節點、邊、LLM 輸出、沙盒結果、分數、成本 |
+| Replay Simulator | 以歷史 DAG 為數據源，提供確定性回放 |
+| Evolution Agent | 元編程，生成 `policy_vN_candidate.py` |
+| Evaluator | 計算 `S(π)`，含品質、成本、並行、邊界懲罰 |
+| Guardrails | AST 檢查、語義無關約束、單調門、回滾 |
+| Tool Synthesizer | 從成功軌跡合成工具與單元測試 |
+| Hot-Swap Manager | 安全替換生產策略與工具版本 |
+
+---
+
+## 4. 核心資料模型
+
+### 4.1 Discovery DAG
+```python
+@dataclass
+class TreeNode:
+    node_id: str
+    task_id: str
+    parent_id: str | None
+    policy_version: str
+    action_type: str              # expand / mutate / prune / tool_call
+    tool_name: str | None
+    tool_input: dict
+    prompt_mutation: dict | None
+    llm_response: str | None
+    output_result: Any
+    sandbox_exit_code: int | None
+    stdout: str | None
+    stderr: str | None
+    score: float
+    token_cost: int
+    exec_time_ms: float
+    critical_path_ms: float | None
+    created_at: float
+```
+
+### 4.2 資料表建議
+- `tasks(task_id, goal, budget, status)`
+- `nodes(node_id, task_id, parent_id, ... , score, token_cost, exec_time_ms)`
+- `edges(parent_id, child_id)`
+- `policies(policy_id, version, code_hash, parent_version, score, status)`
+- `evaluations(eval_id, policy_id, q_norm, c_norm, p_norm, miss_rate, final_score, passed)`
+- `tools(tool_id, name, schema_json, code, tests, version, enabled)`
+
+儲存可用 SQLite/Postgres + JSONB。DAG 查詢需索引 `task_id, parent_id, policy_version`。
+
+---
+
+## 5. DeepSeek Harness Plugin 接口
+
+> 若 Harness 已有 Plugin 基類，以下接口作為適配層。若無，請生成 `HarnessPlugin` 抽象。
+
+```python
+class SelfLearningPlugin:
+    def __init__(self, config: dict, harness):
+        self.config = config
+        self.harness = harness
+        self.store = DiscoveryStore(config["discovery_db"])
+        self.policy = load_policy(config["current_policy_path"])
+        self.tool_registry = DynamicToolRegistry(config["tool_registry_path"])
+
+    def on_task_start(self, task: dict) -> None:
+        """記錄任務開始，載入當前策略。"""
+
+    def before_action(self, state: dict) -> dict:
+        """由當前 Policy 決定下一個 Action。"""
+        return self.policy.select_action(state, self.store.get_tree(state["task_id"]))
+
+    def after_action(self, state: dict, action: dict, result: dict) -> None:
+        """將 LLM 輸出、沙盒結果、成本寫入 Discovery DAG。"""
+        self.store.append_node(state, action, result)
+
+    def on_task_end(self, task: dict, result: dict) -> None:
+        """標記任務結束，觸發可選的增量工具合成。"""
+
+    def evolve_offline(self, task_id: str | None = None) -> dict:
+        """離線做夢：生成候選策略，回放評分，安全門，熱替換。"""
+        return EvolutionLoop(self).run(task_id)
+
+    def invoke_llm(self, prompt: str, **kwargs) -> str:
+        """必須走 Harness LLM Client，便於凍結模型與記錄成本。"""
+        return self.harness.llm.invoke(prompt, **kwargs)
+
+    def run_tool(self, name: str, args: dict) -> Any:
+        """必須走 Harness Tool Runtime 與沙盒。"""
+        return self.harness.tools.run(name, args)
+```
+
+### 5.1 Policy 接口
+```python
+class Policy:
+    def select_action(self, state: dict, tree: list[TreeNode]) -> dict: ...
+    def expand(self, node: TreeNode, context: dict) -> list[dict]: ...
+    def prune(self, node: TreeNode, stats: dict) -> bool: ...
+    def schedule(self, workers: int, frontier: list[TreeNode]) -> dict: ...
+    def score_candidate(self, candidate: dict) -> float: ...
+```
+
+---
+
+## 6. 線上執行迴路
+
+1. Harness 接收任務，載入 `current_policy.py`。
+2. Plugin 的 `before_action` 調用 Policy 選擇節點與動作。
+3. 動作經 Harness 調用凍結 LLM 或沙盒工具。
+4. `after_action` 將以下內容寫入 Discovery DB：
+   - 父節點、動作類型、Prompt 變異、LLM 回應
+   - 工具輸入輸出、Exit Code、Stdout/Stderr
+   - 分數、Token 成本、執行毫秒數
+5. 任務結束後，Discovery DAG 成為下一輪離線做夢的資料源。
+
+---
+
+## 7. 離線做夢與策略進化
+
+### 7.1 流程
+```text
+Discovery DB → Replay Simulator → Evolution Agent 生成候選 Policy
+      → 模擬器回放 → Evaluator 評分 → Guardrails 安全門
+      → 通過則 Hot-Swap，否則 Rollback
+```
+
+### 7.2 Replay Simulator
+```python
+class ReplaySimulator:
+    def __init__(self, history_tree: list[TreeNode]):
+        self.tree_map = {n.node_id: n for n in history_tree}
+        self.visited_nodes: list[str] = []
+
+    def execute_action(self, node_id: str) -> TreeNode | None:
+        if node_id in self.tree_map:
+            self.visited_nodes.append(node_id)
+            return self.tree_map[node_id]
+        # Miss：超出夢境邊界，打斷，不調 LLM / Docker
+        return None
+```
+
+### 7.3 評分矩陣：歸一化版
+原文：
+`S = Q - αC + βP`
+
+工程化後：
+```text
+Q_raw = max(score(v) for v in visited)
+C_raw = Σ(token_cost(v) + γ * exec_time_ms(v))
+P_raw = total_work_cost / max(critical_path_ms, 1)
+
+Q_norm = Q_raw / max(Q_ref, eps)
+C_norm = C_raw / max(C_budget, eps)
+P_norm = P_raw / max(P_ideal, eps)
+
+MissRate = miss_count / max(total_attempts, 1)
+BoundaryPenalty = λ * MissRate
+
+S = w_q * Q_norm - w_c * C_norm + w_p * P_norm - BoundaryPenalty
+```
+建議預設：
+`w_q=1.0, w_c=0.3, w_p=0.1, γ=0.1, λ=10.0`。  
+`Q_ref` 可用當前策略分數或歷史最佳分數。
+
+### 7.4 安全門
+新策略必須全部通過：
+1. AST 靜態檢查通過。
+2. `MissRate ≤ ε`，例如 0.05。
+3. 在 ≥95% 歷史 Test Cases 上，分數不低於當前策略。
+4. 無禁用 API、無未定義自由變數。
+5. 資源預算未超限。
+
+通過後才 `Hot-Swap`，否則 `Rollback`。
+
+---
+
+## 8. 安全護欄
+
+### 8.1 語義無關約束 Semantic-Bias Guard
+Evolution Agent 只能修改：
+- 控制流：if/else、loop、early stop
+- 調度邏輯：UCB、優先級、並行度、剪枝條件
+- 資料結構：frontier、priority queue、batch 分組
+
+禁止：
+- 將自然語言「經驗總結」寫入策略作為 Prompt 偏見。
+- 用高層語義直接堵死探索分支。
+
+### 8.2 AST 沙盒檢查
+所有 `policy_candidate.py` 與 `tool_candidate.py` 進入模擬器前：
+- 禁止 `os.system`、`subprocess`、`eval`、`exec`、未受限 `open`。
+- 禁止未聲明網路訪問。
+- 檢查 import 白名單。
+- 檢查變數定義與型別。
+
+### 8.3 單調增長門
+```python
+if new_score > current_score and safety_passed:
+    deploy(new_policy)
+else:
+    rollback()
+```
+
+### 8.4 回滾
+保留最近 N 個穩定版本。Hot-Swap 失敗或線上異常時，自動恢復上一版。
+
+---
+
+## 9. 工具合成
+
+Tool Synthesizer 掃描成功軌跡：
+1. 找出重複出現的長鏈操作。
+2. 提取參數與返回值。
+3. 生成 Python 函數與 JSON Schema。
+4. 生成單元測試。
+5. 寫入 Dynamic Tool Registry。
+6. 只有測試通過且 AST 安全時才啟用。
+
+```python
+@tool(
+    name="kernel_autotune",
+    schema={"params": {"dtype": "str", "block_size": "int"}},
+    tests=["tests/test_kernel_autotune.py"]
+)
+def kernel_autotune(dtype: str, block_size: int) -> dict:
+    ...
+```
+
+---
+
+## 10. 配置與目錄結構
+
+```yaml
+# config.yaml
+harness:
+  llm_model: "deepseek-chat"
+  sandbox: "docker"
+self_learning:
+  discovery_db: "sqlite:///discovery.db"
+  current_policy_path: "policies/current_policy.py"
+  tool_registry_path: "tools/registry.json"
+  dream_budget:
+    max_candidates: 8
+    max_replay_nodes: 10000
+  evaluator:
+    w_q: 1.0
+    w_c: 0.3
+    w_p: 0.1
+    gamma: 0.1
+    lambda_boundary: 10.0
+  safety:
+    miss_rate_max: 0.05
+    monotonic_pass_ratio: 0.95
+```
+
+```text
+deepseek_self_learning/
+  pyproject.toml
+  plugin.py
+  policies/
+    base.py
+    current_policy.py
+  discovery/
+    models.py
+    store.py
+  replay/
+    simulator.py
+  evolution/
+    agent.py
+    evaluator.py
+    loop.py
+  guardrails/
+    ast_guard.py
+    monotonic_gate.py
+  tools/
+    registry.py
+    synthesizer.py
+  config.yaml
+  tests/
+    test_replay.py
+    test_evaluator.py
+    test_guardrails.py
+```
+
+---
+
+## 11. 最小可用實現步驟
+
+1. 實作 `DiscoveryStore`：SQLite 寫入 `TreeNode`。
+2. 實作 `ReplaySimulator`：命中返回節點，Miss 返回 `None`。
+3. 實作 `HarnessEvaluator`：歸一化評分。
+4. 實作基線 `current_policy.py`：UCB 或貪心。
+5. 實作 `EvolutionAgent`：用 DeepSeek Harness 生成候選策略代碼。
+6. 實作 `ASTGuard` 與 `MonotonicGate`。
+7. 實作 CLI：
+   ```bash
+   python -m deepseek_self_learning evolve --task-id task_001 --budget 8
+   ```
+8. 接入 Harness hooks：`on_task_start / before_action / after_action / on_task_end`。
+9. 加入測試：零 LLM 回放、評分可復現、安全門拒絕劣化。
+
+---
+
+## 12. 驗收標準
+
+- [ ] 線上任務可完整記錄 Discovery DAG。
+- [ ] 離線回放期間 LLM 調用次數為 0，Docker 執行次數為 0。
+- [ ] 同一候選策略評分可重複計算，誤差 < 1e-6。
+- [ ] 劣化策略被 Monotonic Gate 100% 阻止。
+- [ ] AST 檢查能攔截 `os.system`、`eval`、未授權網路。
+- [ ] 工具合成產物附帶單元測試且可註冊。
+- [ ] 可觀測成本下降：Token、沙盒時間、關鍵路徑時間。
+- [ ] 跨任務轉移時，策略衰減有記錄與告警。
+
+---
+
+## 13. 給 DeepSeek Harness 的生成元提示
+
+以下可直接作為代碼生成指令：
+
+```text
+你是代碼生成引擎。請根據本 RFC 生成可用的 Python 插件 deepseek_self_learning。
+
+要求：
+1. 只輸出完整文件樹與代碼，不要解釋。
+2. 必須實現：
+   - DiscoveryStore：SQLite 儲存 TreeNode。
+   - ReplaySimulator：命中 O(1) 返回，Miss 返回 None。
+   - HarnessEvaluator：使用歸一化公式 S = w_q*Q_norm - w_c*C_norm + w_p*P_norm - lambda*MissRate。
+   - EvolutionAgent：讀取 current_policy.py，生成 policy_candidate.py，只改控制流與調度邏輯。
+   - ASTGuard：禁止 os.system、subprocess、eval、exec、未受限網路。
+   - MonotonicGate：新策略需在 ≥95% 歷史案例不劣化才部署。
+   - ToolSynthesizer：從成功軌跡生成工具與單元測試。
+   - SelfLearningPlugin：提供 on_task_start、before_action、after_action、on_task_end、evolve_offline。
+3. 所有 LLM 調用必須通過 harness.llm.invoke()，所有工具執行必須通過 harness.tools.run()。
+4. 使用 dataclasses、typing、sqlite3、ast、json、pytest。
+5. 提供 config.yaml、pyproject.toml、CLI、tests。
+6. 不要使用自然語言 Prompt 作為策略進化手段。
+7. 若 Harness 接口不存在，建立 adapter 層。
+```
+
+---
+
+## 14. 風險與邊界
+
+1. **模擬器邊界局限**：歷史未出現的方向無法預測，必須真實探索拓展。
+2. **跨任務衰減**：短流程 GPU 優化策略轉到長程算法重構，可能衰減 15%–25%。
+3. **語義偏見風險**：人類高層經驗可能降低探索多樣性，應禁止寫入策略。
+4. **作弊與獎勵駭客**：需 AST、安全門、資源預算、單調門多層防護。
+5. **基礎模型未進化**：本 Plugin 進化的是 Harness 編排層，不是底座 LLM 通用智商。
+
+---
+
+**結論**：  
+DeepSeek Harness 的自我學習 Plugin 應以 Dream-RSI 為思想骨架，將 RSI 標的從模型權重轉為策略代碼與工具庫；以 Discovery DAG 為經驗資產，以 Replay Simulator 為零成本夢境，以歸一化多目標評分與單調安全門為部署閘門。如此可在不碰高風險權重訓練的前提下，讓 Agent 以極低算力持續解鎖更優的算法探索空間。

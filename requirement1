@@ -1,0 +1,187 @@
+根據、修改及優化以下的討論及提議,生成技術文檔，引導deepseek harness 生成可用的自我學習plugin。
+
+Google DeepMind 聯合馬里蘭大學及維吉尼亞大學發布的論文《Dream-RSI: Recursive Self-Improvement via Evolving Worlds》，被視為探索人工智慧「遞歸自我改進（Recursive Self-Improvement, RSI）」領域的一項突破。
+
+傳統 RSI 的幻想通常是模型自動修改自身的 Transformer 權重並自我訓練，但这往往面臨權重修改易崩潰/作弊與重訓算力昂貴至極的致命困境。Dream-RSI 提出了全新的解決思維：模型權重一字未改，而是讓 AI 控制探索與搜尋策略的「外圍 Harness（編排層代碼）」進行遞歸自我進化。
+
+核心解構：Dream-RSI 的運作機制
+
+Dream-RSI 的靈感來自於「棋手復盤不必重新下棋，看歷史棋譜即可推演」。它將 AI 過去踩過的坑與探索路徑，轉化為可以進行反事實推演的離線世界。
+
+┌─────────────────────────────────────────────────────────┐ │ 1. 展現真實探索 │ │ (底層 Coding Agent 執行搜尋，記錄為「歷史發現樹」) │ └──────────────────────────┬──────────────────────────────┘ │ 寫入/擴充 ▼ ┌─────────────────────────────────────────────────────────┐ │ 2. 建立離線經驗模擬器 │ │ (將 Discover Tree 轉化為回放環境，無需重複調用 API) │ └──────────────────────────┬──────────────────────────────┘ │ 提供反事實推演場景 ▼ ┌─────────────────────────────────────────────────────────┐ │ 3. 離線「做夢」進化 │ │ (策略 Agent 生成新探索策略，在模擬器中回放評估「多快好省」) │ └──────────────────────────┬──────────────────────────────┘ │ Deploy 最佳策略 └───────────────────────────────┘ 
+
+整個系統分為三個相輔相成的階段：
+
+真實探索（Real Exploration）：
+
+當前的探索策略指揮凍結的底層大模型（如 Gemini 3.1 Pro 或 Gemini 3.7 Flash）去嘗試解決問題（如編寫 GPU Kernel 或優化算法）。
+
+過程中產生的所有代碼分支、沙盒編譯結果、執行延遲、錯誤訊息及評估得分，都會被存儲為一棵結構化的「發現樹（Discovery Tree）」。
+
+建立模擬器（Build Simulator）：
+
+將累積的歷史發現樹封裝為一個「經驗回放模擬器（Replay Simulator）」。
+
+在這棵樹覆蓋的範圍內，結果是完全確定且具備真實反饋的，無需重新調用大模型生成代碼，也不需要重複運行真實 Docker 沙盒。
+
+離線「做夢」與策略進化（Offline Dreaming & Improvement）：
+
+由另一個「策略開發 Agent」修改和編寫新的探索調度策略代碼。
+
+新策略在歷史模擬器中進行快速「回放/做夢」：“如果當初遇到這個節點時，我選擇早點剪枝/改走另一個分支，效果會如何？”
+
+絕不變差的保證：模擬器會依據「最終答案質量」、「算力消耗成本」及「併行利用效率」對新策略評分。只有當新策略綜合得分高於舊策略時才替換部署，保證了演進的單調遞增性。
+
+部署後的新策略進行下一輪真實探索，帶回更深的發現樹，使「夢境宇宙」也隨之增長，形成共生飛輪。
+
+實驗表現與成果數據
+
+在算法工程、數學極值與 GPU 算子優化等 8 項高難度任務中，Dream-RSI 展現出了顯著的算力壓榨能力：
+
+評比任務領域實測指標與表現比較算法工程 (Lasso 解算器)在與傳統在線搜尋 baseline (如 SimpleTES) 對比中，使用 Dream-RSI 的 Agent 調用次數從 51,200 次大幅縮減至 317 次，算力成本降幅達 162 倍，且運算速度更優。GPU 算子優化 (Kernel Bench)優化 VGG16 與 LayerNorm 時，達到相同極限性能下的生成次數分別減少了 2.43 倍與 1.79 倍；在 ConvDiv/ConvMax 任務中，同等算力下將性能提高了 2.09 倍與 1.44 倍。純數學極值問題在 Circle Packing (圓形堆積) 與 Sum Difference 問題中，刷新或追平了 Google 自身 AlphaEvolveV2 的最高紀錄。 
+
+論文產生的反直覺發現：人類語義指導的「副作用」
+
+論文中最引人注目的反直覺結論之一是：「人類寫入的高層次經驗/提示詞指導（Semantic Guidance），反而會降低 AI 的探索效率」。
+
+研究團隊嘗試把前幾輪探索踩坑的經驗總結成自然語言 Prompt（如「不要嘗試某類數據結構」）塞給 Agent，結果性能普遍下降。
+
+原因分析：複雜的長程科研搜尋需要極高的探索多樣性。過早進行高層次的自然語言歸納，相當於強加了人類的「先驗偏見（Semantic Bias）」，反而將潛在有價值的路線過早堵死。
+
+Dream-RSI 的優勢：不依賴抽象文字總結，而是讓策略直接在微觀的代碼級別（併行控制、分支優先級、動態剪枝）進行精確碰撞與自適應。
+
+客觀邊界與理智看待
+
+儘管 Dream-RSI 的成果震撼，但必須理性看待其邊界，防範媒體過度解讀：
+
+非基礎模型能力的進化：Gemini 本身沒有變聰明，變聰明的是「Gemini 被調用和組織的方式」。這屬於 Agent Harness/元探索層的 RSI，而非通用基座模型的通用智商突變。
+
+模擬器的邊界局限：「歷史經驗世界」無法預測邊界之外的未知結果。如果歷史記錄中從未嘗試過某一極端方向，做夢機制無法憑空預知其真實結果，仍然必須依靠真實世界的實體執行來拓展邊界。
+
+Dream-RSI 證實了：AI 的自我進化不一定非要碰高風險、昂貴且黑箱的「模型權重」。 通過將歷史軌跡資產化為「夢境」，讓探索策略在離線世界中自適應演進，AI 能以極低成本解鎖龐大的算法空間，為未來 Automated Science（自動化科學研究）提供了一套極具推廣價值的工程解答。
+
+Dream-RSI 能夠在「不重新調用 LLM 生成代碼」與「不執行實體 Docker 沙盒」的前提下完成離線評估，核心在於一套精密的策略評分矩陣（Strategy Scoring Function）與獨特的策略代碼架構。
+
+以下針對離線評估的具體數學邏輯、動態模擬機制以及跨任務泛化表現進行詳細拆解。
+
+一、 策略評分公式拆解 (Offline Evaluation Metric)
+
+在離线做夢（Offline Dreaming）階段，策略開發 Agent 會寫出一套新的調度代碼（Policy Code） \pi_{new}。該代碼會在歷史「發現樹（Discovery Tree）」構成的模擬器上運行。
+
+模擬器會從三個維度對新策略 \pi_{new} 進行嚴格的綜合量化評分 S(\pi_{new})：
+
+S(\pi_{new}) = Q(\pi_{new}) - \alpha \cdot C(\pi_{new}) + \beta \cdot P(\pi_{new}) 
+
+1. 質量得分 Q(\pi_{new}) (Quality Yield)
+
+機制：代表新策略在有限預算內，最終能找到的最高質量代碼/解法得分。
+
+計算：設新策略在模擬器中終止時，所有被訪問到的歷史節點集合為 \mathcal{V}_{visited}，則： Q(\pi_{new}) = \max_{v \in \mathcal{V}_{visited}} Score(v) 
+
+意義：如果新策略的剪枝邏輯過於激進，導致錯失歷史上記錄過的最高分解答，質量得分會直接跌落。
+
+2. 算力成本懲罰 C(\pi_{new}) (Compute Cost Penalty)
+
+機制：記錄新策略如果在真實環境執行時，會消耗多少大模型 Token 與 GPU 算力。
+
+計算： C(\pi_{new}) = \sum_{v \in \mathcal{V}_{visited}} \left( \text{TokenCost}(v) + \gamma \cdot \text{SandboxExecTime}(v) \right) 
+
+意義：\alpha 是調和係數。只有「找到更高分」或「用更少算力找到同等高分」的策略，才能獲得淨加分。這也是 Dream-RSI 能將算力成本降低 162 倍的核心約束。
+
+3. 併行與搜演效率獎勵 P(\pi_{new}) (Parallel Efficiency Bonus)
+
+機制：獎勵具備「高效動態併行調度」能力的策略（如異步分支擴展、早停機制）。
+
+計算： P(\pi_{new}) = \frac{\text{Total Work Cost}}{\text{Critical Path Time}} 
+
+意義：如果策略能有效利用多核或異步 Workers，在關鍵路徑時間（Critical Path Time）最短的情況下完成深度探索，將獲得 \beta 係數的額外加值。
+
+二、 離線「做夢」模擬器如何無縫回放？
+
+許多人好奇：策略代碼本質上是在下達命令（例如：「取當前最高分節點，對其進行變異 Prompt 擴展」），模擬器如何做到不調用 LLM 就給出反饋？
+
+打標與樹狀查表：歷史發現樹中，每個節點 v 都記錄了它的輸入 Parent、使用的 Prompt 變異策略、LLM 的輸出解答、編譯結果與效能。
+
+確定性回放 (Deterministic Replay)：當新策略 \pi_{new} 執行 expand(node, strategy_type) 時，模擬器會檢查樹中是否已有相同參數的子節點：
+
+Hit (命中)：立刻返回歷史記錄的解答與得分，時間開銷約等於 0 秒，Token 消耗 0。
+
+Miss (未命中/超出夢境邊界)：說明新策略企圖探索歷史未曾涉足的方向。此時模擬器會強制打斷該分支，並給予極大的邊界懲罰，確保評估完全在確定性驗證區塊內進行。
+
+三、 跨任務泛化表現 (Cross-Task Generalization)
+
+論文做了一組關鍵實驗：在 Task A（如 LayerNorm 優化）上進化出來的策略代碼 \pi_{A}^*，直接拿去給 Task B（如 ConvDiv 或 Circle Packing）使用，效果如何？
+
+結構級元策略（Meta-Harness）的強泛化：
+
+由於 Dream-RSI 進化的不是具體的 Prompt 文字，而是探索算法的數據結構與控制流（例如動態調整 UCB 探索係數、基於梯度變化的自適應 Batch 分支），這些策略具備高度的任務無關性（Task-Agnostic）。
+
+實驗顯示，在 GPU 算子優化任務上演進出的調度策略，轉移到純數學幾何問題（Circle Packing）時，依然比傳統的 MCTS 或 Standard Evolutionary Algorithm 展現出更高的搜演效率。
+
+泛化的極限與轉移衰減：
+
+當跨度過大（例如從「短流程 GPU 算子優化」轉移到「長程複雜 Lasso 算法重構」）時，策略的最佳化表現會有 15%–25% 的衰減。
+
+原因：不同任務的解答樹形狀（Search Space Topology）不同。短流程任務偏向於「寬而淺」的併行擴展，而複雜算法重構則需要「窄而深」的長期追蹤。
+
+總結
+
+Dream-RSI 的精髓在於將 RSI 的標的從模型權重轉化為策略代碼，並用「數學化的多目標評分矩陣 + 歷史數據模擬器」解決了安全與算力瓶頸。這證明了在下一代 AI Agent 系統中，編排層（Harness）的自我進化比單純追求基座模型尺寸更具實用價值。
+
+這份工程技術設計規範（RFC Specification），旨在將 Dream-RSI 的核心思想（離線經驗做夢與調度代碼自我演進），結合 AlphaEvolve / Voyager 的技能庫累積以及 Clinician / Reflexion 的長短期記憶更新機制，落地為一個可在產品環境運作的 Self-Evolving AI Agent Harness Engine。
+
+系統架構總覽 (System Architecture)
+
+本 Harness 系統跳過修改底層 LLM 權重的昂貴路徑，專注於 「策略編排代碼 (Policy Harness)」 與 「動態工具庫 (Dynamic Action Tools)」 的遞歸自我優化。
+
+1. 核心模組與模塊職責 (Core Components)
+
+系統分為「線上任務執行」與「離線做夢進化」雙迴路：
+
+Execution Runtime (線上執行引擎)：負責接收任務、調用凍結的底層大模型（如 Gemini 3.1 Pro / 3.7 Flash）、調度當前最佳策略代碼（Best Policy Code），並在 Docker 沙盒中執行工具動作。
+
+Discovery DB (發現樹數據庫)：持久化記錄探索歷程。保存包含 Prompt 變異、Tool Call 輸入輸出、沙盒 Exit Code、Stdout/Stderr、執行耗時與 Token 支出的全量 DAG（有向無環圖）。
+
+Replay Simulator (離線做夢模擬器)：提供確定性模擬介面。策略修改 Agent 在此模擬器中重放歷史軌跡，完全不觸發外部 LLM 與真實沙盒。
+
+Evolution Agent (策略演進器)：專職於元編程（Meta-programming）。讀取當前策略代碼並對調度邏輯、UCB 權重、動態剪枝條件進行程式碼級別的修訂。
+
+Tool Synthesizer (行動力合成器)：將線上探索中成功解決複雜問題的子步驟封裝為可重用的 Python 工具函數，寫入動態工具庫。
+
+2. 核心運作流程 (Engineering Sequence)
+
+線上任務探索與軌跡記錄
+系統收集真實環境的 Discovery Tree
+當前部署的 policy_vN.py 驅動 Agent 執行任務。每次調用工具與模型皆以 JSON 結構記錄至 DiscoveryDB，包含狀態節點、父節點 ID、成功/失敗指標與資源消耗。
+
+離線模擬器建構 (Offline Simulator Mocking)
+避免重複調用 LLM 造成高額成本
+系統定期取用最新的 DiscoveryDB 軌跡樹，將所有 LLM Response 與 Sandbox Result 封裝為鍵值對字典（Key-Value Cache）。對已知的節點查詢直接提供 O(1) 的模擬回演。
+
+離線「做夢」策略演進 (Offline Policy Dreaming)
+Evolution Agent 進行元編程
+Evolution Agent 讀取 policy_vN.py 與歷史做夢模擬器，生成修訂候選版 policy_vN_candidate.py。新策略在模擬器中執行，模擬器根據「綜合品質分」計算得分 S(\pi)。
+
+確定性防禦驗證與單調部署 (Safety Threshold Guard)
+確保新策略絕不比舊策略差
+系統對 S(candidate) 與 S(current) 進行比較。僅當候選策略得分顯著高於舊策略（且未突破安全邊界）時，自動發起 Hot-Swap (熱替換)，更新生產環境中的 current_policy.py。
+
+行動力合成 (Tool Synthesis & Skill Library Update)
+將發現轉化為原生 Tool
+Tool Synthesizer 掃描成功軌跡，提取重複出現的長鏈條操作代碼，自動模組化為全新的 API Tool（包含自訂單元測試），寫入 Dynamic Tool Registry 以擴展 Agent 行動力。
+
+3. 離線策略評估系統代碼實現 (Offline Simulator & Evaluator)
+
+以下為 Harness 核心組件：離線做夢模擬器與策略評分器 的完整生產級 Python 結構範例：
+
+import time from typing import Dict, List, Any, Optional from dataclasses import dataclass @dataclass class TreeNode: node_id: str parent_id: Optional[str] action_type: str tool_input: Dict[str, Any] output_result: Any score: float token_cost: int exec_time_ms: float class ReplaySimulator: """離線做夢模擬器：完全以歷史發現樹為數據源，零 LLM / 零 Docker 消耗""" def __init__(self, history_tree: List[TreeNode]): self.tree_map: Dict[str, TreeNode] = {node.node_id: node for node in history_tree} self.visited_nodes: List[str] = [] def execute_action(self, node_id: str) -> Optional[TreeNode]: """模擬執行 action，若命中有歷史紀錄則無痛回演""" if node_id in self.tree_map: self.visited_nodes.append(node_id) return self.tree_map[node_id] # 若突破歷史邊界 (Miss)，觸發邊界打斷，不進行昂貴的真實擴展 return None class HarnessEvaluator: """Dream-RSI 策略評分矩陣器""" def __init__(self, alpha: float = 0.001, beta: float = 0.5): self.alpha = alpha # 算力懲罰係數 self.beta = beta # 併行/效率獎勵係數 def evaluate_policy(self, simulator: ReplaySimulator, critical_path_ms: float) -> float: visited = [simulator.tree_map[nid] for nid in simulator.visited_nodes if nid in simulator.tree_map] if not visited: return -1000.0 # 完全未命中的無效策略 # 1. 質量得分 (Quality Yield) quality_score = max(node.score for node in visited) # 2. 算力成本懲罰 (Compute Cost) total_tokens = sum(node.token_cost for node in visited) total_exec_time = sum(node.exec_time_ms for node in visited) compute_cost = total_tokens + (0.1 * total_exec_time) # 3. 併行搜演效率 (Parallel Efficiency) parallel_bonus = total_exec_time / max(critical_path_ms, 1.0) # 最終離線做夢評分公式 final_score = quality_score - (self.alpha * compute_cost) + (self.beta * parallel_bonus) return final_score 
+
+4. 關鍵防禦機制與穩定性保護 (Guardrails & Multi-Safety)
+
+為防止 Agent 在自主修改策略代碼或工具庫時陷入死循環、作弊或邏輯崩潰，Harness 必須配置三道防衛線：
+
+語義無關約束 (Semantic-Bias Guard)：限制 Evolution Agent 不得透過自然語言 Prompt 修改邏輯，強制其僅能修訂「程式碼邏輯與搜尋控制流」（如 AST 樹替換）。
+
+動態 AST 沙盒檢查 (Static Code Analysis)：所有新生成的 policy_candidate.py 與 tool_candidate.py 在進入 Replay Simulator 前，必須通過 AST 靜態分析，嚴禁使用 os.system、未受限網絡訪問與未定義的自由變數。
+
+單調增長門檻 (Monotonic Yield Gate)：新策略在回放模擬測試中，必須在 \ge 95\% 的歷史 Test Cases 上達到等於或高於舊策略的性能，否則觸發靜態 Rollback（回滾機制）
