@@ -26,8 +26,15 @@ export const inject: string[] = [];
  * event contracts are pinned in the next implementation phase.
  */
 export function apply(ctx: Context): void {
-  const backend = new MockEmbodiedBackend();
-  ctx.tools.register(createPerceiveTool(backend));
-  ctx.tools.register(createActTool(ctx, backend));
-  ctx.tools.register(createQueryStateTool(backend));
+  ctx.effect(() => {
+    const backend = new MockEmbodiedBackend();
+    const disposers = [
+      ctx.tools.register(createPerceiveTool(backend)),
+      ctx.tools.register(createActTool(ctx, backend)),
+      ctx.tools.register(createQueryStateTool(backend))
+    ];
+    return () => {
+      for (const dispose of disposers.reverse()) dispose();
+    };
+  }, 'dream-rsi/tools');
 }
