@@ -1,0 +1,5 @@
+# Local development patch for mounting the package into a DSH profile.
+# Use the published package name after installing this workspace package.
+- insert:
+    - id: dream-rsi
+      name: '@opengpt4/dsh-dream-rsi'
