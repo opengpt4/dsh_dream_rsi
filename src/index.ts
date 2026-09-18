@@ -6,6 +6,12 @@ import { createActTool } from './embodied/act.js';
 import { createQueryStateTool } from './embodied/query-state.js';
 import './embodied/events.js';
 
+export { InMemoryDiscoveryStore } from './discovery/models.js';
+export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
+export { createReplayKey, REPLAY_KEY_SCHEMA_VERSION } from './replay/key.js';
+export { ReplaySimulator } from './replay/simulator.js';
+export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
+
 export const name = 'dream-rsi';
 export const inject: string[] = [];
 

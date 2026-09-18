@@ -4,7 +4,7 @@
 
 - DSH CLI: `@deepseek-ai/dsh@0.1.5-rc.2`
 - Cordis peer: `@deepseek-ai/cordis@4.0.2`
-- Node runtime: `>=20` (local verification: Node 24.20.0)
+- Node runtime: `>=22.5` (local verification: Node 24.20.0; required for `node:sqlite`)
 - Plugin entry contract verified from `@deepseek-ai/dsh-tool-cordis`: `apply(ctx: Context): void`
 - DSH packages use ESM and expose TypeScript declarations.
 
@@ -14,4 +14,6 @@ The published minimal SDK bundle is a profile bundle, not a plugin registration 
 
 The local plugin entry now registers the verified `embodied_perceive` tool through `ctx.tools.register(defineTool(...))`. Its mock backend isolates state by an explicit `session_id` because the verified tool execution context does not expose a session service directly.
 
-The plugin now also registers `embodied_act` and `embodied_query_state`. `embodied_act` is limited to high-level mock primitives, observes the verified DSH cancellation signal, and emits typed started/completed/frame/error events. Profile mount/unmount tests and a real simulator adapter remain future work.
+The plugin now also registers `embodied_act` and `embodied_query_state`. `embodied_act` is limited to high-level mock primitives, observes the verified DSH cancellation signal, and emits typed started/completed/frame/error events. The package also exports a deterministic ReplayKey, `ReplaySimulator`, idempotent Discovery Stores, and a normalized Q/C/P/M evaluator.
+
+Profile mount/unmount tests, evaluator isolation, and a real simulator adapter remain future work.
