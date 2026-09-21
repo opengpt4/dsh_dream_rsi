@@ -89,6 +89,44 @@ test('occurrences below the threshold are excluded', () => {
   assert.equal(mineSuccessfulPatterns(nodes, { minOccurrences: 1 }).length, 1);
 });
 
+test('a sequence repeated only inside one run is not evidence of repetition', () => {
+  // One episode looping the same two actions. Each window is a real occurrence,
+  // but all of them come from this single run.
+  const nodes = episode('task-a', 'a', [MOVE, PICK, MOVE, PICK]);
+
+  assert.deepEqual(mineSuccessfulPatterns(nodes), []);
+  // Every window of this run is offered once the threshold is one, and each is
+  // evidenced by this run alone.
+  const withThresholdOne = mineSuccessfulPatterns(nodes, { minOccurrences: 1 });
+  assert.deepEqual(
+    withThresholdOne.map((pattern) => pattern.signature),
+    [
+      'move_relative({"dx":1,"dy":0,"dz":0})->pick({"objectId":"red-mug"})',
+      'move_relative({"dx":1,"dy":0,"dz":0})->pick({"objectId":"red-mug"})->move_relative({"dx":1,"dy":0,"dz":0})',
+      'move_relative({"dx":1,"dy":0,"dz":0})->pick({"objectId":"red-mug"})->move_relative({"dx":1,"dy":0,"dz":0})->pick({"objectId":"red-mug"})',
+      'pick({"objectId":"red-mug"})->move_relative({"dx":1,"dy":0,"dz":0})',
+      'pick({"objectId":"red-mug"})->move_relative({"dx":1,"dy":0,"dz":0})->pick({"objectId":"red-mug"})'
+    ]
+  );
+  for (const pattern of withThresholdOne) {
+    assert.equal(pattern.supportingNodeIds.length, 1);
+    assert.deepEqual(pattern.tasks, ['task-a']);
+  }
+});
+
+test('a run contributes one occurrence, so a loop does not inflate the evidence', () => {
+  const nodes = [
+    ...episode('task-a', 'a', [MOVE, PICK, MOVE, PICK]),
+    ...episode('task-b', 'b', [MOVE, PICK])
+  ];
+  const patterns = mineSuccessfulPatterns(nodes);
+
+  assert.equal(patterns.length, 1);
+  // The looping run is one observation, recorded at its earliest window.
+  assert.deepEqual(patterns[0].supportingNodeIds, ['a-0', 'b-0']);
+  assert.deepEqual(patterns[0].tasks, ['task-a', 'task-b']);
+});
+
 test('the pattern signature is canonical, so parameter key order does not matter', () => {
   const reordered = { actionType: 'move_relative', parameters: { dz: 0, dy: 0, dx: 1 } };
   const nodes = [...episode('task-a', 'a', [MOVE, PICK]), ...episode('task-b', 'b', [reordered, PICK])];

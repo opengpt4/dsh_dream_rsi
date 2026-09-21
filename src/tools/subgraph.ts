@@ -6,7 +6,9 @@ import { canonicalJson } from '../hash.js';
  *
  * A pattern is evidence-backed work: the same ordered sequence of actions that
  * succeeded in more than one run. Only completed steps are considered, so a
- * sequence that ever failed is not offered as a tool.
+ * sequence that ever failed is not offered as a tool. A run contributes at most
+ * one occurrence of a pattern, so a sequence repeated only inside one episode
+ * stays below the threshold.
  */
 
 export interface ToolPatternStep {
@@ -18,7 +20,7 @@ export interface ToolPattern {
   /** Canonical identity, e.g. `move_relative({"dx":1})->pick({"objectId":"mug"})`. */
   readonly signature: string;
   readonly steps: readonly ToolPatternStep[];
-  /** Node ids evidencing this pattern, one entry per occurrence. */
+  /** Node ids evidencing this pattern, one entry per run it occurred in. */
   readonly supportingNodeIds: readonly string[];
   /** Distinct tasks the pattern was observed in. */
   readonly tasks: readonly string[];
@@ -26,6 +28,7 @@ export interface ToolPattern {
 
 export interface MinePatternsOptions {
   readonly minSteps?: number;
+  /** Distinct runs that must evidence a pattern before it is offered. */
   readonly minOccurrences?: number;
   readonly maxSteps?: number;
 }
@@ -73,16 +76,22 @@ export function mineSuccessfulPatterns(
     runs.push(run);
   }
 
-  const bySignature = new Map<string, { steps: ToolPatternStep[]; occurrences: DiscoveryNode[][]; tasks: Set<string> }>();
+  const bySignature = new Map<
+    string,
+    { steps: ToolPatternStep[]; occurrences: Map<number, string>; tasks: Set<string> }
+  >();
 
-  for (const run of runs) {
+  for (const [runIndex, run] of runs.entries()) {
     for (let length = config.minSteps; length <= Math.min(config.maxSteps, run.length); length += 1) {
       for (let start = 0; start + length <= run.length; start += 1) {
         const window = run.slice(start, start + length);
         const steps = window.map((node) => ({ actionType: node.actionType, actionParams: node.actionParams }));
         const signature = steps.map((step) => `${step.actionType}(${canonicalJson(step.actionParams)})`).join('->');
-        const entry = bySignature.get(signature) ?? { steps, occurrences: [], tasks: new Set<string>() };
-        entry.occurrences.push(window);
+        const entry = bySignature.get(signature) ?? { steps, occurrences: new Map<number, string>(), tasks: new Set<string>() };
+        // Keyed by run, so a run's internal repetition collapses to one
+        // occurrence: a loop inside a single episode is one observation and can
+        // never clear minOccurrences on its own.
+        if (!entry.occurrences.has(runIndex)) entry.occurrences.set(runIndex, window[0]!.nodeId);
         for (const node of window) entry.tasks.add(node.taskId);
         bySignature.set(signature, entry);
       }
@@ -90,11 +99,11 @@ export function mineSuccessfulPatterns(
   }
 
   return [...bySignature.entries()]
-    .filter(([, entry]) => entry.occurrences.length >= config.minOccurrences)
+    .filter(([, entry]) => entry.occurrences.size >= config.minOccurrences)
     .map(([signature, entry]) => ({
       signature,
       steps: entry.steps,
-      supportingNodeIds: entry.occurrences.map((occurrence) => occurrence[0]!.nodeId),
+      supportingNodeIds: [...entry.occurrences.values()],
       tasks: [...entry.tasks].sort()
     }))
     .sort((left, right) =>

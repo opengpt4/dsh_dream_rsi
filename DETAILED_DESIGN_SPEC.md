@@ -643,7 +643,7 @@ Natural-language summaries may be retained for diagnostics but cannot become aut
 
 `src/tools/`. A synthesized tool is a named macro over already-validated action primitives.
 
-**Mining** (`subgraph.ts`). A pattern is the same ordered sequence of actions that succeeded in more than one run. Only completed steps count, and a failure splits the run: a sequence spanning a failure is never treated as contiguous. The signature is canonical, so parameter key order does not matter. Occurrences and the distinct tasks they came from are recorded as the pattern's evidence.
+**Mining** (`subgraph.ts`). A pattern is the same ordered sequence of actions that succeeded in more than one run. Only completed steps count, and a failure splits the run: a sequence spanning a failure is never treated as contiguous. The signature is canonical, so parameter key order does not matter. A run contributes one occurrence however often it repeats the sequence inside itself, so `minOccurrences` counts the runs behind a pattern and an episode looping one sequence is never evidence of repetition. Occurrences and the distinct tasks they came from are recorded as the pattern's evidence.
 
 **Artifact** (`synthesized-tool.ts`). Every field a reviewer needs is part of the artifact and part of its id: name, version, description, input and output JSON Schema, source, tests, dependencies, permissions, origin, and the pattern signature. `createSynthesizedTool` is the single constructor, so a model-authored tool enters through the same id and verification rules as a template-generated one.
 

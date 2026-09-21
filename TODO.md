@@ -138,7 +138,7 @@
 
 ### 11. Tool Synthesis
 
-- [x] Detect repeated successful subgraphs in Discovery DAGs (`src/tools/subgraph.ts`). Only completed steps count, and a failure splits the run rather than being skipped over, so a sequence spanning a failure is never offered as a tool.
+- [x] Detect repeated successful subgraphs in Discovery DAGs (`src/tools/subgraph.ts`). Only completed steps count, and a failure splits the run rather than being skipped over, so a sequence spanning a failure is never offered as a tool. A run contributes one occurrence no matter how often it repeats a sequence inside itself, so repetition within a single episode cannot stand in for repetition across runs.
 - [x] Generate tool name, version, input/output JSON Schema, source, tests, dependencies, permissions, and a content-addressed artifact hash (`src/tools/synthesized-tool.ts`). The generated module imports nothing, so the dependency allowlist is clean by construction.
 - [x] Run synthesized tools through AST, dependency, resource/network capability, and isolated test gates (`src/tools/tool-gate.ts`). The test source is scanned by the same rules, and a tool whose tests cannot run has not passed them. Process isolation only; filesystem and network confinement is still the open sandbox blocker.
 - [x] Add Dynamic Tool Registry with enable, disable, version, and rollback (`src/tools/tool-registry.ts`). Enabling requires an operator and a clean gate; a tool with any failed guard cannot be enabled by supplying a different verdict later.
