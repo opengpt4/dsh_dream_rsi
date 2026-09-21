@@ -18,8 +18,9 @@ import {
 import { evaluateReplayIsolated } from '../evolution/isolated-evaluator.js';
 import { createEvaluationSnapshot, type EvaluationSnapshot } from '../evolution/snapshot.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig, type EvaluationSplitName } from '../evolution/split.js';
+import { canonicalJson } from '../hash.js';
 import { replayKeyInputFromNode } from '../replay/key.js';
-import { ReplaySimulator } from '../replay/simulator.js';
+import { ReplaySimulator, type CounterfactualBranch } from '../replay/simulator.js';
 import { runEpisode, type EpisodeOutcome, type RunEpisodeOptions } from './runner.js';
 
 /** Runtime-derived ceilings the episode pipeline enforces. */
@@ -63,6 +64,12 @@ export interface BoundaryMiss {
   readonly availableActionTypes: readonly string[];
 }
 
+export interface CounterfactualSummary {
+  /** The node whose state the alternatives were taken from. */
+  readonly nodeId: string;
+  readonly branches: readonly CounterfactualBranch[];
+}
+
 export interface ReplayReport {
   readonly hitCount: number;
   readonly missCount: number;
@@ -72,6 +79,12 @@ export interface ReplayReport {
   readonly replayedNodeIds: readonly string[];
   /** Nodes past `replayMaxNodes`, excluded from this replay. */
   readonly deferredNodeIds: readonly string[];
+  /**
+   * Recorded actions the tree took from the same state, other than the one it
+   * took. Resolved from history, so an alternative costs a lookup rather than a
+   * model call. Nodes with no alternatives are omitted.
+   */
+  readonly counterfactuals: readonly CounterfactualSummary[];
 }
 
 export interface EpisodeGates {
@@ -128,6 +141,21 @@ export function replayNodes(
     }
   }
 
+  const counterfactuals: CounterfactualSummary[] = [];
+  for (const node of replayed) {
+    const state = {
+      environmentVersion: node.environmentVersion,
+      stateHash: node.stateHash,
+      observationHash: node.observationHash
+    };
+    const taken = canonicalJson(node.actionParams);
+    const alternatives = simulator
+      .recordedActions(state)
+      .filter((action) => !(action.actionType === node.actionType && canonicalJson(action.normalizedActionParams) === taken));
+    if (alternatives.length === 0) continue;
+    counterfactuals.push({ nodeId: node.nodeId, branches: simulator.counterfactual(state, alternatives) });
+  }
+
   const metrics = simulator.metrics();
   return {
     simulator,
@@ -137,7 +165,8 @@ export function replayNodes(
       visitedNodeIds: metrics.visitedNodeIds,
       boundaryMisses,
       replayedNodeIds: replayed.map((node) => node.nodeId),
-      deferredNodeIds
+      deferredNodeIds,
+      counterfactuals
     }
   };
 }

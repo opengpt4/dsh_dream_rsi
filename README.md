@@ -61,7 +61,10 @@ Implemented and tested capabilities include:
 - content-addressed artifact store: SHA-256 addressed blobs, kind/media type/schema/byte-length metadata,
   retention and deletion recorded out of band, checksum re-verification, and fail-closed verification
   before evaluation
-- canonical ReplayKey and deterministic counterfactual replay
+- canonical ReplayKey and deterministic counterfactual replay: recorded alternatives for one state are
+  resolved from history, with parameters, so comparing them costs no model call
+- a recording LLM adapter that keeps request/response hashes, token usage, latency, and retry counts, and
+  emits per-task token, latency, retry, and failure metrics
 - Q/C/P/M evaluation, task-level data splits, and monotonic gating
 - ablation study over the evaluator terms and the split strategy, reporting each term's contribution
   and the task leakage a node-level split would introduce
@@ -87,7 +90,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 299 passing tests. OS/container sandboxing and a real
+The current suite contains 310 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

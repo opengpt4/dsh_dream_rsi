@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：299 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：310 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -22,7 +22,7 @@
 - [x] In-memory 與 SQLite Discovery Store
 - [x] Discovery idempotency key 與 duplicate retry protection
 - [x] Canonical ReplayKey 與 deterministic Replay Simulator
-- [x] Boundary miss 與 counterfactual replay behavior
+- [x] Boundary miss 與 counterfactual replay behavior（`ReplaySimulator.counterfactual` 與 `recordedActions`，replay report 帶 `counterfactuals`）
 - [x] Q/C/P/M evaluator
 - [x] Task-level train/validation/holdout split
 - [x] Strict Monotonic Gate 與 candidate case-set validation
@@ -165,7 +165,7 @@
 
 ### 14. Observability and Failure Injection
 
-- [x] Add correlation-aware metrics for task, episode, policy, evaluation, and deployment (`src/observability/metrics.ts`). Every sample carries the identifiers tying it to its run, so a number can be traced rather than only aggregated; non-finite values are refused.
+- [x] Add correlation-aware metrics for task, episode, policy, evaluation, and deployment (`src/observability/metrics.ts`). Every sample carries the identifiers tying it to its run, so a number can be traced rather than only aggregated; non-finite values are refused. Per-task model tokens, latency, retries, and failures come from the recording LLM adapter.
 - [x] Add audit trail for approval, deployment, rollback, lock recovery, and emergency stop. The event now names a `subject` (deployment, session, or tool), so one append-only trail covers policy and action-safety events.
 - [x] Add machine-readable Q/C/P/M/S reports (`src/observability/report.ts`), per evaluation and broken down by task family, alongside deployment history and metric summaries.
 - [x] Inject provider outage, worker crash, stale lease, corrupted artifact, timeout, cancellation, and rollback failures (`test/failure-injection.test.mjs`); each asserts which state must be left untouched, not only that an error surfaced.

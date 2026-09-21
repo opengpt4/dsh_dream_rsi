@@ -171,7 +171,12 @@ export {
   type PutArtifactInput
 } from './artifacts/store.js';
 export { createReplayKey, replayKeyInputFromNode, REPLAY_KEY_SCHEMA_VERSION } from './replay/key.js';
-export { ReplaySimulator } from './replay/simulator.js';
+export {
+  ReplaySimulator,
+  type CounterfactualBranch,
+  type ReplayAction,
+  type ReplayState
+} from './replay/simulator.js';
 export {
   MUTATION_CLASSES,
   assertMutationClassesAllowed,
@@ -181,6 +186,14 @@ export {
   type LlmUsage,
   type MutationClass
 } from './evolution/harness.js';
+export {
+  createRecordingLlm,
+  LlmRecordingError,
+  LLM_RECORD_SCHEMA_VERSION,
+  type LlmCallRecord,
+  type LlmRecorderOptions,
+  type RecordingLlm
+} from './evolution/llm-recorder.js';
 export {
   buildIdentifier,
   buildPrompt,
@@ -328,6 +341,7 @@ export {
   runEpisodePipeline,
   DEFAULT_EPISODE_PIPELINE_SETTINGS,
   type BoundaryMiss,
+  type CounterfactualSummary,
   type EpisodeGates,
   type EpisodePipelineOptions,
   type EpisodePipelineResult,

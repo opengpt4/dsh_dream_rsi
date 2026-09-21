@@ -25,7 +25,12 @@ export type MetricName =
   | 'evolution.candidateRejected'
   | 'policy.deployment'
   | 'policy.rollback'
-  | 'artifact.verificationFailure';
+  | 'artifact.verificationFailure'
+  | 'llm.inputTokens'
+  | 'llm.outputTokens'
+  | 'llm.latencyMs'
+  | 'llm.retry'
+  | 'llm.failure';
 
 export interface MetricLabels {
   readonly taskId?: string;

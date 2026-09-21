@@ -110,6 +110,8 @@ export interface HarnessAdapter {
 
 All model requests pass through `HarnessLlm.invoke`. The adapter records request/response hashes, token usage, latency, retry count, provider error class and correlation ID. API credentials are resolved by the host secret provider and never passed into candidate code.
 
+`createRecordingLlm` (`src/evolution/llm-recorder.ts`) is that recording adapter. It holds **hashes, not bodies**: an observability log that keeps the prompt and response is a second copy of the data it exists to describe, and the prompt can carry candidate and observation text. Retries are bounded by `maxAttempts` and counted; an exhausted call throws with the provider error class and a record whose `responseHash` is null. Given a `MetricsSink` it emits per-task `llm.inputTokens`, `llm.outputTokens`, `llm.latencyMs`, `llm.retry`, and `llm.failure`.
+
 ### 3.3 Environment adapter
 
 ```ts
@@ -479,6 +481,10 @@ export type ReplayTransition =
   | { kind: 'HIT'; node: DiscoveryNode; nextStateHash: string }
   | { kind: 'BOUNDARY_MISS'; stateHash: string; alternatives: readonly ReplayAction[]; reason: string };
 ```
+
+`ReplaySimulator.counterfactual(state, actions)` resolves several actions against one state from history, so comparing alternatives costs a lookup rather than a model call. `recordedActions(state)` lists what the tree actually tried from that state, parameters included: two `move_relative` calls at different distances are different alternatives, and guessing the action set would make the answer depend on the guess. An action never taken from that state resolves to a boundary miss, which is itself the answer.
+
+The replay report carries `counterfactuals`, one entry per visited node that has recorded alternatives, satisfying the functional requirement that replay results include hit, miss, visited nodes, counterfactual branches, simulation cost, and critical path.
 
 Replay may read snapshot and artifact store only. The implementation must not import the Harness LLM client, execute tools, start a sandbox, access network, or mutate the source store. A replay purity test should run with those capabilities denied.
 
