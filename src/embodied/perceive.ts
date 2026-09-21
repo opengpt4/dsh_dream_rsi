@@ -25,6 +25,8 @@ interface PerceiveResult {
     label: string;
     position: number[];
   }>;
+  /** Absent when the caller asked for other sensors only. */
+  readonly gripper?: Observation['gripper'];
   readonly timestamp: string;
 }
 
@@ -89,6 +91,7 @@ export function createPerceiveTool(adapter: EnvironmentAdapter) {
               }
             }
           },
+          gripper: { type: 'string' },
           timestamp: { type: 'string', required: true }
         }
       },
@@ -113,6 +116,10 @@ export function createPerceiveTool(adapter: EnvironmentAdapter) {
 
       const wantsPose = requested.includes('pose') && args.include_pose !== false;
       const wantsObjects = requested.includes('objects') && args.include_objects !== false;
+      // `gripper` is a declared sensor and the observation already carries it,
+      // so accepting it in `sensor_types` and reporting nothing for it made the
+      // request a silent no-op.
+      const wantsGripper = requested.includes('gripper');
 
       const observation = await adapter.observe({
         sessionId: args.session_id,
@@ -136,6 +143,7 @@ export function createPerceiveTool(adapter: EnvironmentAdapter) {
               }))
             }
           : {}),
+        ...(wantsGripper ? { gripper: observation.gripper } : {}),
         timestamp: observation.timestamp
       };
     }

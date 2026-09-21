@@ -305,7 +305,9 @@ Replaying an episode's own recorded decisions is a **determinism check, not gene
 
 Input: `session_id`, optional `sensor_types`, `include_objects`, `include_pose`, `artifact_threshold_bytes`.
 
-Implemented: `sensor_types`, `include_objects`, and `include_pose`. A sensor absent from the declared profile is refused, so a caller cannot read a channel the backend never claimed to have. `artifact_threshold_bytes` is not implemented because no adapter yet produces a payload large enough to externalise; the artifact store and its retention policy are in place for when one does.
+Implemented: `sensor_types`, `include_objects`, and `include_pose`. A sensor absent from the declared profile is refused, so a caller cannot read a channel the backend never claimed to have.
+
+Every sensor the profile declares must appear in the output when it is requested. `gripper` was declared and accepted in `sensor_types` while the tool reported nothing for it, so the request succeeded as a silent no-op; the observation already carried the gripper, and only the projection dropped it. `artifact_threshold_bytes` is not implemented because no adapter yet produces a payload large enough to externalise; the artifact store and its retention policy are in place for when one does.
 
 Output: compact text/JSON observation, object references, pose, timestamp, coordinate-frame ID, schema version and artifact references. Large RGB/depth/point-cloud payloads are stored externally with checksum and retention metadata. The frame ID and schema version are always reported, whichever sensors were read: without the frame a pose is an ambiguous triple of numbers, and without the version a consumer cannot tell which schema it is parsing.
 

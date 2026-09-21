@@ -26,7 +26,8 @@ Implemented and tested capabilities include:
 - enforced architecture boundaries: the simulator SDK is reached only through its adapter, and only the
   adapter calls the Cordis registration API
 - `embodied_perceive` reports the coordinate frame and schema version with every observation, accepts
-  `sensor_types`/`include_pose`, and refuses a sensor the backend never declared
+  `sensor_types`/`include_pose`, refuses a sensor the backend never declared, and reports every sensor it
+  does declare
 - environment protocol (`Observation`, `ActionRequest`, `ActionResult`) and a mock adapter that resolves
   every attempt to a terminal status and latches a stopped session until reset
 - end-to-end episode runner recording one Discovery node per step, including failed, timed-out, and
@@ -103,7 +104,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 357 passing tests. OS/container sandboxing and a real
+The current suite contains 359 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

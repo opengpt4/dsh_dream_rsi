@@ -80,6 +80,33 @@ test('an undeclared sensor is refused rather than silently ignored', async () =>
   );
 });
 
+test('every sensor the profile declares can actually be read', async () => {
+  const { perceive } = tool();
+
+  // A sensor named in `sensor_types` must appear in the output. Accepting
+  // `gripper` and reporting nothing for it made the request a silent no-op
+  // against a capability the backend explicitly declares.
+  const outputKeyFor = { pose: 'pose', objects: 'objects', gripper: 'gripper' };
+
+  for (const sensor of MOCK_CAPABILITY_PROFILE.sensors) {
+    const key = outputKeyFor[sensor];
+    assert.ok(key, `the profile declares ${sensor} but this test does not know its output key`);
+
+    const result = await perceive.execute({ session_id: 'session-1', sensor_types: [sensor] }, exec());
+    assert.ok(result[key] !== undefined, `sensor_types ['${sensor}'] returned no ${key}`);
+  }
+});
+
+test('the gripper is reported by default and excluded on request', async () => {
+  const { perceive } = tool();
+
+  const byDefault = await perceive.execute({ session_id: 'session-1' }, exec());
+  assert.equal(byDefault.gripper, 'open');
+
+  const excluded = await perceive.execute({ session_id: 'session-1', sensor_types: ['pose'] }, exec());
+  assert.equal(excluded.gripper, undefined);
+});
+
 test('a cancelled perceive does not reach the environment', async () => {
   const { perceive } = tool();
   const controller = new AbortController();
