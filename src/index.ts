@@ -49,6 +49,30 @@ export {
 } from './artifacts/store.js';
 export { createReplayKey, replayKeyInputFromNode, REPLAY_KEY_SCHEMA_VERSION } from './replay/key.js';
 export { ReplaySimulator } from './replay/simulator.js';
+export {
+  MUTATION_CLASSES,
+  assertMutationClassesAllowed,
+  type HarnessLlm,
+  type LlmRequest,
+  type LlmResponse,
+  type LlmUsage,
+  type MutationClass
+} from './evolution/harness.js';
+export {
+  buildIdentifier,
+  buildPrompt,
+  evaluateCandidate,
+  generateCandidate,
+  parseCandidateProposal,
+  CANDIDATE_SCHEMA_VERSION,
+  type BuildIdentifierInput,
+  type CandidateEvaluationInput,
+  type CandidateEvaluationResult,
+  type CandidateProposal,
+  type GenerateCandidateInput,
+  type GenerateCandidateOptions,
+  type ParseCandidateContext
+} from './evolution/candidate-generator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
 export { evaluateReplayIsolated, DEFAULT_MAX_OUTPUT_BYTES, type IsolatedEvaluatorOptions } from './evolution/isolated-evaluator.js';
 export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';

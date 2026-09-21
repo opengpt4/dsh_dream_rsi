@@ -36,6 +36,9 @@ Implemented and tested capabilities include:
   a current-policy pointer that moves only behind an approval, a passing evaluation, and a passing canary,
   and a file store that re-verifies every record on load
 - evaluation reports persisted per run, with rejection reasons summarised by task family
+- evaluate-only candidate generation over the Harness LLM facade: mutation classes restricted to
+  scheduling, pruning, retry, parallelism, and budget; a prompt projected from named fields so holdout,
+  evaluator internals, secrets, and deployment state cannot leak into it; and a reproducible build id
 - content-addressed artifact store: SHA-256 addressed blobs, kind/media type/schema/byte-length metadata,
   retention and deletion recorded out of band, checksum re-verification, and fail-closed verification
   before evaluation
@@ -57,7 +60,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 151 passing tests. OS/container sandboxing, candidate
+The current suite contains 164 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

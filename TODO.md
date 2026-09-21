@@ -91,7 +91,7 @@
 - [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits. Wall-time, output bound, and process-count termination are in place; CPU, memory, filesystem, and network limits need the sandbox below.
 - [ ] Select and implement container or OS-level sandbox before running untrusted candidate code. `[!]`
 - [x] Keep host secrets and evaluator internals out of a candidate's reach: the child is spawned with `PATH` only, so inheriting `process.env` cannot hand it the host's API keys.
-- [ ] Ensure holdout data is inaccessible to candidates. The deployment registry cannot leak through the gate: `CandidateGateOptions` carries only source text and allowlist options. Holdout needs the mechanism in item 9.
+- [x] Ensure holdout data is inaccessible to candidates: `GenerateCandidateInput` carries train and validation metrics only, and the prompt projection is asserted free of holdout markers. The holdout mechanism itself arrives with the benchmark (item 13).
 
 ### 7. Guardrails
 
@@ -113,11 +113,11 @@
 
 ### 9. Candidate Generation
 
-- [ ] Build Evolution Agent adapter using only the Harness LLM facade.
-- [ ] Restrict candidate mutations to scheduling, pruning, retry, parallelism, and budget logic.
-- [ ] Keep holdout data, evaluator internals, secrets, and deployment state outside candidate input.
-- [ ] Add evaluate-only candidate generation; do not enable deployment by default.
-- [ ] Add deterministic seed and reproducible build identifier.
+- [x] Build Evolution Agent adapter using only the Harness LLM facade (`src/evolution/harness.ts`). `generateCandidate` receives `HarnessLlm` and nothing wider, so it has no provider SDK, credentials, or registry to reach.
+- [x] Restrict candidate mutations to scheduling, pruning, retry, parallelism, and budget logic. A proposal naming any other class is rejected during parsing, and the resulting artifact's `allowedCapabilities` are derived from the approved classes rather than declared by the candidate.
+- [x] Keep holdout data, evaluator internals, secrets, and deployment state outside candidate input: the prompt is projected from named fields rather than serialized, so a caller that attaches them cannot leak them, and both the prompt and the whole request are asserted free of marker strings.
+- [x] Add evaluate-only candidate generation. `evaluateCandidate` generates, scans, registers, and evaluates, and returns `promoted: false`; it has no path to the current-policy pointer, and a mutation test confirms the pointer is untouched.
+- [x] Add deterministic seed and reproducible build identifier (`buildIdentifier`): a pure function of parent version, source hash, manifest, and seed, so identical generations share an id.
 
 ### 10. Deployment, Canary, and Rollback
 

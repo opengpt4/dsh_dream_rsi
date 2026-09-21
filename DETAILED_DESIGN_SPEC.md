@@ -62,6 +62,22 @@ Core modules receive plain TypeScript interfaces and must not import Cordis type
 ### 3.2 Harness adapter
 
 ```ts
+export interface LlmRequest {
+  model: string;
+  prompt: string;
+  system?: string;
+  maxOutputTokens?: number;
+  temperature?: number;
+  correlationId: string;
+}
+
+export interface LlmResponse {
+  text: string;
+  model: string;
+  usage: { inputTokens: number; outputTokens: number };
+  finishReason: 'stop' | 'length' | 'error';
+}
+
 export interface HarnessLlm {
   invoke(request: LlmRequest, signal?: AbortSignal): Promise<LlmResponse>;
 }
@@ -556,6 +572,20 @@ Allowed mutation classes:
 - retry and exploration coefficients.
 
 Natural-language summaries may be retained for diagnostics but cannot become automatic hard pruning rules without explicit policy review.
+
+#### Implemented generation (`src/evolution/candidate-generator.ts`)
+
+`generateCandidate(llm, input)` takes a `HarnessLlm` and nothing wider — no provider SDK, no credentials, no registry — so the generation path has no route to the current-policy pointer.
+
+**Input projection.** The prompt is built from named fields, never by serializing the input. A caller that attaches holdout results, evaluator internals, secrets, or deployment state cannot leak them into the prompt by doing so, and a test asserts marker strings appear nowhere in the request.
+
+**Mutation boundary.** A proposal naming a class outside `MUTATION_CLASSES` is rejected during parsing, before its source reaches any other guard. The artifact's `allowedCapabilities` are then derived from the approved classes, so a candidate cannot declare its own capabilities.
+
+**Strict parsing.** A missing or mistyped field is rejected rather than defaulted, and the manifest is built by the host: a model reply supplies source, rationale, mutation classes, and at most a dependency list.
+
+**Reproducible identity.** `buildIdentifier` is a pure function of parent version, source hash, manifest, and seed, so identical generations share an id.
+
+**Evaluate-only.** `evaluateCandidate` generates, scans, registers the artifact, and evaluates. It returns `promoted: false`, and the pointer is asserted unchanged. A candidate that trips the guard registers nothing and is never evaluated: the gate runs before registration, so a rejected candidate costs no episode.
 
 ### 9.3 Guard pipeline
 

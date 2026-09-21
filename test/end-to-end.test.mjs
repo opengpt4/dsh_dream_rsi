@@ -465,6 +465,12 @@ test('the snapshot is immutable and hashes its splits', async () => {
 
   assert.equal(Object.isFrozen(snapshot), true);
   assert.equal(Object.isFrozen(snapshot.splits), true);
-  assert.equal(createEvaluationSnapshot(nodes).snapshotId, createEvaluationSnapshot(nodes).snapshotId);
-  assert.notEqual(snapshot.snapshotId, createEvaluationSnapshot(nodes, undefined, '2020-01-01T00:00:00.000Z').snapshotId);
+  // Pin `createdAt`: two default calls can straddle a millisecond boundary, and
+  // the id covers creation time by design.
+  const at = '2026-01-01T00:00:00.000Z';
+  assert.equal(
+    createEvaluationSnapshot(nodes, undefined, at).snapshotId,
+    createEvaluationSnapshot(nodes, undefined, at).snapshotId
+  );
+  assert.notEqual(createEvaluationSnapshot(nodes, undefined, at).snapshotId, snapshot.snapshotId);
 });
