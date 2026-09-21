@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_MAX_OUTPUT_BYTES, runIsolatedChild } from '../operations/isolated-child.js';
+import { DEFAULT_MAX_OUTPUT_BYTES, runIsolatedChild, type ChildConfinement } from '../operations/isolated-child.js';
 import type { EvaluationInput, EvaluationResult, EvaluatorConfig } from './evaluator.js';
 
 export { DEFAULT_MAX_OUTPUT_BYTES };
@@ -21,6 +21,8 @@ export interface IsolatedEvaluatorOptions {
   readonly env?: NodeJS.ProcessEnv;
   /** Worker entry point. Defaults to the bundled evaluator worker. */
   readonly workerPath?: string;
+  /** Runtime confinement. Defaults to on; `false` disables it. */
+  readonly confinement?: ChildConfinement | false;
 }
 
 /**
@@ -43,7 +45,8 @@ export async function evaluateReplayIsolated(
     stdin: `${JSON.stringify({ input, config })}\n`,
     ...(options.maxOutputBytes !== undefined ? { maxOutputBytes: options.maxOutputBytes } : {}),
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
-    ...(options.env !== undefined ? { env: options.env } : {})
+    ...(options.env !== undefined ? { env: options.env } : {}),
+    ...(options.confinement !== undefined ? { confinement: options.confinement } : {})
   });
 
   if (result.exitCode !== 0) {

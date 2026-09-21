@@ -67,7 +67,8 @@ Implemented and tested capabilities include:
   quality/cost/parallel/miss-rate/sample budgets, candidate guard failures, and per-task-family verdicts,
   with a passing verdict required before any promotion
 - immutable evaluation snapshots
-- process-isolated evaluator with timeout
+- process-isolated evaluator with timeout, and Node's permission model applied to every isolated child by
+  default: reads scoped to the child's own directory, writes and child processes denied
 - lease-based single-writer lock with heartbeat and stale-lock recovery
 - validated configuration with evolution and auto-deployment disabled by default
 - read-only `dream_status` tool for enabled capabilities and safety-relevant config
@@ -82,7 +83,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 275 passing tests. OS/container sandboxing, candidate
+The current suite contains 278 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

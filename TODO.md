@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：275 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：278 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -79,7 +79,7 @@
 - [x] Align `DiscoveryNode` with the detailed design schema (`schemaVersion`, `createdAt`, optional `sessionId`/`episodeStep`/`correlationId`/`criticalPathMs`) and persist all fields in the SQLite store.
 - [x] Implement content-addressed artifact store with SHA-256, kind, schema version, byte length, retention, and deletion metadata (`src/artifacts/store.ts`); blobs are immutable and metadata is the only mutable state.
 - [x] Materialize ReplaySnapshot from a consistent SQLite read transaction: `DiscoveryStore.readAll()` serves the tree under one deferred transaction, and `EpisodePipelineOptions.snapshotSource: 'store'` snapshots the persisted tree rather than the run in memory.
-- [x] Decided: snapshot identity includes `createdAt` (content hash covers `schemaVersion` + `createdAt` + `splits`; see `src/evolution/snapshot.ts`).
+- [x] Revised: snapshot identity covers content only (`schemaVersion` + `splits`), with `createdAt` recorded but excluded. Including creation time meant two snapshots of the identical tree never shared an id, so the id was not the content address the design claims. Node-level `createdAt` values remain part of the content.
 - [x] Add artifact checksum verification before evaluation (`assertArtifactsVerified` runs before the evaluator and fails the run). Deployment does not exist yet; it must call the same function rather than re-implement the check.
 - [ ] Select and implement a signing scheme: provider, verification, key rotation, and failure tests. `[!]` Covers both the artifact signature in item 5 and the deployment-time signature check in item 10.
 
@@ -88,7 +88,7 @@
 - [x] Process boundary and timeout wrapper.
 - [x] Add cancellation and process-group termination. The child leads its own process group (`detached: true`), so a deadline or abort kills everything it spawned; killing only the direct child leaves grandchildren running with host privileges.
 - [x] Add output schema validation and bounded stdout/stderr. Captured output is capped at `maxOutputBytes`, and the result is rebuilt field by field from untrusted JSON rather than cast, so a crafted response cannot smuggle extra properties.
-- [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits. Wall-time, output bound, and process-count termination are in place; CPU, memory, filesystem, and network limits need the sandbox below.
+- [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits. Wall-time, output bound, and process-count termination are in place, and Node's permission model now denies filesystem writes and child processes (see `src/operations/isolated-child.ts`). CPU, memory, and network limits still need OS-level confinement.
 - [ ] Select and implement container or OS-level sandbox before running untrusted candidate code. `[!]`
 - [x] Keep host secrets and evaluator internals out of a candidate's reach: the child is spawned with `PATH` only, so inheriting `process.env` cannot hand it the host's API keys.
 - [x] Ensure holdout data is inaccessible to candidates: `GenerateCandidateInput` carries train and validation metrics only, and the prompt projection is asserted free of holdout markers. The holdout mechanism itself arrives with the benchmark (item 13).
@@ -187,7 +187,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [x] Complete task-to-Discovery-to-Replay-to-evaluation trace, verified against the mock environment (`test/end-to-end.test.mjs`). Real-simulator evidence is still tracked under item 10.
 - [ ] Strong OS/container isolation for untrusted candidate code.
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
-- [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested, but runtime CPU/memory/filesystem/network limits do not, so this stays open.
+- [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested, and runtime filesystem writes and process spawning are denied by Node's permission model. Runtime CPU, memory, and network limits do not, so this stays open.
 - [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
 - [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, 15 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).

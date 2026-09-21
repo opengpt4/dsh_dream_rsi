@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { scanCandidate } from '../guardrails/candidate-gate.js';
 import type { Capability } from '../guardrails/import-allowlist.js';
-import { runIsolatedChild } from '../operations/isolated-child.js';
+import { runIsolatedChild, type ChildConfinement } from '../operations/isolated-child.js';
 import type { GuardResult } from '../registry/models.js';
 import type { SynthesizedTool } from './synthesized-tool.js';
 
@@ -27,6 +27,8 @@ export interface ToolTestRunner {
 export interface ProcessToolTestRunnerOptions {
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
+  /** Runtime confinement. Defaults to on, scoped to the tool's scratch directory. */
+  readonly confinement?: ChildConfinement | false;
 }
 
 /**
@@ -52,6 +54,9 @@ export class ProcessToolTestRunner implements ToolTestRunner {
         timeoutMs: this.options.timeoutMs ?? 10_000,
         cwd: scratch,
         ...(this.options.maxOutputBytes !== undefined ? { maxOutputBytes: this.options.maxOutputBytes } : {}),
+        // The tool and its test both live in the scratch directory, so that is
+        // the only read grant it needs.
+        confinement: this.options.confinement ?? { allowRead: [join(scratch, '*')] },
         ...(signal !== undefined ? { signal } : {})
       });
 

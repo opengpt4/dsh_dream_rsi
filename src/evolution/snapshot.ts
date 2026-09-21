@@ -10,6 +10,16 @@ export interface EvaluationSnapshot {
   readonly splits: EvaluationSplit;
 }
 
+/**
+ * Freeze a node set into an evaluation snapshot.
+ *
+ * `snapshotId` covers the content and nothing else. `createdAt` is recorded on
+ * the snapshot but excluded from the id: including it would mean two snapshots
+ * of the identical tree never shared an id, so nothing could tell "the same
+ * tree" from "a different tree at a different time", and the id would not be a
+ * content address. Node-level `createdAt` values are already part of the
+ * content, so the identity still covers when the work happened.
+ */
 export function createEvaluationSnapshot(
   nodes: readonly DiscoveryNode[],
   config?: EvaluationSplitConfig,
@@ -18,7 +28,7 @@ export function createEvaluationSnapshot(
   const clonedNodes = nodes.map((node) => cloneAndFreeze(node));
   const splits = splitDiscoveryNodes(clonedNodes, config);
   const snapshotId = createHash('sha256')
-    .update(JSON.stringify({ schemaVersion: 1, createdAt, splits }))
+    .update(JSON.stringify({ schemaVersion: 1, splits }))
     .digest('hex');
   return deepFreeze({ snapshotId, schemaVersion: 1, createdAt, splits });
 }

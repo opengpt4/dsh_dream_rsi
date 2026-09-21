@@ -33,6 +33,15 @@ function options(overrides = {}) {
   return { workerPath: PROBE_WORKER, timeoutMs: 5_000, ...overrides };
 }
 
+/**
+ * The process-group fixture has to spawn a grandchild, which confinement
+ * prevents. That test is about the kill path, so it runs unconfined; the
+ * default posture is covered separately by the confinement test below.
+ */
+function unconfinedOptions(overrides = {}) {
+  return { ...options(overrides), confinement: false };
+}
+
 // ---------------------------------------------------------------- guardrails
 
 test('the import allowlist admits only approved specifiers', () => {
@@ -223,6 +232,42 @@ test('an explicit environment is passed through when the host asks for one', asy
   assert.equal(result.quality, 999);
 });
 
+test('a confined child cannot write to the filesystem', async () => {
+  const target = join(tmpdir(), `dream-rsi-confined-${process.pid}.txt`);
+  try {
+    const result = await evaluateReplayIsolated(probe('write-probe', { target }), undefined, options());
+
+    assert.equal(result.quality, 1, 'the write should have been denied');
+    assert.equal(existsSync(target), false, 'nothing should have been written');
+  } finally {
+    rmSync(target, { force: true });
+  }
+});
+
+test('a confined child cannot spawn a process', async () => {
+  const result = await evaluateReplayIsolated(probe('spawn-probe'), undefined, options());
+
+  // Confinement is what bounds process count: with no child_process grant there
+  // is nothing to fork, before the process-group kill even matters.
+  assert.equal(result.quality, 1, 'the spawn should have been denied');
+});
+
+test('a host that cannot use the permission flag can disable confinement explicitly', async () => {
+  const target = join(tmpdir(), `dream-rsi-unconfined-${process.pid}.txt`);
+  try {
+    const result = await evaluateReplayIsolated(
+      probe('write-probe', { target }),
+      undefined,
+      options({ confinement: false })
+    );
+
+    assert.equal(result.quality, 0, 'the write should have been allowed');
+    assert.equal(readFileSync(target, 'utf8'), 'confined write');
+  } finally {
+    rmSync(target, { force: true });
+  }
+});
+
 test('cancellation terminates the run', async () => {
   const controller = new AbortController();
   const pending = evaluateReplayIsolated(probe('hang'), undefined, options({ timeoutMs: 30_000, signal: controller.signal }));
@@ -245,7 +290,7 @@ test('a deadline kills the child and everything it spawned', async () => {
   const pidFile = join(tmpdir(), `dream-rsi-grandchild-${process.pid}-${Date.now()}.pid`);
   try {
     await assert.rejects(
-      evaluateReplayIsolated(probe('spawn-child', { pidFile }), undefined, options({ timeoutMs: 400 })),
+      evaluateReplayIsolated(probe('spawn-child', { pidFile }), undefined, unconfinedOptions({ timeoutMs: 400 })),
       /timed out/
     );
 

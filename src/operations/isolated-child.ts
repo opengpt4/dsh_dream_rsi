@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 /**
  * Run one child process under the isolation properties this project relies on.
@@ -11,6 +13,23 @@ import { spawn } from 'node:child_process';
 
 export const DEFAULT_MAX_OUTPUT_BYTES = 1_048_576;
 
+/**
+ * Runtime confinement for the child, via Node's permission model.
+ *
+ * On by default: the child may read its own directory and nothing else, and may
+ * not write or spawn. This is defense in depth, not the OS/container sandbox —
+ * Node documents the permission model as not a security boundary against
+ * hostile native code, and it does not restrict network access.
+ */
+export interface ChildConfinement {
+  /** Directories the child may read. Defaults to the entry point's directory. */
+  readonly allowRead?: readonly string[];
+  /** Never granted by default. */
+  readonly allowWrite?: readonly string[];
+  /** Grants `child_process`. Off by default, which is what bounds process count. */
+  readonly allowChildProcess?: boolean;
+}
+
 export interface RunIsolatedChildOptions {
   readonly entryPath: string;
   /** Names the child in timeout and overflow messages. */
@@ -22,12 +41,58 @@ export interface RunIsolatedChildOptions {
   readonly signal?: AbortSignal;
   readonly env?: NodeJS.ProcessEnv;
   readonly execPath?: string;
+  /** `false` disables confinement entirely. A host that cannot use the flag must say so. */
+  readonly confinement?: ChildConfinement | false;
 }
 
 export interface IsolatedChildResult {
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
+}
+
+/**
+ * Build the permission-model flags for a child.
+ *
+ * The entry point's own directory is readable because the child has to load
+ * itself; granting that rather than `--allow-fs-read=*` is the difference
+ * between running a file and reading the disk.
+ */
+function permissionArgs(options: RunIsolatedChildOptions, entryPath: string): string[] {
+  if (options.confinement === false) return [];
+  const confinement = options.confinement ?? {};
+  const readPaths = confinement.allowRead ?? [join(dirname(entryPath), '*')];
+
+  const args = ['--experimental-permission'];
+  for (const path of readPaths) args.push(`--allow-fs-read=${resolveGrant(path)}`);
+  for (const path of confinement.allowWrite ?? []) args.push(`--allow-fs-write=${resolveGrant(path)}`);
+  if (confinement.allowChildProcess === true) args.push('--allow-child-process');
+  return args;
+}
+
+/**
+ * Resolve a granted path so it matches what the child computes for itself.
+ *
+ * An explicit grant has the same symlink problem as the default one, so every
+ * path goes through here rather than only the derived one.
+ */
+function resolveGrant(path: string): string {
+  const isGlob = path.endsWith('/*');
+  const base = isGlob ? path.slice(0, -2) : path;
+  try {
+    return `${realpathSync(base)}${isGlob ? '/*' : ''}`;
+  } catch {
+    return path;
+  }
+}
+
+function resolveEntryPath(entryPath: string): string {
+  try {
+    return realpathSync(entryPath);
+  } catch {
+    // Let the spawn report the missing file rather than failing here.
+    return entryPath;
+  }
 }
 
 export function runIsolatedChild(options: RunIsolatedChildOptions): Promise<IsolatedChildResult> {
@@ -39,7 +104,12 @@ export function runIsolatedChild(options: RunIsolatedChildOptions): Promise<Isol
   }
   if (options.signal?.aborted === true) return Promise.reject(new Error(`${label} cancelled before start`));
 
-  const child = spawn(options.execPath ?? process.execPath, [options.entryPath], {
+  // Resolve the entry point before granting it. On macOS `tmpdir()` is a
+  // symlink, so a granted `/var/...` path never matches the `/private/var/...`
+  // path the child computes when it resolves itself, and the child dies before
+  // it can run anything.
+  const entryPath = resolveEntryPath(options.entryPath);
+  const child = spawn(options.execPath ?? process.execPath, [...permissionArgs(options, entryPath), entryPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
     detached: true,
     ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),

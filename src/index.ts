@@ -93,6 +93,7 @@ export {
 export {
   DEFAULT_MAX_OUTPUT_BYTES as ISOLATED_CHILD_MAX_OUTPUT_BYTES,
   runIsolatedChild,
+  type ChildConfinement,
   type IsolatedChildResult,
   type RunIsolatedChildOptions
 } from './operations/isolated-child.js';

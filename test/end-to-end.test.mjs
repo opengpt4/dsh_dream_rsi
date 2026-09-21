@@ -465,12 +465,21 @@ test('the snapshot is immutable and hashes its splits', async () => {
 
   assert.equal(Object.isFrozen(snapshot), true);
   assert.equal(Object.isFrozen(snapshot.splits), true);
-  // Pin `createdAt`: two default calls can straddle a millisecond boundary, and
-  // the id covers creation time by design.
-  const at = '2026-01-01T00:00:00.000Z';
+
+  // The id is a content address: the same tree yields the same id whatever the
+  // wall clock said, so two evaluations can be told apart from the same one.
+  assert.equal(snapshot.snapshotId, createEvaluationSnapshot(nodes).snapshotId);
   assert.equal(
-    createEvaluationSnapshot(nodes, undefined, at).snapshotId,
-    createEvaluationSnapshot(nodes, undefined, at).snapshotId
+    snapshot.snapshotId,
+    createEvaluationSnapshot(nodes, undefined, '2020-01-01T00:00:00.000Z').snapshotId
   );
-  assert.notEqual(createEvaluationSnapshot(nodes, undefined, at).snapshotId, snapshot.snapshotId);
+  // Creation time is still recorded and still differs between calls; it is just
+  // no longer part of the identity.
+  const earlier = createEvaluationSnapshot(nodes, undefined, '2020-01-01T00:00:00.000Z');
+  assert.equal(earlier.createdAt, '2020-01-01T00:00:00.000Z');
+  assert.notEqual(earlier.createdAt, snapshot.createdAt);
+  assert.equal(earlier.snapshotId, snapshot.snapshotId);
+
+  // Different content is a different snapshot.
+  assert.notEqual(snapshot.snapshotId, createEvaluationSnapshot(nodes.slice(1)).snapshotId);
 });

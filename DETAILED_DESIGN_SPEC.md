@@ -440,7 +440,7 @@ Object keys are sorted recursively; arrays preserve order; numbers and strings u
 2. Freeze nested structures.
 3. Assign task-level train/validation/holdout membership using deterministic SHA-256.
 4. Serialize schema version, creation time and splits.
-5. Hash the serialized content as `snapshotId`.
+5. Hash the serialized content as `snapshotId` — `schemaVersion` and `splits` only. `createdAt` is recorded on the snapshot but excluded from the id, so two snapshots of the identical tree share an id and the id is a content address. Node-level `createdAt` values are part of the content, so the identity still covers when the work happened.
 6. Return an immutable snapshot.
 
 Evaluation stores the snapshot ID and content hash. A snapshot is never edited in place.
@@ -525,6 +525,14 @@ Parent process sends one JSON request to a worker over stdin. Worker returns one
 - limit CPU, memory, process count, output bytes and wall time;
 - kill the complete process group on timeout;
 - write only a temporary result that parent validates and atomically promotes.
+
+#### Node permission model
+
+`src/operations/isolated-child.ts` spawns every isolated child under Node's permission model by default: `--experimental-permission` with a read grant scoped to the child's own directory, and no write or `child_process` grant. A confined child that attempts either receives `ERR_ACCESS_DENIED`, which bounds filesystem writes and process count before the process-group kill is even relevant.
+
+Two details are load-bearing. The entry point and every granted path are resolved with `realpathSync` first, because `tmpdir()` is a symlink on macOS and a grant written as `/var/...` never matches the `/private/var/...` path the child computes when it resolves itself. And an explicit grant is resolved the same way as the derived one, or the caller's grant silently fails.
+
+This is defense in depth, not the OS/container sandbox. Node documents the permission model as not a security boundary against hostile native code, and it does not restrict network access. `confinement: false` exists for a host that cannot use the flag, and says so rather than silently degrading.
 
 ## 9. Evolution and Candidate Design
 
