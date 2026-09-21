@@ -59,7 +59,11 @@ export function validateRetentionPolicy(policy: RetentionPolicy): void {
  * Write an artifact under a retention policy.
  *
  * The caller cannot shorten retention by passing its own `retentionMs`: the
- * policy decides, so a tool cannot arrange for its own evidence to expire.
+ * policy decides, so a tool cannot arrange for its own evidence to expire. The
+ * input is rebuilt field by field rather than spread, because an untyped caller
+ * can pass `retentionMs` regardless of the parameter type, and for a kind the
+ * policy retains indefinitely a merged value would otherwise become the
+ * retention.
  */
 export function putWithRetention(
   store: ArtifactStore,
@@ -68,7 +72,13 @@ export function putWithRetention(
 ): ArtifactMetadata {
   validateRetentionPolicy(policy);
   const retentionMs = retentionFor(policy, input.kind);
-  return store.put({ ...input, ...(retentionMs !== null ? { retentionMs } : {}) });
+  return store.put({
+    bytes: input.bytes,
+    kind: input.kind,
+    mediaType: input.mediaType,
+    schemaVersion: input.schemaVersion,
+    ...(retentionMs !== null ? { retentionMs } : {})
+  });
 }
 
 /** Artifacts past their retention, without deleting them. */

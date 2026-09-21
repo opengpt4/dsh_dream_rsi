@@ -602,6 +602,8 @@ Candidates are immutable artifacts. The Evolution Agent may output source, diff,
 
 `src/registry/policy-registry.ts`. Policies, evaluation reports, and deployments are append-only and identified by content hash. The current-policy pointer is the only mutable state.
 
+An id is computed, never accepted: each record constructor derives it from a body built field by field from the caller's input, so a caller that passes an `evaluationId` cannot replace the hash. A spread of the caller's object after the computed id would return a report claiming another report's identity and failing its own verification. The registry re-verifies every record against its content on registration and on load, so a record edited after construction is refused.
+
 `promotePolicy(artifactId, { evaluationId, approval, canary })` runs every check before any mutation, so a rejected promotion leaves the registry byte-identical:
 
 1. the artifact is registered;
@@ -803,7 +805,7 @@ Redaction applies where data is *emitted for operators* — audit reasons, befor
 
 Every governed transition on the deployment writer checks the acting principal before reading or writing state, so a denial changes nothing. The writer also refuses an approval recorded under another principal's name: recording someone else's approval is not approval.
 
-**Retention** (`src/governance/retention.ts`). Decided per artifact kind at write time; a caller cannot shorten it, so a tool cannot arrange for its own evidence to expire. Policy, tool, and evaluation artifacts are retained indefinitely because they are the audit trail. `pruneExpired` and `expiredArtifacts` never remove anything on their own.
+**Retention** (`src/governance/retention.ts`). Decided per artifact kind at write time; a caller cannot shorten it, so a tool cannot arrange for its own evidence to expire. The write path rebuilds the store input field by field rather than spreading the caller's object, because the parameter type omitting `retentionMs` is a compile-time guard only: an untyped caller can pass one, and for a kind retained indefinitely that value would otherwise become the retention and make the audit trail immediately prunable. Policy, tool, and evaluation artifacts are retained indefinitely because they are the audit trail. `pruneExpired` and `expiredArtifacts` never remove anything on their own.
 
 **Production policy** (`PRODUCTION_POLICY.md`). States the safety defaults as a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code in either direction. While any release blocker remains open, `evolution.autoDeploy` stays `false`.
 

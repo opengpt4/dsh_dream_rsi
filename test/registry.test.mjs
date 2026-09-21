@@ -134,6 +134,25 @@ test('an evaluation report id covers its metrics and case results', () => {
   );
 });
 
+test('a report cannot claim another report\'s id', () => {
+  const artifact = policy();
+  const honest = report(artifact.artifactId);
+  // The parameter type omits `evaluationId`, but an untyped caller can pass it.
+  const impostor = report(artifact.artifactId, { passed: false, evaluationId: honest.evaluationId });
+
+  assert.notEqual(impostor.evaluationId, honest.evaluationId);
+  assert.equal(impostor.evaluationId, report(artifact.artifactId, { passed: false }).evaluationId);
+  assert.equal(verifyEvaluationReport(impostor), true);
+
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  registry.registerPolicy(artifact);
+  registry.registerEvaluation(impostor);
+  assert.equal(registry.evaluation(impostor.evaluationId)?.passed, false);
+  // A record edited after construction is still refused, because the id no
+  // longer covers the content.
+  assert.throws(() => registry.registerEvaluation({ ...honest, passed: false }), /does not match its content/);
+});
+
 test('policy artifact input is validated before an id is computed', () => {
   assert.throws(() => policy({ version: '  ' }), /version must not be empty/);
   assert.throws(() => policy({ manifest: { entrypoint: '', dependencies: [], schemaVersion: 1 } }), /entrypoint must not be empty/);

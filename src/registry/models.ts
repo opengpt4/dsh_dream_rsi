@@ -338,11 +338,25 @@ function evaluationReportBody(report: EvaluationReport | EvaluationReportInput):
 }
 
 export function createEvaluationReport(input: EvaluationReportInput): EvaluationReport {
-  return {
-    evaluationId: hashJson(evaluationReportBody(input)),
-    ...input,
+  // Rebuilt field by field rather than spread. The parameter type omits
+  // `evaluationId`, but an untyped caller can pass it anyway, and a spread
+  // would let that value replace the computed hash — returning a report that
+  // fails its own verification and claims another report's identity.
+  const report: Omit<EvaluationReport, 'evaluationId'> = {
+    evaluatorVersion: input.evaluatorVersion,
+    sourceHash: input.sourceHash,
+    snapshotId: input.snapshotId,
+    policyArtifactId: input.policyArtifactId,
+    split: input.split,
+    configHash: input.configHash,
+    metrics: input.metrics,
+    caseResults: input.caseResults,
+    sampleCount: input.sampleCount,
+    passed: input.passed,
+    guardResults: input.guardResults,
     createdAt: input.createdAt ?? new Date().toISOString()
   };
+  return { evaluationId: hashJson(evaluationReportBody(report)), ...report };
 }
 
 export function verifyEvaluationReport(report: EvaluationReport): boolean {

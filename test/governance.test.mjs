@@ -308,6 +308,27 @@ test('a writer cannot shorten retention by passing its own', () => {
       schemaVersion: 1
     });
     assert.equal(forever.retentionUntil, null);
+
+    // The parameter type omits `retentionMs`, but an untyped caller can pass it
+    // anyway. For a kind retained indefinitely, a merged value would become the
+    // retention and make the audit trail immediately prunable.
+    const shortened = putWithRetention(store, DEFAULT_RETENTION_POLICY, {
+      bytes: Buffer.from('policy-attacked'),
+      kind: 'policy',
+      mediaType: 'application/json',
+      schemaVersion: 1,
+      retentionMs: 1
+    });
+    assert.equal(shortened.retentionUntil, null);
+
+    const lengthened = putWithRetention(store, DEFAULT_RETENTION_POLICY, {
+      bytes: Buffer.from('observation-attacked'),
+      kind: 'observation',
+      mediaType: 'application/json',
+      schemaVersion: 1,
+      retentionMs: 365 * 24 * 60 * 60 * 1_000
+    });
+    assert.equal(lengthened.retentionUntil, new Date(Date.parse(AT) + 7 * 24 * 60 * 60 * 1_000).toISOString());
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
