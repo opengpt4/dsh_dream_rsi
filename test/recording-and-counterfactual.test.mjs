@@ -238,6 +238,36 @@ test('a state with no alternatives reports no counterfactual entry', () => {
   assert.deepEqual(report.counterfactuals, []);
 });
 
+test('a counterfactual probe is not counted as a replay', () => {
+  // Two decisions from one state, so each is the other's alternative. Probing
+  // them must not inflate what the replay of the episode reports.
+  const { report } = replayNodes([
+    node({ nodeId: 'n-0' }),
+    node({ nodeId: 'n-1', actionParams: { dx: 5, dy: 0, dz: 0 } })
+  ]);
+
+  assert.equal(report.replayedNodeIds.length, 2);
+  assert.equal(report.hitCount, 2);
+  assert.equal(report.missCount, 0);
+  assert.deepEqual(report.visitedNodeIds, ['n-0', 'n-1']);
+  // The alternatives are still resolved and still reported.
+  assert.equal(report.counterfactuals.length, 2);
+  assert.equal(report.counterfactuals.flatMap((entry) => entry.branches).length, 2);
+});
+
+test('probing an action the tree never took leaves the counters alone', () => {
+  const simulator = new ReplaySimulator([node({ nodeId: 'n-0' })]);
+  const state = { environmentVersion: 'mock-room-v1@1', stateHash: 'state-shared', observationHash: 'obs-shared' };
+
+  const branches = simulator.counterfactual(state, [
+    { actionType: 'goto', normalizedActionParams: { x: 9, y: 0, z: 0 } }
+  ]);
+
+  assert.deepEqual(branches.map((branch) => branch.result.kind), ['boundary_miss']);
+  // A boundary miss here is the answer to a question, not a failed replay.
+  assert.deepEqual(simulator.metrics(), { hitCount: 0, missCount: 0, visitedNodeIds: [] });
+});
+
 test('counterfactual branches come from a recorded episode', async () => {
   const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
   try {

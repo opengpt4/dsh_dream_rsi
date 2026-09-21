@@ -59,15 +59,22 @@ export class ReplaySimulator {
   }
 
   execute(input: ReplayKeyInput): ReplayResult {
+    const result = this.resolve(input);
+    if (result.kind === 'hit') {
+      this.hitCount += 1;
+      this.visitedNodeIds.push(result.node.nodeId);
+    } else {
+      this.missCount += 1;
+    }
+    return result;
+  }
+
+  /** Resolve a key without recording the attempt as a replay. */
+  private resolve(input: ReplayKeyInput): ReplayResult {
     const replayKey = createReplayKey(input);
     const node = this.nodesByReplayKey.get(replayKey);
-    if (node !== undefined) {
-      this.hitCount += 1;
-      this.visitedNodeIds.push(node.nodeId);
-      return { kind: 'hit', replayKey, node };
-    }
+    if (node !== undefined) return { kind: 'hit', replayKey, node };
 
-    this.missCount += 1;
     const actionTypes = (this.actionsByState.get(this.stateKey(input)) ?? []).map((action) => action.actionType);
     return {
       kind: 'boundary_miss',
@@ -94,11 +101,15 @@ export class ReplaySimulator {
    * recorded actions, resolved from history without re-running the model or the
    * environment. An action never taken from this state resolves to a boundary
    * miss, which is itself the answer.
+   *
+   * A probe does not reach the counters: {@link metrics} describes the decisions
+   * that were replayed, and counting probes as replays reported more hits than
+   * the episode had decisions, with a visited list holding each such node twice.
    */
   counterfactual(state: ReplayState, actions: readonly ReplayAction[]): readonly CounterfactualBranch[] {
     return actions.map((action) => ({
       actionType: action.actionType,
-      result: this.execute({
+      result: this.resolve({
         environmentVersion: state.environmentVersion,
         stateHash: state.stateHash,
         observationHash: state.observationHash,

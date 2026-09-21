@@ -503,7 +503,7 @@ export type ReplayTransition =
 
 `ReplaySimulator.counterfactual(state, actions)` resolves several actions against one state from history, so comparing alternatives costs a lookup rather than a model call. `recordedActions(state)` lists what the tree actually tried from that state, parameters included: two `move_relative` calls at different distances are different alternatives, and guessing the action set would make the answer depend on the guess. An action never taken from that state resolves to a boundary miss, which is itself the answer.
 
-The replay report carries `counterfactuals`, one entry per visited node that has recorded alternatives, satisfying the functional requirement that replay results include hit, miss, visited nodes, counterfactual branches, simulation cost, and critical path.
+The replay report carries `counterfactuals`, one entry per visited node that has recorded alternatives, satisfying the functional requirement that replay results include hit, miss, visited nodes, counterfactual branches, simulation cost, and critical path. The counters describe replays, not probes: `execute` records an attempt, a counterfactual resolves without recording one, so `hitCount` and `visitedNodeIds` hold one entry per replayed decision and a boundary miss found by a probe is not a failed replay. Counting probes as replays reported more hits than the episode had decisions and listed each such node twice.
 
 Replay may read snapshot and artifact store only. The implementation must not import the Harness LLM client, execute tools, start a sandbox, access network, or mutate the source store. A replay purity test should run with those capabilities denied.
 
@@ -526,6 +526,8 @@ S = wq*Q - wc*C + wp*P - boundaryPenalty*M
 ```
 
 Store Q, C, P, M and S separately. A single score cannot hide a quality or safety regression.
+
+`boundaryMissCount` and `totalAttempts` come from the replay of the episode's decisions, with counterfactual probes excluded, so M is the fraction of replayed decisions that missed rather than a count of questions asked.
 
 ### 8.2 Evaluation request and report
 
