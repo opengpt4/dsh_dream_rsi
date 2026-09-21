@@ -42,7 +42,10 @@ Implemented and tested capabilities include:
 - lease-based single-writer lock with heartbeat and stale-lock recovery
 - validated configuration with evolution and auto-deployment disabled by default
 - read-only `dream_status` tool for enabled capabilities and safety-relevant config
-- minimal AST guard rejecting `eval`, dynamic `import`/`require`, and filesystem/network/process modules
+- import and capability allowlist, composed with the AST guard into a candidate gate that the pipeline
+  enforces before running anything; a capability-granting built-in cannot be allowlisted
+- evaluator isolation: own process group killed on deadline, cancellation, or output overflow, a
+  `PATH`-only environment, bounded stdout/stderr, and a result rebuilt from untrusted JSON
 
 ```bash
 npm ci
@@ -50,7 +53,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 115 passing tests. OS/container sandboxing, candidate
+The current suite contains 132 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

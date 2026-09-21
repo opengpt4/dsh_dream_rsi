@@ -1,4 +1,5 @@
 import { assertArtifactsVerified, type ArtifactStore } from '../artifacts/store.js';
+import { assertCandidateAccepted, type CandidateGateOptions } from '../guardrails/candidate-gate.js';
 import type { DiscoveryNode } from '../discovery/models.js';
 import {
   evaluateReplay,
@@ -182,6 +183,8 @@ export interface EpisodePipelineOptions extends RunEpisodeOptions {
     readonly store: ArtifactStore;
     readonly artifactIds: readonly string[];
   };
+  /** Scanned before evaluation; a candidate that trips either guard stops the run. */
+  readonly candidateSource?: CandidateGateOptions;
 }
 
 /**
@@ -190,14 +193,17 @@ export interface EpisodePipelineOptions extends RunEpisodeOptions {
  */
 export async function runEpisodePipeline(options: EpisodePipelineOptions): Promise<EpisodePipelineResult> {
   const settings: EpisodePipelineSettings = { ...DEFAULT_EPISODE_PIPELINE_SETTINGS, ...options.settings };
-  const outcome = await runEpisode(options);
-
-  // Fail closed before the evaluator sees anything: an artifact whose checksum
-  // does not match its name must never be scored or deployed.
+  // Fail closed before spending any work: an artifact whose checksum does not
+  // match its name must never be scored, and a candidate that trips a guard
+  // must never run at all.
   if (options.artifacts !== undefined) {
     assertArtifactsVerified(options.artifacts.store, options.artifacts.artifactIds);
   }
+  if (options.candidateSource !== undefined) {
+    assertCandidateAccepted(options.candidateSource);
+  }
 
+  const outcome = await runEpisode(options);
   const nodes = options.snapshotSource === 'store' ? options.store.readAll() : outcome.nodes;
   const snapshot = createEvaluationSnapshot(nodes, options.splitConfig ?? DEFAULT_SPLIT_CONFIG);
   const { report } = replayNodes(nodes, settings);

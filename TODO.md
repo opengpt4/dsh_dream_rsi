@@ -86,19 +86,20 @@
 ### 6. Strong Evaluator Isolation
 
 - [x] Process boundary and timeout wrapper.
-- [ ] Add cancellation and process-group termination.
-- [ ] Add output schema validation and bounded stdout/stderr.
-- [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits.
+- [x] Add cancellation and process-group termination. The child leads its own process group (`detached: true`), so a deadline or abort kills everything it spawned; killing only the direct child leaves grandchildren running with host privileges.
+- [x] Add output schema validation and bounded stdout/stderr. Captured output is capped at `maxOutputBytes`, and the result is rebuilt field by field from untrusted JSON rather than cast, so a crafted response cannot smuggle extra properties.
+- [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits. Wall-time, output bound, and process-count termination are in place; CPU, memory, filesystem, and network limits need the sandbox below.
 - [ ] Select and implement container or OS-level sandbox before running untrusted candidate code. `[!]`
-- [ ] Ensure holdout, evaluator internals, secrets, and deployment registry are inaccessible to candidates.
+- [x] Keep host secrets and evaluator internals out of a candidate's reach: the child is spawned with `PATH` only, so inheriting `process.env` cannot hand it the host's API keys.
+- [ ] Ensure holdout and the deployment registry are inaccessible to candidates. Needs the holdout mechanism and the deployment registry (items 8 and 9).
 
 ### 7. Guardrails
 
 - [x] Implement AST guard for forbidden calls and dynamic imports (`src/guardrails/ast-guard.ts`, rule-based on the TypeScript compiler AST; not a full sandbox).
-- [ ] Implement dependency/import allowlist.
-- [ ] Implement resource and network capability guard.
-- [ ] Add prompt-injection and malicious tool-output fixtures.
-- [ ] Verify every guard rejection leaves current policy and deployment registry unchanged.
+- [x] Implement dependency/import allowlist (`src/guardrails/import-allowlist.ts`): relative imports must resolve inside the candidate root, packages are matched against an explicit list, and an unlisted built-in is denied rather than assumed harmless.
+- [x] Implement resource and network capability guard: built-ins are classified by the capability they grant (filesystem, network, process, secrets, code-generation, concurrency), and a capability-granting built-in cannot be allowlisted at all.
+- [x] Add prompt-injection and malicious tool-output fixtures (`test/fixtures/malicious-candidates.mjs`), each naming the rule that must catch it; `scanCandidate` composes both guards and is wired into the pipeline before the episode runs.
+- [ ] Verify every guard rejection leaves current policy and deployment registry unchanged. Scanning is deterministic and stateless, but neither registry exists yet (item 8).
 
 ## P1: Evolution and Deployment
 
@@ -180,7 +181,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [x] Complete task-to-Discovery-to-Replay-to-evaluation trace, verified against the mock environment (`test/end-to-end.test.mjs`). Real-simulator evidence is still tracked under item 10.
 - [ ] Strong OS/container isolation for untrusted candidate code.
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
-- [ ] AST, dependency, resource, and network guards.
+- [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested, but runtime CPU/memory/filesystem/network limits do not, so this stays open.
 - [ ] Holdout gate with sufficient samples and per-task-family report.
 - [ ] Approval, canary, atomic deployment, and rollback.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).

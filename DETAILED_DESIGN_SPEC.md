@@ -622,6 +622,33 @@ Controls:
 
 AST checking is a prefilter, never the security boundary. Any candidate capable of executing code must run in an OS-level restricted environment.
 
+#### Candidate gate
+
+Two independent checks run over the same source before a candidate is evaluated or executed, composed by `scanCandidate` and enforced by `assertCandidateAccepted`:
+
+| Guard | Rejects |
+|---|---|
+| `runAstGuard` | `eval`, `Function`, `exec*`/`spawn*`, dynamic `import()`, non-literal `require()`, forbidden module specifiers, `process.env`/`binding`/`kill`/`mainModule` |
+| `checkImports` | a relative import resolving outside the candidate root; a package absent from the allowlist; a built-in absent from the allowlist; any built-in that grants a capability |
+
+Built-ins are classified by the capability they grant — filesystem, network, process, secrets, code-generation, concurrency. **A capability-granting built-in cannot be allowlisted at all**, because approving it by name would make the profile meaningless. The unlisted remainder falls to the package allowlist and is denied, so a new Node release cannot silently widen what a candidate may reach.
+
+Both guards are pure functions of the source string: no state, no mutation, and the same input always yields the same verdict.
+
+#### Evaluator isolation
+
+The evaluator runs in a child process that leads its own process group (`detached: true`). A deadline, a cancellation, or an output overflow kills the whole group, because killing only the direct child leaves grandchildren running with the host's privileges.
+
+| Control | Behaviour |
+|---|---|
+| Deadline | `timeoutMs`, default 5000 |
+| Cancellation | `signal`; kills the group |
+| Output bound | `maxOutputBytes` on stdout and on stderr, default 1 MiB |
+| Environment | `PATH` only. Inheriting `process.env` would hand the child every API key the parent holds |
+| Result validation | Fields are rebuilt from untrusted JSON rather than cast, so a crafted response cannot inject extra properties |
+
+CPU, memory, filesystem, and network limits require OS-level confinement and are not yet implemented.
+
 ## 13. Observability and Audit
 
 Every event and metric carries:

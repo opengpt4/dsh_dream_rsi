@@ -17,12 +17,26 @@ export {
 export { createReplayKey, replayKeyInputFromNode, REPLAY_KEY_SCHEMA_VERSION } from './replay/key.js';
 export { ReplaySimulator } from './replay/simulator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
-export { evaluateReplayIsolated } from './evolution/isolated-evaluator.js';
+export { evaluateReplayIsolated, DEFAULT_MAX_OUTPUT_BYTES, type IsolatedEvaluatorOptions } from './evolution/isolated-evaluator.js';
 export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
 export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG } from './evolution/monotonic-gate.js';
 export { createEvaluationSnapshot, type EvaluationSnapshot } from './evolution/snapshot.js';
 export { SingleWriterLock } from './operations/single-writer-lock.js';
 export { runAstGuard, type AstGuardResult, type AstGuardViolation } from './guardrails/ast-guard.js';
+export {
+  checkImports,
+  type Capability,
+  type ImportAllowlistOptions,
+  type ImportAllowlistResult,
+  type ImportKind,
+  type ImportViolation
+} from './guardrails/import-allowlist.js';
+export {
+  assertCandidateAccepted,
+  scanCandidate,
+  type CandidateGateOptions,
+  type CandidateGateResult
+} from './guardrails/candidate-gate.js';
 export { getDreamRsiStatus, createStatusTool, type DreamRsiStatus } from './status.js';
 export {
   DEFAULT_DREAM_RSI_CONFIG,
