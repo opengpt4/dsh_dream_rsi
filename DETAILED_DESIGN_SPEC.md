@@ -153,7 +153,7 @@ A setup failure must dispose any registrations already created, then fail startu
 
 `ready` verifies storage schema, current policy artifact, evaluator worker availability and backend capability profile. `dispose` cancels evolution jobs, waits for bounded shutdown, closes SQLite/artifact handles, resets session backends and unregisters all effects.
 
-Implemented as `verifyReadiness` (`src/readiness.ts`), surfaced through `dream_status`. Each check reports `ready`, `not-ready`, or `not-probed` rather than a boolean, because opening the store creates the database file and the status tool is documented as side-effect free: storage is left `not-probed` there and probed only when a caller asks. A `not-probed` check does not make the report claim readiness.
+Implemented as `verifyReadiness` (`src/readiness.ts`), surfaced through `dream_status` when the tool is constructed with a runtime. The tool previously accepted a runtime and dropped it, so readiness lived on the function and never reached the output a model reads; `noUnusedParameters` now makes that mistake a compile error. Each check reports `ready`, `not-ready`, or `not-probed` rather than a boolean, because opening the store creates the database file and the status tool is documented as side-effect free: storage is left `not-probed` there and probed only when a caller asks. A `not-probed` check does not make the report claim readiness.
 
 `dispose` releases adapter sessions and guard latches before closing storage. Releasing sessions is not housekeeping: a backend that keeps them past unload leaves a real environment holding whatever pose and gripper the last episode left it in. Guard latches go with them, because the sessions a guard knew about belong to a runtime that no longer exists.
 

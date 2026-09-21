@@ -95,7 +95,9 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 334 passing tests. OS/container sandboxing and a real
+`tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
+
+The current suite contains 336 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

@@ -105,7 +105,7 @@ export class FileArtifactStore implements ArtifactStore {
   private readonly blobRoot: string;
   private readonly entries = new Map<string, ArtifactMetadata>();
 
-  constructor(private readonly rootDir: string, private readonly now: () => Date = () => new Date()) {
+  constructor(rootDir: string, private readonly now: () => Date = () => new Date()) {
     this.indexFilePath = join(rootDir, 'index.json');
     this.blobRoot = join(rootDir, 'blobs');
     mkdirSync(this.blobRoot, { recursive: true });

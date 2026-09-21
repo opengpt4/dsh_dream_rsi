@@ -89,6 +89,28 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
               holdout_ratio: { type: 'number', required: true },
               minimum_holdout_samples: { type: 'integer', required: true }
             }
+          },
+          // Present only when the tool was given a runtime to inspect.
+          readiness: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              ready: { type: 'boolean', required: true },
+              checked_at: { type: 'string', required: true },
+              checks: {
+                type: 'array',
+                required: true,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: 'string', required: true },
+                    state: { type: 'string', required: true },
+                    detail: { type: 'string', required: true }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -96,7 +118,9 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
     },
     isConcurrencySafe: () => true,
     async execute() {
-      const status = getDreamRsiStatus(config);
+      // Passing the runtime through is what makes readiness part of the tool
+      // rather than only of the function behind it.
+      const status = getDreamRsiStatus(config, runtime);
       return {
         enabled: status.enabled,
         evolution_enabled: status.evolutionEnabled,
@@ -109,7 +133,20 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
           validation_ratio: status.evaluation.validationRatio,
           holdout_ratio: status.evaluation.holdoutRatio,
           minimum_holdout_samples: status.evaluation.minimumHoldoutSamples
-        }
+        },
+        ...(status.readiness !== undefined
+          ? {
+              readiness: {
+                ready: status.readiness.ready,
+                checked_at: status.readiness.checkedAt,
+                checks: status.readiness.checks.map((check) => ({
+                  name: check.name,
+                  state: check.state,
+                  detail: check.detail
+                }))
+              }
+            }
+          : {})
       };
     }
   });

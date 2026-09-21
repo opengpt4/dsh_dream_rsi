@@ -1,4 +1,3 @@
-import type { Context } from '@deepseek-ai/cordis';
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 
 import type { EnvironmentAdapter } from './protocol.js';

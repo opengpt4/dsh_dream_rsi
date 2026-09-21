@@ -130,9 +130,9 @@ test('Cordis types are imported only by modules that take a Context', () => {
     .map(([file]) => file)
     .sort();
 
-  // perceive and query-state take only the adapter contract now, so they carry
-  // no Cordis type at all.
-  assert.deepEqual(importers, ['adapter/cordis.ts', 'embodied/act.ts', 'embodied/query-state.ts']);
+  // query-state takes only the adapter contract now, so only act still needs a
+  // Context — and only to emit its events.
+  assert.deepEqual(importers, ['adapter/cordis.ts', 'embodied/act.ts']);
 });
 
 /**

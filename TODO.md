@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：334 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：336 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -52,7 +52,7 @@
 - [x] Add configuration schema export for the host Harness (`Config`, Schemastery; the Cordis loader validates each fiber's `config` against it before `apply` runs).
 - [x] Connect validated config to Discovery store, embodied backend, split config, and writer lock construction (`src/runtime.ts`).
 - [x] Derive replay and evaluator settings (`replay.maxNodes`, `replay.missRateMax`, `evaluation.timeoutMs`, `evaluation.minimumHoldoutSamples`) in the runtime, applied by `src/tasks/pipeline.ts`. The holdout gate's thresholds are derived too (`evaluationSettings.holdoutGate`), including `evolution.minimumPassRatio` and `evolution.minimumImprovement`; before that the gate only ever used its own defaults, so `minimumImprovement` was configurable in name only.
-- [x] Add `dream status` read-only runtime facade (exposed as the `dream_status` tool, since no verified Cordis/DSH command contract exists yet; see `src/status.ts`).
+- [x] Add `dream status` read-only runtime facade (exposed as the `dream_status` tool, since no verified Cordis/DSH command contract exists yet; see `src/status.ts`). It carries the readiness report when it is given a runtime, and omits the field rather than inventing one when it is not.
 - [x] Reject invalid configuration before any persistent resource or tool registration is created (the schema runs in `apply` before `ctx.effect`; `createDreamRsiRuntime` validates before opening SQLite).
 
 ### 3. End-to-End Mock Task
