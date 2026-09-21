@@ -322,6 +322,32 @@ test('deployment refuses an artifact whose signature does not verify', () => {
   }
 });
 
+test('a verifier that throws is a refusal, not a bypass', () => {
+  // A provider that cannot reach its key service throws rather than returning
+  // false. That has to refuse the deployment: catching the error and trusting
+  // the artifact is the one failure mode this check exists to prevent, and
+  // nothing pinned it.
+  const context = setup({
+    signatureVerifier: {
+      verify: () => {
+        throw new Error('key service unreachable');
+      }
+    }
+  });
+  try {
+    const proposed = context.propose();
+    context.writer.decide(proposed.deploymentId, APPROVAL);
+
+    assert.throws(() => context.writer.startCanary(proposed.deploymentId), /key service unreachable/);
+    assert.equal(context.registry.currentPolicyArtifactId(), null);
+    assert.equal(context.registry.latestDeployment().state, 'APPROVED');
+    // The failure is not a transition, so the trail claims none.
+    assert.deepEqual(context.audit.types(), ['policy.proposed', 'policy.approved']);
+  } finally {
+    context.cleanup();
+  }
+});
+
 test('deployment refuses an artifact whose checksum does not match its id', () => {
   const context = setup();
   try {
