@@ -62,6 +62,44 @@ test('identical bytes are one artifact and different bytes are another', () => {
   });
 });
 
+test('the same bytes cannot be filed under two kinds', () => {
+  // One blob carries one record, so a second kind cannot be filed over the
+  // first — and the kind decides retention. The case that matters is the audit
+  // trail: storing a policy after the same bytes were stored as an observation
+  // silently returned the observation, so the policy would have expired in seven
+  // days. Refusing is the honest answer; a store that must hold one blob under
+  // two kinds needs per-kind records rather than a silent collision.
+  const AT = '2026-01-01T00:00:00.000Z';
+  const week = 7 * 24 * 60 * 60 * 1_000;
+  withTempDir((dir) => {
+    const store = new FileArtifactStore(dir, () => new Date(AT));
+    const observation = store.put({
+      bytes: Buffer.from('the same bytes'),
+      kind: 'observation',
+      mediaType: 'text/plain',
+      schemaVersion: 1,
+      retentionMs: week
+    });
+    assert.equal(observation.retentionUntil, new Date(Date.parse(AT) + week).toISOString());
+
+    assert.throws(
+      () =>
+        store.put({
+          bytes: Buffer.from('the same bytes'),
+          kind: 'policy',
+          mediaType: 'text/plain',
+          schemaVersion: 1
+        }),
+      /already stored as observation; the same bytes cannot also be stored as policy/
+    );
+
+    // Nothing was written over: still one record, still the observation's retention.
+    assert.equal(store.list().length, 1);
+    assert.equal(store.metadata(observation.artifactId).kind, 'observation');
+    assert.equal(store.metadata(observation.artifactId).retentionUntil, observation.retentionUntil);
+  });
+});
+
 test('metadata records the media type, byte length, schema version, and retention', () => {
   withTempDir((dir) => {
     const at = new Date('2026-01-01T00:00:00.000Z');

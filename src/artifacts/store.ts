@@ -131,8 +131,22 @@ export class FileArtifactStore implements ArtifactStore {
 
     const artifactId = createHash('sha256').update(input.bytes).digest('hex');
     const existing = this.metadata(artifactId);
-    // Identical content is one artifact; re-putting an undeleted one changes nothing.
-    if (existing !== undefined && existing.deletedAt === null) return existing;
+    if (existing !== undefined && existing.deletedAt === null) {
+      // Identical content is one artifact, and re-putting an undeleted one
+      // changes nothing. One blob carries one record, though, so a second kind
+      // cannot be filed over the first: the kind, and the retention the policy
+      // derives from it, would silently become whichever writer came first —
+      // storing the same bytes as a policy after they were stored as an
+      // observation left the audit trail expiring in seven days. A store that
+      // must hold one blob under two kinds needs per-kind records, which is a
+      // design change rather than a silent one.
+      if (existing.kind !== input.kind) {
+        throw new Error(
+          `artifact ${artifactId} is already stored as ${existing.kind}; the same bytes cannot also be stored as ${input.kind}`
+        );
+      }
+      return existing;
+    }
 
     const blobPath = this.blobPath(artifactId);
     if (!existsSync(blobPath)) {
