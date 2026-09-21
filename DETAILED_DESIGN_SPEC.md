@@ -144,7 +144,7 @@ The adapter is the only component permitted to know a simulator or hardware SDK.
 Target setup sequence:
 
 1. Validate configuration and capability profile.
-2. Resolve storage and artifact directories.
+2. Resolve the storage directory. The artifact directory is taken from configuration but not opened: the runtime builds no artifact store, so a host passes `storage.artifactDir` to `createPolicyArtifactWithSource` itself.
 3. Construct service facades.
 4. Register typed events.
 5. Register tools and read-only commands.

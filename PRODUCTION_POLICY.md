@@ -23,14 +23,26 @@ Deployment requires a registered policy artifact, a passing holdout gate
 covering the exact evaluation being deployed, an explicit operator approval,
 and a passing canary. Nothing on that path deploys itself.
 
-`evolution.autoDeploy` is a declaration rather than a switch: the schema accepts
-it, the resolver requires `evolution.enabled` alongside it, and the status tool
-reports it — and nothing reads it to do anything. Setting it today changes no
-behaviour, which `test/candidate-generation.test.mjs` asserts by running the
-whole generation path with it on and a passing gate, and
-`test/architecture.test.mjs` enforces by failing if a third module names the
-flag. That is why it stays `false` while any release blocker in `TODO.md`
-remains open: implementing it is a deliberate act, not a configuration change.
+`evolution.autoDeploy` is not consumed by anything, so it stays `false` while any
+release blocker in `TODO.md` remains open: implementing it is a deliberate act,
+not a configuration change. `test/candidate-generation.test.mjs` asserts the
+guarantee directly by running the whole generation path with the flag on and a
+passing gate, and checking the current-policy pointer has not moved.
+
+## Configuration fields nothing consumes
+
+These are accepted by the schema, validated, and reported by `dream_status` where
+they appear there, and read by no code path. Each is a declaration of intent
+rather than a switch. `test/architecture.test.mjs` derives the set from the
+source and requires it to match this list, so wiring one is a deliberate change
+that updates this section in the same commit, and a new field nothing reads has
+to be documented here rather than left to imply a capability.
+
+- `runtime.maxWorkers` — no worker pool exists; the isolated evaluator runs one child per evaluation.
+- `runtime.taskTimeoutMs` — an episode is bounded by `Task.budget.wallClockMs` and each action by its own timeout, so there is no configuration-level task ceiling.
+- `evolution.maxCandidates` — there is no candidate loop; `generateCandidate` produces one proposal per call.
+- `evolution.autoDeploy` — nothing promotes a policy on its own; promotion requires an explicit approval, a passing gate verdict covering the evaluation, and a passing canary.
+- `storage.artifactDir` — the runtime builds no artifact store and `src/` constructs no `FileArtifactStore`, so this is the location a host passes to `createPolicyArtifactWithSource` rather than one the plugin opens.
 
 ## Approval is never implied
 

@@ -202,17 +202,21 @@ test('every Cordis service the adapter uses is declared in inject', () => {
   assert.deepEqual(declared, ['tools']);
 });
 
-test('nothing consumes the automatic-deployment flag', () => {
-  // `evolution.autoDeploy` is a declaration, not a switch: the schema accepts it,
-  // the resolver requires `evolution.enabled` alongside it, and the status tool
-  // reports it — and nothing else reads it, so no configuration promotes a policy
-  // on its own. Implementing automatic deployment is a decision the release
-  // blockers forbid until isolation and signing land, so it has to be deliberate.
-  // This fails the moment a third module names the flag. It matches raw text, so
-  // a mention in a comment counts: the point is that the flag stays in two
-  // places, and a note about it elsewhere belongs in a document, not in a module.
-  const allowed = new Set(['config.ts', 'status.ts']);
-  const consumers = [];
+test('the configuration fields nothing consumes are exactly the documented ones', () => {
+  // `autoDeploy` was the first of these, and it was not the only one: three
+  // runtime/evolution fields and the artifact directory were accepted, validated
+  // and reported while no code path read them, so each implied a capability that
+  // does not exist. This derives the set from the source and requires it to match
+  // PRODUCTION_POLICY.md, so wiring one forces the document to change with it and
+  // a newly unread field has to be documented rather than implied.
+  const config = readFileSync(join(SRC, 'config.ts'), 'utf8');
+  const declaration = config.slice(config.indexOf('export interface DreamRsiConfig {'));
+  // Leaf fields only: a block declaration is followed by `{`.
+  const body = declaration.slice(0, declaration.indexOf('\n}\n'));
+  const fields = [...new Set([...body.matchAll(/readonly ([A-Za-z][A-Za-z0-9]*): (?!\{)/g)].map((match) => match[1]))];
+  assert.ok(fields.length >= 20, `expected the whole config surface, found ${fields.length} fields`);
+
+  const others = [];
   const walk = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const absolute = join(directory, entry.name);
@@ -220,13 +224,17 @@ test('nothing consumes the automatic-deployment flag', () => {
         walk(absolute);
         continue;
       }
-      if (!entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts')) continue;
-      if (!readFileSync(absolute, 'utf8').includes('autoDeploy')) continue;
-      if (allowed.has(entry.name)) continue;
-      consumers.push(relative(SRC, absolute));
+      // config.ts declares them and status.ts reports them; neither consumes one.
+      if (!entry.name.endsWith('.ts') || ['config.ts', 'status.ts'].includes(entry.name)) continue;
+      others.push(readFileSync(absolute, 'utf8'));
     }
   };
   walk(SRC);
 
-  assert.deepEqual(consumers, [], 'a module now names evolution.autoDeploy');
+  const inert = fields.filter((field) => !others.some((text) => new RegExp(`\\b${field}\\b`).test(text)));
+
+  const policy = readFileSync(fileURLToPath(new URL('../PRODUCTION_POLICY.md', import.meta.url)), 'utf8');
+  const documented = [...policy.matchAll(/^- `(?:[a-zA-Z]+\.)?([A-Za-z][A-Za-z0-9]*)` —/gm)].map((match) => match[1]);
+
+  assert.deepEqual(inert.sort(), documented.sort(), 'PRODUCTION_POLICY.md and the source disagree about which configuration fields nothing consumes');
 });
