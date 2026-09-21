@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { InMemoryDiscoveryStore, SQLiteDiscoveryStore } from '../dist/index.js';
 import { DEFAULT_EVALUATOR_CONFIG, evaluateReplay } from '../dist/evolution/evaluator.js';
+import { evaluateReplayIsolated } from '../dist/evolution/isolated-evaluator.js';
 
 const node = {
   nodeId: 'node-sqlite-1',
@@ -89,6 +90,49 @@ test('a zero denominator is floored rather than dividing by zero', () => {
   for (const [name, value] of Object.entries(result)) {
     assert.ok(Number.isFinite(value), `${name} is ${value}`);
   }
+});
+
+test('a coefficient that would invert the score is refused', () => {
+  // A negative cost weight rewards spending and a negative boundary penalty
+  // rewards misses: the score keeps its shape and flips its meaning, which is
+  // worse than a wrong number because nothing about it looks wrong.
+  const input = { visitedNodes: [node], boundaryMissCount: 3, totalAttempts: 4, criticalPathMs: 6 };
+  const honest = evaluateReplay(input, DEFAULT_EVALUATOR_CONFIG);
+  // The inversion, computed from the honest metrics rather than by calling the
+  // guarded function: both terms enter with a minus sign, so negating their
+  // coefficients adds them and a run with misses and cost scores higher.
+  const inverted =
+    honest.score +
+    2 * DEFAULT_EVALUATOR_CONFIG.costWeight * honest.cost +
+    2 * DEFAULT_EVALUATOR_CONFIG.boundaryPenalty * honest.missRate;
+  assert.ok(inverted > honest.score, 'the fixture must show the inversion this guard exists to stop');
+
+  for (const name of ['gamma', 'qualityWeight', 'costWeight', 'parallelWeight', 'boundaryPenalty']) {
+    for (const value of [-0.1, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.throws(
+        () => evaluateReplay(input, { ...DEFAULT_EVALUATOR_CONFIG, [name]: value }),
+        new RegExp(`evaluator ${name} must `),
+        `${name} = ${value} must be refused`
+      );
+    }
+  }
+
+  // Zero is a direction too — "ignore this axis" — and stays legal.
+  assert.doesNotThrow(() =>
+    evaluateReplay(input, { ...DEFAULT_EVALUATOR_CONFIG, gamma: 0, costWeight: 0, parallelWeight: 0, boundaryPenalty: 0 })
+  );
+});
+
+test('the isolated evaluator refuses an inverting coefficient on the child side', async () => {
+  // The config crosses the child's stdin, so the child has to check it as well:
+  // the parent's copy is not the one that computes the score.
+  await assert.rejects(
+    evaluateReplayIsolated(
+      { visitedNodes: [node], boundaryMissCount: 0, totalAttempts: 1, criticalPathMs: 6 },
+      { ...DEFAULT_EVALUATOR_CONFIG, qualityWeight: -1 }
+    ),
+    /evaluator qualityWeight must not be negative/
+  );
 });
 
 test('a reference that is not finite and positive counts as one', () => {

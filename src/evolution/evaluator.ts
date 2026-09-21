@@ -37,10 +37,40 @@ export const DEFAULT_EVALUATOR_CONFIG: EvaluatorConfig = {
   boundaryPenalty: 10
 };
 
+/**
+ * Refuse a coefficient that would invert what the score means.
+ *
+ * `positive` guards the references and budgets because they are scales: a
+ * nonsensical one is replaced by one and the score keeps its meaning. A
+ * coefficient is a direction, not a scale. A negative `costWeight` rewards
+ * spending, a negative `boundaryPenalty` rewards misses, and a negative `gamma`
+ * subtracts execution time from cost — each silently produces a score that says
+ * the opposite of what the field name claims. A non-finite coefficient poisons
+ * every score it touches. So these are refused rather than adjusted.
+ *
+ * The config reaches the evaluator from the host and, for an isolated run, over
+ * the child's stdin: the child calls this too, which is what stops a run from
+ * being scored under coefficients the parent never intended.
+ */
+export function assertEvaluatorConfig(config: EvaluatorConfig): void {
+  const coefficients = [
+    ['gamma', config.gamma],
+    ['qualityWeight', config.qualityWeight],
+    ['costWeight', config.costWeight],
+    ['parallelWeight', config.parallelWeight],
+    ['boundaryPenalty', config.boundaryPenalty]
+  ] as const;
+  for (const [name, value] of coefficients) {
+    if (!Number.isFinite(value)) throw new Error(`evaluator ${name} must be finite, received ${value}`);
+    if (value < 0) throw new Error(`evaluator ${name} must not be negative, received ${value}`);
+  }
+}
+
 export function evaluateReplay(
   input: EvaluationInput,
   config: EvaluatorConfig = DEFAULT_EVALUATOR_CONFIG
 ): EvaluationResult {
+  assertEvaluatorConfig(config);
   const qualityRaw = input.visitedNodes.length === 0
     ? 0
     : Math.max(...input.visitedNodes.map((node) => node.score));

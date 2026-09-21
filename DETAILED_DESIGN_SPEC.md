@@ -540,7 +540,7 @@ S = wq*Q - wc*C + wp*P - boundaryPenalty*M
 
 `positive(x)` is `x` when it is finite and greater than zero, and `1` otherwise. It is a guard against a denominator that would poison the score, not a floor at one: a fractional reference divides by that fraction, while a zero, negative, NaN or infinite one divides by one rather than yielding `Infinity`, `NaN` or `0`. The written form used to say `max(x, 1)`, which agrees only for references at or above one and would have described the opposite behaviour for the other two cases.
 
-Store Q, C, P, M and S separately. A single score cannot hide a quality or safety regression.
+Store Q, C, P, M and S separately. A single score cannot hide a quality or safety regression. The five coefficients — `gamma`, `qualityWeight`, `costWeight`, `parallelWeight`, `boundaryPenalty` — must be finite and non-negative and are refused otherwise, including by the evaluator child, because a config crosses its stdin: a negative one inverts the axis it names, so a run with misses and cost would score *higher*, and a non-finite one poisons every score it touches. Zero is legal and means "ignore this axis". The references and budgets are scales rather than directions and stay guarded by `positive` instead.
 
 `boundaryMissCount` and `totalAttempts` come from the replay of the episode's decisions, with counterfactual probes excluded, so M is the fraction of replayed decisions that missed rather than a count of questions asked.
 

@@ -60,11 +60,26 @@ export async function evaluateReplayIsolated(
   });
 
   if (result.exitCode !== 0) {
-    throw new Error(`isolated evaluator exited with code ${result.exitCode}: ${result.stderr.trim().slice(0, 512)}`);
+    // The child reports a refusal on stdout and an exit code; checking the code
+    // first was throwing away the reason it wrote, leaving an operator with
+    // "exited with code 1: " and an empty stderr.
+    const reported = reportedError(result.stdout);
+    const detail = reported ?? result.stderr.trim().slice(0, 512);
+    throw new Error(`isolated evaluator exited with code ${result.exitCode}: ${detail}`);
   }
   const response = JSON.parse(result.stdout) as { result?: unknown; error?: string };
   if (response.error) throw new Error(response.error);
   return parseEvaluationResult(response.result);
+}
+
+/** The error the child wrote, when it wrote one. */
+function reportedError(stdout: string): string | undefined {
+  try {
+    const parsed = JSON.parse(stdout) as { error?: unknown };
+    return typeof parsed.error === 'string' && parsed.error.length > 0 ? parsed.error : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
