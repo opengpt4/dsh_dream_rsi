@@ -27,7 +27,8 @@ import {
   redactValue,
   resolveDreamRsiConfig,
   retentionFor,
-  validateRetentionPolicy
+  validateRetentionPolicy,
+  verifyAuditEvent
 } from '../dist/index.js';
 
 const AT = '2026-01-01T00:00:00.000Z';
@@ -112,6 +113,55 @@ test('an audit reason is redacted before it is stored and hashed', () => {
   // The id covers what is actually stored, so it verifies against the redacted form.
   assert.match(event.eventId, /^[0-9a-f]{64}$/);
   assert.equal(createAuditEvent({ ...event, eventId: undefined }).reason, event.reason);
+});
+
+test('an audit event id covers its whole body', () => {
+  const event = createAuditEvent({
+    type: 'policy.rolled-back',
+    subject: 'deployment',
+    subjectId: 'deploy-1',
+    correlationId: 'correlation-1',
+    reason: 'operator rolled back',
+    at: AT
+  });
+
+  assert.equal(verifyAuditEvent(event), true);
+  assert.equal(verifyAuditEvent({ ...event, eventId: 'f'.repeat(64) }), false);
+  // Every field the id covers. A hash over only part of the body — the type,
+  // say — would leave the rest editable without a reader noticing.
+  for (const change of [
+    { type: 'policy.deployed' },
+    { subject: 'session' },
+    { subjectId: 'deploy-2' },
+    { correlationId: 'correlation-2' },
+    { at: '2026-01-02T00:00:00.000Z' },
+    { reason: 'nothing happened' },
+    { schemaVersion: 2 }
+  ]) {
+    assert.equal(verifyAuditEvent({ ...event, ...change }), false, JSON.stringify(change));
+  }
+  assert.equal(verifyAuditEvent({ ...event, operator: 'someone-else' }), false);
+  // A field the event never had is an alteration, not something to ignore.
+  assert.equal(verifyAuditEvent({ ...event, note: 'extra' }), false);
+});
+
+test('a recorded audit event cannot be rewritten through the reference it returns', () => {
+  const log = new InMemoryAuditLog();
+  const recorded = log.record({
+    type: 'policy.deployed',
+    subject: 'deployment',
+    subjectId: 'deploy-1',
+    correlationId: 'correlation-1',
+    reason: 'approved',
+    at: AT
+  });
+
+  assert.equal(Object.isFrozen(recorded), true);
+  assert.throws(() => {
+    recorded.reason = 'rewritten';
+  }, TypeError);
+  assert.equal(log.list()[0].reason, 'approved');
+  assert.equal(verifyAuditEvent(log.list()[0]), true);
 });
 
 // ------------------------------------------------------------- access control

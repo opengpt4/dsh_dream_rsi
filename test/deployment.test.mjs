@@ -15,6 +15,7 @@ import {
   createEvaluationReport,
   createPolicyArtifact,
   transitionDeployment,
+  verifyAuditEvent,
   verifyDeployment
 } from '../dist/index.js';
 
@@ -466,6 +467,46 @@ test('the file audit log appends one verifiable line per event', () => {
     assert.equal(first.subjectId, 'd1');
     assert.match(first.eventId, /^[0-9a-f]{64}$/);
     assert.equal(second.operator, 'op');
+
+    // Read back through the log rather than by hand, so the lines are checked
+    // against their ids rather than only looking like events.
+    const events = log.read();
+    assert.deepEqual(events.map((event) => event.type), ['policy.proposed', 'policy.approved']);
+    assert.equal(verifyAuditEvent(events[0]), true);
+    assert.equal(Object.isFrozen(events), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the file audit log refuses an altered or truncated line', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-audit-'));
+  const path = join(dir, 'audit.jsonl');
+  try {
+    const log = new FileAuditLog(path);
+    const recorded = log.record({
+      type: 'policy.rolled-back', subject: 'deployment', subjectId: 'd1',
+      correlationId: 'c1', reason: 'operator rolled back', at: AT
+    });
+
+    // An edit to a covered field, with the stored id left alone.
+    const altered = `${JSON.stringify({ ...recorded, reason: 'nothing happened' })}\n`;
+    writeFileSync(path, altered);
+    assert.throws(() => log.read(), /line 1 does not match its event id/);
+
+    // A field the record never had is an alteration too, not invisible.
+    writeFileSync(path, `${JSON.stringify({ ...recorded, note: 'extra' })}\n`);
+    assert.throws(() => log.read(), /line 1 does not match its event id/);
+
+    // An interrupted append: the writer is not atomic, so this must not be read
+    // as an event.
+    writeFileSync(path, `${JSON.stringify(recorded)}\n{"eventId":"ab`);
+    assert.throws(() => log.read(), /line 2 is not a complete event/);
+
+    // Truncation that removes the whole final line is a shorter trail, not a
+    // corrupt one.
+    writeFileSync(path, `${JSON.stringify(recorded)}\n`);
+    assert.equal(log.read().length, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

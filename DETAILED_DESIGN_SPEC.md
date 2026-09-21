@@ -777,7 +777,7 @@ Deployment records carry `history`, so the path taken is recoverable even though
 
 **Signature posture.** `SignatureVerifier` is a seam, and its absence is a refusal rather than a bypass: an unsigned artifact must not reach production because nobody wired the check. The signing scheme itself is an open blocker.
 
-**Audit.** `AuditSink` is append-only; `FileAuditLog` writes one JSON object per line and never rewrites. Each event's `eventId` is the hash of its body, so a reader can tell whether a line was altered. Degradation performed as part of a rollback is emitted as its own `policy.degraded` event.
+**Audit.** `AuditSink` is append-only; `FileAuditLog` writes one JSON object per line and never rewrites. Each event's `eventId` is a hash over its whole body, taken from one definition shared by the writer and `verifyAuditEvent`, so a field cannot be covered when an event is written and ignored when it is checked. `verifyAuditEvent` is the supported way for a reader to tell whether a line was altered, and treats an unrecognised field as an alteration; `FileAuditLog.read` checks every line and fails closed on the first that does not match, including an interrupted final append, which is not a complete event. A recorded event is frozen, because `record` hands back the object the sink keeps and a caller that could edit it in place could rewrite the trail. Degradation performed as part of a rollback is emitted as its own `policy.degraded` event.
 
 ## 12. Security Model
 

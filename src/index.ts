@@ -137,6 +137,7 @@ export {
 export {
   AUDIT_SCHEMA_VERSION,
   createAuditEvent,
+  verifyAuditEvent,
   FileAuditLog,
   InMemoryAuditLog,
   type AuditEvent,
