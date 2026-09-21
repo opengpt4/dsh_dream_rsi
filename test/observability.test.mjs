@@ -358,6 +358,22 @@ test('small samples use a t critical value rather than 1.96', () => {
   assert.ok(Math.abs(tCritical95(31) / 1.96 - 1) < 0.04);
 });
 
+test('an interval is the t value at n-1 degrees of freedom', () => {
+  // A whole-suite mutation sweep changed this to `values.length` and no test
+  // noticed: the table was pinned, the confidence interval built from it was
+  // not. The two differ observably, so the interval is what has to be asserted.
+  const values = [1, 2, 3, 4, 5];
+  const interval = aggregate(values);
+  const standardError = Math.sqrt(2.5 / values.length);
+
+  assert.equal(interval.mean, 3);
+  assert.ok(Math.abs(interval.upper - (3 + tCritical95(values.length - 1) * standardError)) < 1e-12);
+  assert.notEqual(interval.upper, 3 + tCritical95(values.length) * standardError);
+  // Symmetric, and the width is twice the margin.
+  assert.equal(interval.upper - interval.mean, interval.mean - interval.lower);
+  assert.ok(Math.abs((interval.upper - interval.lower) / 2 - tCritical95(4) * standardError) < 1e-12);
+});
+
 test('a miss flag a case never recorded is absent from the family miss rate', () => {
   const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
   const artifact = artifactFor(registry);
