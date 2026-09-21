@@ -55,6 +55,16 @@ lines.once('line', (line) => {
     return;
   }
 
+  if (mode === 'heap-probe') {
+    // Hold `allocateMb` of numbers, then report how many entries survived. Under
+    // a ceiling below that the child is killed, so there is no verdict at all.
+    const held = [];
+    const entries = Math.ceil((input.allocateMb ?? 24) / 8);
+    for (let i = 0; i < entries; i += 1) held.push(new Array(1_000_000).fill(i));
+    process.stdout.write(JSON.stringify({ result: { quality: held.length, cost: 0, parallelEfficiency: 0, missRate: 0, score: 0 } }) + '\n');
+    return;
+  }
+
   if (mode === 'noisy') {
     // Far more than any caller should accept.
     process.stdout.write('x'.repeat(4 * 1024 * 1024));

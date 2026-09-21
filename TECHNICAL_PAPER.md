@@ -521,7 +521,7 @@ First, the current embodied backend is a mock backend. It demonstrates session i
 
 Second, the replay world is bounded by observed transitions. A high replay score may reflect historical coverage rather than a genuinely better policy in an unexplored environment.
 
-Third, the current child-process evaluator is not a complete sandbox. It runs under Node's permission model, which denies filesystem writes and child processes, and it is spawned with `PATH` only so host secrets are unreachable. Node documents that model as not a security boundary against hostile native code, and it does not restrict network access, so CPU, memory, and network isolation are still not enforced against hostile generated code.
+Third, the current child-process evaluator is not a complete sandbox. It runs under Node's permission model, which denies filesystem writes and child processes, it is spawned with `PATH` only so host secrets are unreachable, and its V8 heap is capped so an unbounded allocation stops the child rather than the host. Node documents that model as not a security boundary against hostile native code, and it does not restrict network access, so CPU-time and network isolation are still not enforced against hostile generated code.
 
 Fourth, candidate generation is evaluate-only and tool synthesis produces host-templated artifacts; neither has been exercised against a real simulator, and no claim of autonomous self-improvement is made by the current test suite.
 

@@ -14,12 +14,22 @@ import { dirname, join } from 'node:path';
 export const DEFAULT_MAX_OUTPUT_BYTES = 1_048_576;
 
 /**
+ * V8 heap ceiling for a child, in MiB.
+ *
+ * A resource bound, not a permission-model grant, so it applies whether or not
+ * confinement is on: a child that cannot use `--experimental-permission` can
+ * still be stopped from allocating the host to death. V8 aborts the child when
+ * the ceiling is reached, which reaches the caller as a non-zero exit.
+ */
+export const DEFAULT_MAX_OLD_SPACE_SIZE_MB = 512;
+
+/**
  * Runtime confinement for the child, via Node's permission model.
  *
  * On by default: the child may read its own directory and nothing else, and may
  * not write or spawn. This is defense in depth, not the OS/container sandbox —
  * Node documents the permission model as not a security boundary against
- * hostile native code, and it does not restrict network access.
+ * hostile native code, and it does not restrict network access or CPU time.
  */
 export interface ChildConfinement {
   /** Directories the child may read. Defaults to the entry point's directory. */
@@ -38,6 +48,8 @@ export interface RunIsolatedChildOptions {
   readonly cwd?: string;
   readonly stdin?: string;
   readonly maxOutputBytes?: number;
+  /** V8 heap ceiling in MiB. Defaults to {@link DEFAULT_MAX_OLD_SPACE_SIZE_MB}. */
+  readonly maxOldSpaceSizeMb?: number;
   readonly signal?: AbortSignal;
   readonly env?: NodeJS.ProcessEnv;
   readonly execPath?: string;
@@ -49,6 +61,17 @@ export interface IsolatedChildResult {
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
+}
+
+/**
+ * Resource flags for a child, applied whether or not confinement is on.
+ *
+ * The heap ceiling is a V8 flag rather than a permission-model grant, so a host
+ * that has to disable confinement still gets a memory bound.
+ */
+function resourceArgs(options: RunIsolatedChildOptions): string[] {
+  const maxOldSpaceSizeMb = options.maxOldSpaceSizeMb ?? DEFAULT_MAX_OLD_SPACE_SIZE_MB;
+  return [`--max-old-space-size=${maxOldSpaceSizeMb}`];
 }
 
 /**
@@ -102,6 +125,10 @@ export function runIsolatedChild(options: RunIsolatedChildOptions): Promise<Isol
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) {
     return Promise.reject(new Error('maxOutputBytes must be a positive integer'));
   }
+  const maxOldSpaceSizeMb = options.maxOldSpaceSizeMb ?? DEFAULT_MAX_OLD_SPACE_SIZE_MB;
+  if (!Number.isInteger(maxOldSpaceSizeMb) || maxOldSpaceSizeMb <= 0) {
+    return Promise.reject(new Error('maxOldSpaceSizeMb must be a positive integer'));
+  }
   if (options.signal?.aborted === true) return Promise.reject(new Error(`${label} cancelled before start`));
 
   // Resolve the entry point before granting it. On macOS `tmpdir()` is a
@@ -109,12 +136,16 @@ export function runIsolatedChild(options: RunIsolatedChildOptions): Promise<Isol
   // path the child computes when it resolves itself, and the child dies before
   // it can run anything.
   const entryPath = resolveEntryPath(options.entryPath);
-  const child = spawn(options.execPath ?? process.execPath, [...permissionArgs(options, entryPath), entryPath], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    detached: true,
-    ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-    env: options.env ?? { PATH: process.env.PATH ?? '/usr/bin:/bin' }
-  });
+  const child = spawn(
+    options.execPath ?? process.execPath,
+    [...resourceArgs(options), ...permissionArgs(options, entryPath), entryPath],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true,
+      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+      env: options.env ?? { PATH: process.env.PATH ?? '/usr/bin:/bin' }
+    }
+  );
 
   return new Promise((resolve, reject) => {
     let stdout = '';

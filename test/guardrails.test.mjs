@@ -293,6 +293,49 @@ test('a host that cannot use the permission flag can disable confinement explici
   }
 });
 
+test('a child that allocates past its heap ceiling is killed, not the host', async () => {
+  // 24 MiB of numbers under a 16 MiB ceiling. V8 aborts the child, so there is
+  // no verdict and the caller sees the exit rather than an out-of-memory host.
+  await assert.rejects(
+    evaluateReplayIsolated(probe('heap-probe', { allocateMb: 24 }), undefined, options({ maxOldSpaceSizeMb: 16 })),
+    /exited with code/
+  );
+});
+
+test('the same allocation completes under a ceiling above it', async () => {
+  const result = await evaluateReplayIsolated(
+    probe('heap-probe', { allocateMb: 24 }),
+    undefined,
+    options({ maxOldSpaceSizeMb: 256 })
+  );
+
+  // Three 8 MiB entries: the ceiling is what stopped it before, not the probe.
+  assert.equal(result.quality, 3);
+});
+
+test('the heap ceiling applies whether or not confinement is on', async () => {
+  // Memory is a resource bound, not a permission-model grant: a host that has to
+  // turn confinement off still gets the child bounded.
+  await assert.rejects(
+    evaluateReplayIsolated(
+      probe('heap-probe', { allocateMb: 24 }),
+      undefined,
+      options({ maxOldSpaceSizeMb: 16, confinement: false })
+    ),
+    /exited with code/
+  );
+});
+
+test('a heap ceiling that is not a positive integer is refused', async () => {
+  for (const maxOldSpaceSizeMb of [0, -1, 1.5]) {
+    await assert.rejects(
+      evaluateReplayIsolated(probe('ok'), undefined, options({ maxOldSpaceSizeMb })),
+      /maxOldSpaceSizeMb must be a positive integer/,
+      String(maxOldSpaceSizeMb)
+    );
+  }
+});
+
 test('cancellation terminates the run', async () => {
   const controller = new AbortController();
   const pending = evaluateReplayIsolated(probe('hang'), undefined, options({ timeoutMs: 30_000, signal: controller.signal }));

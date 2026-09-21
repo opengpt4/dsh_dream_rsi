@@ -91,6 +91,7 @@ export {
   type ToolStatus
 } from './tools/tool-registry.js';
 export {
+  DEFAULT_MAX_OLD_SPACE_SIZE_MB,
   DEFAULT_MAX_OUTPUT_BYTES,
   runIsolatedChild,
   type ChildConfinement,

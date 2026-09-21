@@ -843,12 +843,13 @@ The evaluator runs in a child process that leads its own process group (`detache
 | Deadline | `timeoutMs`, default 5000 |
 | Cancellation | `signal`; kills the group |
 | Output bound | `maxOutputBytes` on stdout and on stderr, default 1 MiB |
+| Heap ceiling | `maxOldSpaceSizeMb`, default 512. A V8 flag rather than a permission-model grant, so it applies with confinement off too: V8 aborts the child, and the caller sees a non-zero exit rather than a host that ran out of memory |
 | Environment | `PATH` only. Inheriting `process.env` would hand the child every API key the parent holds |
 | Result validation | Fields are rebuilt from untrusted JSON rather than cast, so a crafted response cannot inject extra properties |
 
 An observation whose `schemaVersion` is not the expected one fails the episode before a Discovery node is built. Recording it would put the mismatch into the replay key, producing a silently different key instead of an error — the one thing a version field exists to prevent.
 
-Every child is spawned under Node's permission model (`--experimental-permission`) with a read grant scoped to its own directory and no write or `child_process` grant, which bounds filesystem writes and process count. CPU, memory, and network limits still require OS-level confinement and are not implemented; Node documents the permission model as not a security boundary against hostile native code.
+Every child is spawned under Node's permission model (`--experimental-permission`) with a read grant scoped to its own directory and no write or `child_process` grant, which bounds filesystem writes and process count, and with a V8 heap ceiling, which bounds memory. CPU time and network remain unbounded: the permission model does not restrict `net.connect` (confirmed by a probe), and Node exposes no CPU-time ceiling. Both need OS-level confinement, and Node documents the permission model as not a security boundary against hostile native code.
 
 ## 13. Observability and Audit
 

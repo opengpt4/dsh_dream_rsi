@@ -1,9 +1,9 @@
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_MAX_OUTPUT_BYTES, runIsolatedChild, type ChildConfinement } from '../operations/isolated-child.js';
+import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_MAX_OLD_SPACE_SIZE_MB, runIsolatedChild, type ChildConfinement } from '../operations/isolated-child.js';
 import type { EvaluationInput, EvaluationResult, EvaluatorConfig } from './evaluator.js';
 
-export { DEFAULT_MAX_OUTPUT_BYTES };
+export { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_MAX_OLD_SPACE_SIZE_MB };
 
 const RESULT_FIELDS = ['quality', 'cost', 'parallelEfficiency', 'missRate', 'score'] as const;
 
@@ -11,6 +11,12 @@ export interface IsolatedEvaluatorOptions {
   readonly timeoutMs?: number;
   /** Kill the child once captured stdout exceeds this. */
   readonly maxOutputBytes?: number;
+  /**
+   * V8 heap ceiling for the child, in MiB. Defaults to
+   * {@link DEFAULT_MAX_OLD_SPACE_SIZE_MB}, so a candidate that allocates without
+   * bound is stopped by the child rather than by the host running out of memory.
+   */
+  readonly maxOldSpaceSizeMb?: number;
   /** Cancels the run and terminates the child's process group. */
   readonly signal?: AbortSignal;
   /**
@@ -44,6 +50,7 @@ export async function evaluateReplayIsolated(
     timeoutMs: options.timeoutMs ?? 5_000,
     stdin: `${JSON.stringify({ input, config })}\n`,
     ...(options.maxOutputBytes !== undefined ? { maxOutputBytes: options.maxOutputBytes } : {}),
+    ...(options.maxOldSpaceSizeMb !== undefined ? { maxOldSpaceSizeMb: options.maxOldSpaceSizeMb } : {}),
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
     ...(options.env !== undefined ? { env: options.env } : {}),
     ...(options.confinement !== undefined ? { confinement: options.confinement } : {})
