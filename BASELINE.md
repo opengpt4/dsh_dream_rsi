@@ -23,6 +23,11 @@ Verified against the deployed Harness and `@deepseek-ai/cordis-plugin-loader@1.0
   bundle's patch, then the profile's `cordis.patch.yml`, then `--patch` overlays
   — and a later layer addresses an earlier row by id, last write per row
   winning. `!!js` expressions are evaluated by the loader.
+- `inject` names the services a plugin waits for. `ctx.tools` is a Cordis
+  service, so it must be declared: reading a service the provider has not yet
+  installed throws `cannot get property "tools" without inject`, and the plugin
+  declared none. The core mixins (`effect`, `emit`) live on the context
+  prototype rather than in the service store, so they need no declaration.
 - A package is mountable only when `package.json` declares `dsh.bundle.patch`
   and that path resolves to a patch file. A package listed in
   `dsh.profile.bundles` with no readable patch target never mounts.

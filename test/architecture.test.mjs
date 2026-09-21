@@ -171,3 +171,33 @@ test('the declared non-imported entry points are the only ones', () => {
 
   assert.deepEqual(unimported, NON_IMPORTED_ENTRY_POINTS);
 });
+
+/**
+ * Core Context members, which live on the prototype rather than in the service
+ * store, so reading them needs no `inject` declaration. Anything else reached
+ * as `ctx.<name>` is a service.
+ */
+const CORE_CONTEXT_MEMBERS = new Set([
+  'effect', 'emit', 'on', 'once', 'off', 'parallel', 'waterfall', 'bail',
+  'start', 'stop', 'provide', 'command', 'worker', 'plugin', 'registry',
+  'inject', 'reflect', 'scope', 'isolate', 'extend', 'mixin'
+]);
+
+test('every Cordis service the adapter uses is declared in inject', () => {
+  const adapter = readFileSync(join(SRC, 'adapter/cordis.ts'), 'utf8');
+  const entry = readFileSync(join(SRC, 'index.ts'), 'utf8');
+
+  const used = new Set(
+    [...adapter.matchAll(/ctx\.([A-Za-z_][A-Za-z0-9_]*)/g)]
+      .map((match) => match[1])
+      .filter((name) => !CORE_CONTEXT_MEMBERS.has(name))
+  );
+
+  const declared = [...(entry.match(/export const inject: string\[\] = \[([^\]]*)\]/) ?? [, ''])[1].matchAll(/'([^']+)'/g)]
+    .map((match) => match[1]);
+
+  // A service read without a declaration is an activation race: Cordis throws
+  // "cannot get property X without inject" when the provider has not run yet.
+  assert.deepEqual([...used].sort(), [...declared].sort());
+  assert.deepEqual(declared, ['tools']);
+});

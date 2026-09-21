@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：336 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：337 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -13,7 +13,7 @@
 ## Completed Baseline
 
 - [x] 固定 Node.js >=22.5、TypeScript、Cordis 與 DSH tools 版本
-- [x] Cordis `apply(ctx, config?)` plugin entrypoint
+- [x] Cordis `apply(ctx, config?)` plugin entrypoint，`inject` 宣告所用 service（`tools`；未宣告會讓 activation 與 provider 競態，讀不到時 Cordis 丟 `cannot get property "tools" without inject`）
 - [x] `ctx.effect()` reversible tool registration/disposal
 - [x] Mock embodied backend 與 per-session state isolation
 - [x] `embodied_perceive`、`embodied_act`、`embodied_query_state`（perceive 輸出帶 `frame_id` 與 `schema_version`，接受 `sensor_types`／`include_pose`，未宣告的 sensor 直接拒絕）

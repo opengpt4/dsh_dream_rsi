@@ -17,7 +17,8 @@ deployment.
 
 Implemented and tested capabilities include:
 
-- Cordis reversible embodied tool registration behind a dedicated `adapter/cordis.ts` boundary
+- Cordis reversible embodied tool registration behind a dedicated `adapter/cordis.ts` boundary, with the
+  `tools` service declared in `inject` so activation cannot race its provider
 - bundle patch and `dsh.bundle.patch` manifest, so a profile can mount the package
 - host-facing `Config` schema, validated by the Cordis loader before `apply` runs
 - runtime binding validated config to the Discovery store, embodied backend, split config, and writer locks
@@ -97,7 +98,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 336 passing tests. OS/container sandboxing and a real
+The current suite contains 337 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

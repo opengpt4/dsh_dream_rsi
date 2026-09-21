@@ -352,7 +352,16 @@ export {
 } from './tasks/pipeline.js';
 
 export const name = 'dream-rsi';
-export const inject: string[] = [];
+
+/**
+ * Services this plugin waits for before `apply` runs.
+ *
+ * `ctx.tools` is a Cordis service, so it has to be declared or activation can
+ * race the provider: reading an unprovided service throws "cannot get property
+ * \"tools\" without inject". The core mixins (`effect`, `emit`) need no
+ * declaration — they are on the context prototype, not in the service store.
+ */
+export const inject: string[] = ['tools'];
 
 /**
  * Cordis entrypoint for the Dream-RSI plugin. All Cordis-specific wiring
