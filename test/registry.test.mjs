@@ -551,6 +551,33 @@ test('an edited deployment is refused at the write boundary, not only on load', 
   assert.equal(registry.latestDeployment().state, 'ACTIVE');
 });
 
+test('a tampered evaluation record is refused rather than trusted', () => {
+  // The policy tamper test covers the other record kind. A report is the
+  // evidence a promotion rests on, so a `passed` flag edited on disk is exactly
+  // what the re-verification on load exists to catch — and dropping that check
+  // survived every test.
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
+  try {
+    const registry = new PolicyRegistry(new FilePolicyRegistryStore(dir));
+    const artifact = policy();
+    registry.registerPolicy(artifact);
+    const evaluation = report(artifact.artifactId);
+    registry.registerEvaluation(evaluation);
+
+    const recordPath = join(dir, 'evaluations', `${evaluation.evaluationId}.json`);
+    const written = JSON.parse(readFileSync(recordPath, 'utf8'));
+    written.passed = !written.passed;
+    writeFileSync(recordPath, JSON.stringify(written));
+
+    assert.throws(
+      () => new PolicyRegistry(new FilePolicyRegistryStore(dir)),
+      /evaluation .* does not match its content/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a pointer at an unregistered current policy is refused', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
   try {

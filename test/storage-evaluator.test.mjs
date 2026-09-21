@@ -90,3 +90,18 @@ test('a zero denominator is floored rather than dividing by zero', () => {
     assert.ok(Number.isFinite(value), `${name} is ${value}`);
   }
 });
+
+test('the stored schema version is read back rather than defaulted', () => {
+  // The existing round-trip test uses the current schema version, so a store
+  // that returned the constant 1 instead of the stored column passed it. The
+  // field exists so a reader can tell which schema wrote a node, which is worth
+  // nothing if the answer is always the one this build happens to use.
+  const store = new SQLiteDiscoveryStore(':memory:');
+  const fromOtherSchema = { ...node, nodeId: 'from-other-schema', schemaVersion: 2 };
+  store.append(fromOtherSchema);
+
+  assert.equal(store.get('from-other-schema').schemaVersion, 2);
+  assert.equal(store.readAll().find((entry) => entry.nodeId === 'from-other-schema').schemaVersion, 2);
+  assert.deepEqual(store.get('from-other-schema'), fromOtherSchema);
+  store.close();
+});
