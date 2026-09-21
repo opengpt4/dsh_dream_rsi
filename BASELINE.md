@@ -42,6 +42,26 @@ Verified against the deployed Harness and `@deepseek-ai/cordis-plugin-loader@1.0
   returned disposer as the rollback. An effect body that throws registers
   nothing, so a partially-completed setup must roll back its own work.
 
+## Simulator environment (verified)
+
+The real-environment path was chosen and checked on this machine, not assumed:
+
+| Fact | Verified how |
+|---|---|
+| RoboSuite 1.5.2 and MuJoCo 3.2.3 install and import on arm64 macOS | Python 3.11 venv, CPU only, no display, no system packages; about two minutes |
+| `Lift` and `Stack` run headless | Both load, reset, step with 7-dimension OSC actions, and close |
+| The seed is real and the run is reproducible | The same seed produced an identical observation digest in two separate processes; a different seed produced a different one |
+| Cameras give large payloads headless | `agentview` RGB 84x84x3 plus 84x84x1 depth with `MUJOCO_GL=glfw`, 49,392 bytes per step, about 1 MB at 512x512 |
+| Observations map onto the plugin's protocol | `robot0_eef_pos`/`_quat` is the pose, `robot0_gripper_qpos` the gripper, `cube_pos`/`cubeB_pos`/`cubeA_pos` the objects, and `object-state` is a 10-vector |
+
+Two constraints came out of the check. RoboSuite 1.5.2 fails against MuJoCo 3.13
+(`get_joint_qpos_addr` asserts a hinge-or-slide joint and the Panda model presents
+a free joint), and its metadata asks for `mujoco>=3.3.0` while 3.2.3 is the
+version that works — so the pin is empirical and a future RoboSuite release is
+what would lift it. Offscreen rendering needs `MUJOCO_GL=glfw` on macOS; `osmesa`
+is not a value this MuJoCo build accepts. The virtual environment lives outside
+the repository, so nothing here depends on a committed interpreter.
+
 ## Not Assumed Yet
 
 The published minimal SDK bundle is a profile bundle, not a plugin registration API. Tool, event, and service registration must be implemented only after the exact DSH packages and runtime contracts are selected and tested.

@@ -1,8 +1,8 @@
 # Decisions needed
 
-6 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
+4 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
 repository because they choose a provider, a runtime, a benchmark, or a person.
-All 14 open items wait on one of these six (§8 is empty). Sections whose decision has been made are kept as the record of what
+All 13 open items wait on one of these four (§8 is empty). Sections whose decision has been made are kept as the record of what
 was chosen.
 
 Each section states what already exists, the decision, the options with the
@@ -81,36 +81,49 @@ seam, so the decision is which dependency the host must have.
 
 ---
 
-## 3. First simulator and task family
+## 3. First simulator and task family — answered
 
-**Claims** `TODO: Select first simulator and task family`, and with it
+**Chosen: RoboSuite 1.5.2 on MuJoCo 3.2.3**, in a Python 3.11 virtual environment,
+with `Lift` and `Stack` as the two task families. The pick was made against the
+four criteria below and verified on this machine rather than assumed; the
+evidence is in `BASELINE.md` under "Simulator environment (verified)".
+
+| Criterion | Evidence |
+|---|---|
+| Two families with distinct search-space topology | `Lift` is a sequential reach — a path — and `Stack` is ordering with irreversible steps — a permutation. Both load and step headless. |
+| Deterministic seed, large sensor payloads | The same seed produced an identical observation digest in two separate processes, and a different seed changed it. Cameras give RGB 84x84x3 plus depth, 49,392 bytes per step, about 1 MB at 512x512. |
+| Installable in this environment | Installed in an arm64 macOS venv in about two minutes, no system packages, no display, CPU only. |
+| A frame and scoring stable enough to freeze | MuJoCo world frame in metres, Z-up; `robot0_eef_pos`/`_quat` is the pose, `robot0_gripper_qpos` the gripper, `cube_pos`/`cubeB_pos` the objects. Scoring comes from the task's reward and success predicate, which the node `score` already carries. |
+
+**Eliminated with evidence.** PyBullet publishes no macOS arm64 wheel and its
+source build fails here, so it cannot be installed at all. Meta-World and
+ManiSkill were not needed: they add MuJoCo task wrappers or SAPIEN plus torch
+weight without satisfying a requirement RoboSuite does not already meet, and
+their families are closer to variations on one topology than to the path-versus-
+permutation split the design asks for. Classic-control Gymnasium environments
+were never candidates: they have no manipulation, and the action vocabulary is
+`move_relative`/`pick`/`place`.
+
+**The constraint the host must honour.** RoboSuite 1.5.2 fails on first contact
+with MuJoCo 3.13 (`get_joint_qpos_addr` asserts a hinge-or-slide joint and the
+Panda model presents a free joint), and its metadata asks for `mujoco>=3.3.0`
+while 3.2.3 is the version that works. That contradiction is recorded rather
+than papered over: the pin is empirical, and a future RoboSuite release is what
+would lift it.
+
+**Still open behind it** — the choice was the gate, and these are what it gates:
 `TODO: Add deterministic seed and large-payload artifact capture`,
 `TODO: Compare fixed baseline, hand-designed policy, evolved policy, and holdout performance`,
 `TODO: Holdout gate with sufficient samples and per-task-family report`, and
 `TODO: Multi-task benchmark evidence`.
 
-**Already built.** The `EnvironmentAdapter` boundary is enforced: the SDK is
-reached only through `embodied/mock-adapter.ts`, the protocol depends on nothing
-but the core data model, and `test/architecture.test.mjs` fails if that changes.
-`observe`, `availableActions`, `execute`, `emergencyStop`, `reset`,
-`releaseAllSessions`, and `capability()` are the whole surface.
-
-**The decision.** Which benchmark, and with it: whether a Python simulator needs
-a bridge (every manipulation benchmark of note — Meta-World, ManiSkill,
-RoboSuite, PyBullet — is Python, so the adapter would proxy across processes),
-whether the host will install it, and whether it can supply the two topological
-families that `TODO: Define at least two task families with distinct search-space topology`
-needs and the randomness and payloads the seed item needs.
-
-**Criteria that matter here, in order:** (1) two task families with distinct
-search-space topology; (2) a deterministic seed and large sensor payloads;
-(3) installable in this environment; (4) a coordinate frame and scoring function
-stable enough to freeze for
-`TODO: Freeze observation schema, coordinate system, action capability profile, and scoring function`.
-
-**Smallest answer needed:** a name. If the choice is delegated to me, say so and
-I will pick against those four criteria and document the reasoning.
-
+**What this unblocks, and what it does not.** The simulator choice was the gate
+on the real adapter, the deterministic seed and payload capture, the two task
+families, real holdout evidence, and the benchmark. Selecting it is not the same
+as having them: the remaining work is the bridge and adapter, the two families
+built on these environments, and the evidence run. It also does not answer
+§4 (which frame and sensors to freeze) or §5 (the families' exact shapes) — the
+values are now concrete enough to freeze, which is the next decision.
 ---
 
 ## 4. Freeze the observation schema, frame, capability profile, and scoring
@@ -195,7 +208,7 @@ profile now or waits for the real adapter.
 
 | Answer | Unblocks |
 |---|---|
-| Simulator (§3) | the simulator, adapter, seed, holdout-evidence, and benchmark items — the largest single block, and the only route to real holdout evidence |
+| Simulator (§3) — answered | RoboSuite + MuJoCo, chosen and verified; the bridge, adapter, families, and evidence remain |
 | Schema freeze (§4) | the freeze item, and the comparability of every score after it |
 | Signing (§1) — answered | kept as the record; the remaining report and snapshot signing is in §8 |
 | Sandbox (§2) — answered | the seam and its tests; exercising a named runtime is the host's, so the item, the CPU/network limits, and the release blocker stay open |
