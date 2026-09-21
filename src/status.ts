@@ -17,6 +17,22 @@ export interface DreamRsiStatus {
     readonly holdoutRatio: number;
     readonly minimumHoldoutSamples: number;
   };
+  /**
+   * What an action may do, and how good a candidate must be to replace the live
+   * policy.
+   *
+   * These are the settings a reader needs to answer "will this action be
+   * admitted" and "could this candidate be promoted" — the enabled booleans
+   * above say whether a capability is on, not what it permits.
+   */
+  readonly safetyControls: {
+    readonly requireConfirmation: boolean;
+    readonly allowedActions: readonly string[];
+    readonly actionLeaseMs: number;
+    readonly maxActionsPerMinute: number;
+    readonly minimumPassRatio: number;
+    readonly minimumImprovement: number;
+  };
   /** Present when the status tool was given a runtime to inspect. */
   readonly readiness?: ReadinessReport;
 }
@@ -35,6 +51,14 @@ export function getDreamRsiStatus(config: DreamRsiConfig, runtime?: DreamRsiRunt
       validationRatio: config.evaluation.validationRatio,
       holdoutRatio: config.evaluation.holdoutRatio,
       minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples
+    },
+    safetyControls: {
+      requireConfirmation: config.embodied.requireConfirmation,
+      allowedActions: [...config.embodied.allowActions],
+      actionLeaseMs: config.embodied.actionLeaseMs,
+      maxActionsPerMinute: config.embodied.maxActionsPerMinute,
+      minimumPassRatio: config.evolution.minimumPassRatio,
+      minimumImprovement: config.evolution.minimumImprovement
     },
     // Storage is never probed here: opening it would create a database file,
     // and this tool is documented as side-effect free.
@@ -90,6 +114,19 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
               minimum_holdout_samples: { type: 'integer', required: true }
             }
           },
+          safety_controls: {
+            type: 'object',
+            additionalProperties: false,
+            required: true,
+            properties: {
+              require_confirmation: { type: 'boolean', required: true },
+              allowed_actions: { type: 'array', items: { type: 'string' }, required: true },
+              action_lease_ms: { type: 'integer', required: true },
+              max_actions_per_minute: { type: 'integer', required: true },
+              minimum_pass_ratio: { type: 'number', required: true },
+              minimum_improvement: { type: 'number', required: true }
+            }
+          },
           // Present only when the tool was given a runtime to inspect.
           readiness: {
             type: 'object',
@@ -133,6 +170,14 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
           validation_ratio: status.evaluation.validationRatio,
           holdout_ratio: status.evaluation.holdoutRatio,
           minimum_holdout_samples: status.evaluation.minimumHoldoutSamples
+        },
+        safety_controls: {
+          require_confirmation: status.safetyControls.requireConfirmation,
+          allowed_actions: [...status.safetyControls.allowedActions],
+          action_lease_ms: status.safetyControls.actionLeaseMs,
+          max_actions_per_minute: status.safetyControls.maxActionsPerMinute,
+          minimum_pass_ratio: status.safetyControls.minimumPassRatio,
+          minimum_improvement: status.safetyControls.minimumImprovement
         },
         ...(status.readiness !== undefined
           ? {

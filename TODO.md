@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：437 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：439 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -31,7 +31,7 @@
 - [x] Single-writer lock、lease、heartbeat、stale-lock recovery
 - [x] Validated configuration與安全預設
 - [x] `src/adapter/cordis.ts` 邊界：`index.ts` 不再直接持有 Cordis 註冊邏輯
-- [x] `dream_status` 唯讀工具（config 的安全相關投影，無副作用）
+- [x] `dream_status` 唯讀工具（config 的安全相關投影：啟用旗標、`requireConfirmation`、`allowActions`、`actionLeaseMs`、`maxActionsPerMinute` 與晉升門檻，無副作用）
 - [x] 最小可用 AST guard（`src/guardrails/ast-guard.ts`，以 TypeScript compiler AST 為基礎，非完整沙盒）
 - [x] Functional spec、project plan、detailed design spec、technical paper
 
@@ -54,6 +54,7 @@
 - [x] Derive replay and evaluator settings (`replay.maxNodes`, `replay.missRateMax`, `evaluation.timeoutMs`, `evaluation.minimumHoldoutSamples`) in the runtime, applied by `src/tasks/pipeline.ts`. The holdout gate's thresholds are derived too (`evaluationSettings.holdoutGate`), including `evolution.minimumPassRatio` and `evolution.minimumImprovement`; before that the gate only ever used its own defaults, so `minimumImprovement` was configurable in name only.
 - [x] Add `dream status` read-only runtime facade (exposed as the `dream_status` tool, since no verified Cordis/DSH command contract exists yet; see `src/status.ts`). It carries the readiness report when it is given a runtime, and omits the field rather than inventing one when it is not.
 - [x] Reject invalid configuration before any persistent resource or tool registration is created (the schema runs in `apply` before `ctx.effect`; `createDreamRsiRuntime` validates before opening SQLite).
+- [ ] Extend the `dream status` facade to the rest of the FUNCTIONAL_SPEC.md §4.4 report: current policy, latest evaluation, and resource usage. The tool projects enabled capabilities, the action-admitting controls, and readiness; the store, lock, and evaluator surfaces the runtime exposes are not read into its output.
 
 ### 3. End-to-End Mock Task
 

@@ -88,8 +88,9 @@ Implemented and tested capabilities include:
   gate's non-regression ratio and minimum improvement
 - `embodied.allowActions` narrows the declared action set; configuration can tighten a deployment but
   never widen it
-- read-only `dream_status` tool for enabled capabilities, safety-relevant config, and readiness checks that
-  never open storage as a side effect
+- read-only `dream_status` tool reporting enabled capabilities, the controls that admit an action
+  (`requireConfirmation`, `allowActions`, `actionLeaseMs`, `maxActionsPerMinute`), the promotion thresholds,
+  and readiness checks that never open storage as a side effect
 - disposal releases adapter sessions and guard latches, so an environment is not left holding a pose
 - import and capability allowlist, composed with the AST guard into a candidate gate that the pipeline
   enforces before running anything; a capability-granting built-in cannot be allowlisted
@@ -104,7 +105,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 437 passing tests. OS/container sandboxing and a real
+The current suite contains 439 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work; the seven decisions those and the other
 outstanding items depend on are set out with their options in `DECISIONS.md`.
 

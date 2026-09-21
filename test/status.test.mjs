@@ -34,6 +34,49 @@ test('dream_status tool reports current config with no side effects', async () =
   assert.equal(result.evaluation.train_ratio, DEFAULT_DREAM_RSI_CONFIG.evaluation.trainRatio);
 });
 
+test('the status carries the controls that decide what an action may do', async () => {
+  // The enabled flags say a capability is on, not what it permits: whether a
+  // high-risk action needs confirmation, which actions are admitted, how often,
+  // and how good a candidate must be to replace the live policy all live in the
+  // safety controls, so the projection has to carry them.
+  const config = resolveDreamRsiConfig({
+    embodied: { enabled: true, allowActions: ['pick'], requireConfirmation: false, maxActionsPerMinute: 7 },
+    evolution: { minimumPassRatio: 0.8, minimumImprovement: 0.25 }
+  });
+  const status = getDreamRsiStatus(config);
+
+  assert.deepEqual(status.safetyControls, {
+    requireConfirmation: false,
+    allowedActions: ['pick'],
+    actionLeaseMs: config.embodied.actionLeaseMs,
+    maxActionsPerMinute: 7,
+    minimumPassRatio: 0.8,
+    minimumImprovement: 0.25
+  });
+
+  const tool = createStatusTool(config);
+  const result = await tool.execute({}, { callId: 'call-1', signal: new AbortController().signal });
+
+  assert.deepEqual(result.safety_controls, {
+    require_confirmation: false,
+    allowed_actions: ['pick'],
+    action_lease_ms: config.embodied.actionLeaseMs,
+    max_actions_per_minute: 7,
+    minimum_pass_ratio: 0.8,
+    minimum_improvement: 0.25
+  });
+});
+
+test('the projected action list is a copy', () => {
+  // The projection must not hand out the config's array: a caller that sorted or
+  // emptied it would be editing the running configuration.
+  const config = resolveDreamRsiConfig({ embodied: { enabled: true, allowActions: ['pick'] } });
+  const status = getDreamRsiStatus(config);
+
+  status.safetyControls.allowedActions.push('place');
+  assert.deepEqual(config.embodied.allowActions, ['pick']);
+});
+
 test('the tool reports readiness when it is given a runtime', async () => {
   const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
   try {
