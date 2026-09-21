@@ -72,6 +72,8 @@ Core modules receive plain TypeScript interfaces and must not import Cordis type
 | Registry | never imports the environment layer |
 | Cordis registration | only `adapter/cordis.ts` calls `ctx.tools.register` or `ctx.effect` |
 | Cordis services | every non-core `ctx.<name>` the adapter reads is declared in the plugin's `inject` |
+
+`test/real-cordis-mount.test.mjs` mounts the plugin on an actual `Context` rather than a hand-built object, so the proxy that enforces `inject` is exercised. The hand-built context in `test/adapter-compat.test.mjs` cannot catch a missing declaration: it has a `tools` property, so registration succeeds whatever `inject` says.
 | Module reachability | every source module is reachable from the entry or listed as a path-spawned entry point |
 | Mounting contract | the manifest patch path resolves, the patch parses to one row, and that row's id and name agree with the plugin and the package |
 

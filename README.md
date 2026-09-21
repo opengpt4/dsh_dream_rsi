@@ -98,13 +98,16 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 337 passing tests. OS/container sandboxing and a real
+The current suite contains 343 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not
 generalization evidence: every replayed decision was recorded from the state it
 is replayed against. Generalization needs holdout tasks the policy never saw,
 which the multi-task benchmark is what produces.
+
+The plugin is mounted on a real Cordis context in `test/real-cordis-mount.test.mjs`, which is what
+exercises the `inject` declaration and the context proxy behind it.
 
 See [examples/](examples/README.md) for mounting the package into a profile. The mounting contract — the
 manifest's patch path, the patch row's id and name, and the example override — is checked by
