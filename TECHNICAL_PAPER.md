@@ -29,7 +29,7 @@ The design makes five commitments:
 4. **Reversible operations.** Plugin registration, writer ownership, policy deployment, and rollback are explicitly reversible.
 5. **Conservative claims.** Deterministic replay can evaluate behavior inside the recorded experience boundary; it cannot predict an unobserved environment transition.
 
-The current implementation is an engineering baseline rather than a completed empirical study. It contains validated configuration defaults, mock embodied tools, discovery storage, deterministic replay, evaluation, splitting, gating, snapshots, process isolation, writer leases, and lifecycle tests. Candidate generation, AST/resource guards, production sandboxing, canary deployment, and real simulator adapters remain planned work.
+The current implementation is an engineering baseline rather than a completed empirical study. It contains validated configuration defaults, mock embodied tools, discovery storage, deterministic replay, evaluation, splitting, gating, snapshots, process isolation, writer leases, and lifecycle tests. Candidate generation, evaluate-only by design, and tool synthesis are implemented; the AST, dependency, and capability guards run before evaluation, and deployment, canary, and rollback are implemented behind an approval and a writer lease. Production sandboxing and real simulator adapters remain planned work.
 
 ## 2. Contributions
 
@@ -521,9 +521,9 @@ First, the current embodied backend is a mock backend. It demonstrates session i
 
 Second, the replay world is bounded by observed transitions. A high replay score may reflect historical coverage rather than a genuinely better policy in an unexplored environment.
 
-Third, the current child-process evaluator is not a complete sandbox. It does not by itself enforce filesystem, network, memory, CPU, or secret isolation against hostile generated code.
+Third, the current child-process evaluator is not a complete sandbox. It runs under Node's permission model, which denies filesystem writes and child processes, and it is spawned with `PATH` only so host secrets are unreachable. Node documents that model as not a security boundary against hostile native code, and it does not restrict network access, so CPU, memory, and network isolation are still not enforced against hostile generated code.
 
-Fourth, candidate generation and tool synthesis are specified but not yet implemented. No claim of autonomous self-improvement is made by the current test suite.
+Fourth, candidate generation is evaluate-only and tool synthesis produces host-templated artifacts; neither has been exercised against a real simulator, and no claim of autonomous self-improvement is made by the current test suite.
 
 Fifth, the default composite metric is configurable and domain dependent. The chosen weights do not establish a universal utility function, and cost/quality normalization must be calibrated for each task family.
 

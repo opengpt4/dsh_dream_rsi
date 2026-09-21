@@ -1,14 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 
-import type { MockEmbodiedBackend } from './backend.js';
+import type { EnvironmentAdapter } from './protocol.js';
 
 interface QueryArgs {
   readonly session_id: string;
   readonly query: string;
 }
 
-export function createQueryStateTool(backend: MockEmbodiedBackend) {
+export function createQueryStateTool(adapter: EnvironmentAdapter) {
   return defineTool({
     name: 'embodied_query_state',
     description: 'Query compact world state from the mock embodied environment.',
@@ -60,7 +60,13 @@ export function createQueryStateTool(backend: MockEmbodiedBackend) {
     isConcurrencySafe: () => true,
     async execute(args: QueryArgs, exec: ToolRunContext) {
       if (exec.signal.aborted) throw new Error('state query was cancelled');
-      const state = backend.queryState(args.session_id);
+      // `observe` is the only environment read, so this tool needs nothing the
+      // adapter contract does not already provide.
+      const state = await adapter.observe({
+        sessionId: args.session_id,
+        correlationId: exec.callId,
+        includeObjects: true
+      });
       if (args.query !== 'objects' && args.query !== 'pose' && args.query !== 'gripper') {
         throw new Error('query must be one of: objects, pose, gripper');
       }

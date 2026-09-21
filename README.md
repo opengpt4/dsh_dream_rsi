@@ -22,6 +22,8 @@ Implemented and tested capabilities include:
 - host-facing `Config` schema, validated by the Cordis loader before `apply` runs
 - runtime binding validated config to the Discovery store, embodied backend, split config, and writer locks
 - session-isolated mock embodied backend and typed events, with real async timeout/cancellation
+- enforced architecture boundaries: the simulator SDK is reached only through its adapter, and only the
+  adapter calls the Cordis registration API
 - environment protocol (`Observation`, `ActionRequest`, `ActionResult`) and a mock adapter that resolves
   every attempt to a terminal status and latches a stopped session until reset
 - end-to-end episode runner recording one Discovery node per step, including failed, timed-out, and
@@ -83,9 +85,8 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 278 passing tests. OS/container sandboxing, candidate
-generation, canary deployment, tool synthesis, and a real simulator adapter
-remain planned work.
+The current suite contains 288 passing tests. OS/container sandboxing and a real
+simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not
 generalization evidence: every replayed decision was recorded from the state it

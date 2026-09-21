@@ -59,6 +59,21 @@ The adapter owns all Cordis-specific operations:
 
 Core modules receive plain TypeScript interfaces and must not import Cordis types.
 
+#### Enforced boundaries
+
+`test/architecture.test.mjs` checks the import graph rather than asserting the boundary in prose:
+
+| Boundary | Check |
+|---|---|
+| Simulator SDK | `embodied/backend.ts` is imported only by `embodied/mock-adapter.ts`, `runtime.ts`, and the package entry |
+| Environment protocol | `embodied/protocol.ts` depends on nothing but `discovery/models.ts` |
+| Embodied tools | every tool takes `EnvironmentAdapter`, never the SDK |
+| Policy and replay | never import the environment layer |
+| Registry | never imports the environment layer |
+| Cordis registration | only `adapter/cordis.ts` calls `ctx.tools.register` or `ctx.effect` |
+
+The Cordis check is deliberately narrow. Taking a `Context` to emit an event does not couple a module to the loader; calling the registration API does, because that is what must be reversible on unload. A tool registered outside the adapter's disposer chain would never be unregistered, which is why the one such helper that existed was removed rather than left unused.
+
 ### 3.2 Harness adapter
 
 ```ts
@@ -554,7 +569,7 @@ export interface PolicyArtifact {
 
 Candidates are immutable artifacts. The Evolution Agent may output source, diff, manifest and build identifier, but cannot write `current` directly.
 
-`artifactId` is the hash of the artifact body, so two identical artifacts share an id and a record whose body does not match its id is rejected on registration and on load. `sourceRef` is not implemented: the registry records `sourceSha256` only, so the source blob is not yet retrievable from a record.
+`artifactId` is the hash of the artifact body, so two identical artifacts share an id and a record whose body does not match its id is rejected on registration and on load. `sourceRef` points at the stored source and is verified separately from the id, because a reference is a location and must not change what the artifact is.
 
 ### 9.1.1 Policy registry
 
@@ -778,7 +793,7 @@ The evaluator runs in a child process that leads its own process group (`detache
 | Environment | `PATH` only. Inheriting `process.env` would hand the child every API key the parent holds |
 | Result validation | Fields are rebuilt from untrusted JSON rather than cast, so a crafted response cannot inject extra properties |
 
-CPU, memory, filesystem, and network limits require OS-level confinement and are not yet implemented.
+Every child is spawned under Node's permission model (`--experimental-permission`) with a read grant scoped to its own directory and no write or `child_process` grant, which bounds filesystem writes and process count. CPU, memory, and network limits still require OS-level confinement and are not implemented; Node documents the permission model as not a security boundary against hostile native code.
 
 ## 13. Observability and Audit
 

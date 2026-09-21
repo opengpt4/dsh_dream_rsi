@@ -1,7 +1,6 @@
-import type { Context } from '@deepseek-ai/cordis';
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 
-import type { MockEmbodiedBackend, MockObservation } from './backend.js';
+import type { EnvironmentAdapter, Observation } from './protocol.js';
 
 interface PerceiveArgs {
   readonly session_id: string;
@@ -10,9 +9,9 @@ interface PerceiveArgs {
 
 interface PerceiveResult {
   readonly session_id: string;
-  readonly environment_id: 'mock-room-v1';
+  readonly environment_id: string;
   readonly step: number;
-  readonly pose: MockObservation['pose'];
+  readonly pose: Observation['pose'];
   readonly objects: Array<{
     id: string;
     label: string;
@@ -21,7 +20,7 @@ interface PerceiveResult {
   readonly timestamp: string;
 }
 
-export function createPerceiveTool(backend: MockEmbodiedBackend) {
+export function createPerceiveTool(adapter: EnvironmentAdapter) {
   return defineTool({
     name: 'embodied_perceive',
     description: 'Observe the current state of the mock embodied environment.',
@@ -83,25 +82,23 @@ export function createPerceiveTool(backend: MockEmbodiedBackend) {
         throw new Error('embodied_perceive was cancelled before execution');
       }
 
-      const observation = backend.observe(args.session_id);
+      const observation = await adapter.observe({
+        sessionId: args.session_id,
+        correlationId: exec.callId,
+        includeObjects: args.include_objects !== false
+      });
       return {
         session_id: observation.sessionId,
         environment_id: observation.environmentId,
         step: observation.step,
         pose: observation.pose,
-        objects: args.include_objects === false
-          ? []
-          : observation.objects.map((object) => ({
-              id: object.id,
-              label: object.label,
-              position: [...object.position]
-            })),
+        objects: observation.objects.map((object) => ({
+          id: object.id,
+          label: object.label,
+          position: [...object.position]
+        })),
         timestamp: observation.timestamp
       };
     }
   });
-}
-
-export function registerPerceiveTool(ctx: Context, backend: MockEmbodiedBackend): void {
-  ctx.tools.register(createPerceiveTool(backend));
 }

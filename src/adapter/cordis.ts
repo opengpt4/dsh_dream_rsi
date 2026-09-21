@@ -36,9 +36,9 @@ function mountTools(ctx: Context, config: DreamRsiConfig): void {
     // so the already-registered tools and the runtime would leak. Roll back here
     // instead of relying on the caller.
     try {
-      disposers.push(ctx.tools.register(createPerceiveTool(runtime.backend)));
+      disposers.push(ctx.tools.register(createPerceiveTool(runtime.adapter)));
       disposers.push(ctx.tools.register(createActTool(ctx, runtime.adapter, runtime.guard)));
-      disposers.push(ctx.tools.register(createQueryStateTool(runtime.backend)));
+      disposers.push(ctx.tools.register(createQueryStateTool(runtime.adapter)));
       disposers.push(ctx.tools.register(createStatusTool(config)));
     } catch (error) {
       rollback();
