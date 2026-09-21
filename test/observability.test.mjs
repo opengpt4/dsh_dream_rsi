@@ -347,11 +347,74 @@ test('small samples use a t critical value rather than 1.96', () => {
   assert.equal(tCritical95(100), 1.96);
   assert.throws(() => tCritical95(0), /positive integer/);
 
-  // With four samples the interval is roughly 1.4x wider than a z-interval,
-  // which is the difference between "no regression" and "cannot tell yet".
-  const four = aggregate([1, 1, 1, 0]);
-  const spread = four.upper - four.lower;
-  assert.ok(spread > 0);
+  // How much wider the t interval is than the z interval at the same sample
+  // size — the sqrt(n) factors cancel, so this is t/1.96. These are the
+  // magnitudes statistics.ts and the design spec quote, so a change to the
+  // table has to change the prose with it.
+  const ratio = (sampleCount) => Number((tCritical95(sampleCount - 1) / 1.96).toFixed(1));
+  assert.equal(ratio(3), 2.2);
+  assert.equal(ratio(5), 1.4);
+  // Past the table the fallback is within 4%, which is why it costs nothing.
+  assert.ok(Math.abs(tCritical95(31) / 1.96 - 1) < 0.04);
+});
+
+test('a miss flag a case never recorded is absent from the family miss rate', () => {
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const artifact = artifactFor(registry);
+  const report = createEvaluationReport({
+    evaluatorVersion: '0.1.0',
+    sourceHash: artifact.sourceSha256,
+    snapshotId: 'b'.repeat(64),
+    policyArtifactId: artifact.artifactId,
+    split: 'holdout',
+    configHash: CONFIG_HASH,
+    metrics: { quality: 1, cost: 0.1, parallelEfficiency: 1, missRate: 0, score: 1 },
+    caseResults: [
+      { caseId: 'recorded', taskFamily: 'packing', split: 'holdout', outcome: 'passed', quality: 1, score: 1, missed: true },
+      // No `missed`: scoring it as a clean replay would report a rate these
+      // cases never supported.
+      { caseId: 'unrecorded', taskFamily: 'packing', split: 'holdout', outcome: 'passed', quality: 1, score: 1 }
+    ],
+    sampleCount: 2,
+    passed: true,
+    guardResults: [],
+    createdAt: AT
+  });
+  registry.registerEvaluation(report);
+
+  const family = buildObservabilityReport({ registry, generatedAt: AT }).evaluations[0].families[0];
+
+  assert.equal(family.caseCount, 2);
+  assert.equal(family.missRate.sampleCount, 1);
+  assert.equal(family.missRate.mean, 1);
+  // The quantity's own sample count is what says how much it rests on.
+  assert.equal(family.quality.sampleCount, 2);
+});
+
+test('a family that never recorded a miss flag reports no miss rate', () => {
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const artifact = artifactFor(registry);
+  registry.registerEvaluation(
+    createEvaluationReport({
+      evaluatorVersion: '0.1.0',
+      sourceHash: artifact.sourceSha256,
+      snapshotId: 'b'.repeat(64),
+      policyArtifactId: artifact.artifactId,
+      split: 'holdout',
+      configHash: CONFIG_HASH,
+      metrics: { quality: 1, cost: 0.1, parallelEfficiency: 1, missRate: 0, score: 1 },
+      caseResults: [{ caseId: 'c1', taskFamily: 'navigation', split: 'holdout', outcome: 'passed', quality: 1, score: 1 }],
+      sampleCount: 1,
+      passed: true,
+      guardResults: [],
+      createdAt: AT
+    })
+  );
+
+  const family = buildObservabilityReport({ registry, generatedAt: AT }).evaluations[0].families[0];
+
+  // No samples, so no rate and no interval — not a clean zero.
+  assert.deepEqual(family.missRate, { sampleCount: 0, mean: 0, min: 0, max: 0, lower: null, upper: null });
 });
 
 test('a non-finite sample is refused rather than widening every interval silently', () => {

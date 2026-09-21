@@ -121,14 +121,31 @@ function summarizeFamilies(caseResults: readonly CaseResult[]): readonly FamilyM
         quality: aggregate(valuesOf(cases, 'quality')),
         cost: aggregate(valuesOf(cases, 'cost')),
         latencyMs: aggregate(valuesOf(cases, 'latencyMs')),
-        missRate: rate(cases.map((result) => result.missed === true)),
+        // Absent is not "did not miss": scoring an unrecorded replay as clean
+        // reports a rate the cases never supported. The aggregate's sample
+        // count says how many cases recorded it.
+        missRate: rate(valuesOf(cases, 'missed')),
         rejectionSummary: summarizeCaseResults(failed)
       };
     });
 }
 
-/** A case that did not record a quantity is absent from that quantity's aggregate. */
-function valuesOf(cases: readonly CaseResult[], field: 'quality' | 'cost' | 'latencyMs'): number[] {
+/**
+ * A case that did not record a quantity is absent from that quantity's
+ * aggregate, so a rate covers the cases that answered rather than scoring every
+ * non-answer as false.
+ */
+function valuesOf(cases: readonly CaseResult[], field: 'quality' | 'cost' | 'latencyMs'): number[];
+function valuesOf(cases: readonly CaseResult[], field: 'missed'): boolean[];
+function valuesOf(
+  cases: readonly CaseResult[],
+  field: 'quality' | 'cost' | 'latencyMs' | 'missed'
+): number[] | boolean[] {
+  if (field === 'missed') {
+    return cases
+      .map((result) => result.missed)
+      .filter((value): value is boolean => typeof value === 'boolean');
+  }
   return cases
     .map((result) => result[field])
     .filter((value): value is number => typeof value === 'number');

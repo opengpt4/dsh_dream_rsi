@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { tCritical95 } from '../dist/index.js';
+
 /**
  * Guards against the documentation understating what is built.
  *
@@ -80,9 +82,24 @@ test('the design spec does not deny a capability the code provides', () => {
   assert.ok(
     !/createdAt.*part of (the )?(content hash|snapshot identity)/i.test(spec),
     'the spec still says the snapshot id covers creation time'
-  );
-  assert.ok(
+  );  assert.ok(
     !/CPU, memory, filesystem, and network limits require OS-level confinement and are not yet implemented/.test(spec),
     'the spec still says no filesystem limit exists'
+  );
+});
+
+test('the design spec quotes the interval widening the t table produces', () => {
+  const spec = readFileSync(`${ROOT}DETAILED_DESIGN_SPEC.md`, 'utf8');
+
+  // The prose named four samples for the 1.4x figure, which is the widening at
+  // five samples, and the module doc claimed a factor of two at five samples,
+  // which is the widening at three. Tied to the table so a change to either
+  // side fails here rather than leaving a number nobody recomputes.
+  const widening = (sampleCount) => (tCritical95(sampleCount - 1) / 1.96).toFixed(1);
+  assert.ok(spec.includes(`${widening(5)}x wider`), `the spec must quote ${widening(5)}x at five samples`);
+  assert.ok(spec.includes(`${widening(3)}x`), `the spec must quote ${widening(3)}x at three samples`);
+  assert.ok(
+    !/at four samples the interval is roughly/i.test(spec),
+    'the spec still attributes the widening to four samples'
   );
 });

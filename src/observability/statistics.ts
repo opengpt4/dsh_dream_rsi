@@ -2,9 +2,10 @@
  * Small-sample aggregation for per-family reporting.
  *
  * Uses a Student-t critical value rather than 1.96, because evaluation samples
- * are small: with five samples a normal approximation understates the interval
- * by roughly a factor of two, which is the difference between "no regression"
- * and "cannot tell yet".
+ * are small: the interval at five samples is 1.4x the normal-approximation
+ * width and at three samples 2.2x, which is the difference between "no
+ * regression" and "cannot tell yet". At 32 samples the table runs out and 1.96
+ * is within 4%, so the fallback costs nothing.
  */
 
 export interface Aggregate {
