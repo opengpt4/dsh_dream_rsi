@@ -396,3 +396,14 @@ export const inject: string[] = ['tools'];
  */
 export { apply };
 
+export {
+  ROBOSUITE_FRAME_ID,
+  toActionStatus,
+  toActionResult,
+  toBridgeRequest,
+  toObservation,
+  type ActionResultInput,
+  type BridgeRequest,
+  type BridgeState,
+  type ObservationIdentity
+} from './embodied/robosuite-mapping.js';
