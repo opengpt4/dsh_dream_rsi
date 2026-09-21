@@ -126,6 +126,8 @@ export interface EnvironmentAdapter {
 
 The adapter is the only component permitted to know a simulator or hardware SDK. Core policy sees action schemas and structured observations, not raw motor channels. Full request/result shapes are in §5.2; `execute` resolves to a terminal result rather than throwing.
 
+`capability()` is part of the contract: every backend declares the sensors, actions, coordinate frames, and limits it supports, and a capability absent from that declaration is denied rather than defaulted. The declaration types live in `src/embodied/capability.ts` and enforcement in `src/safety/capability.ts`, so a backend declares its profile and safety checks it — the reverse direction would have the environment layer depend on the policy that constrains it.
+
 ## 4. Cordis Plugin Lifecycle
 
 ### 4.1 Apply
@@ -294,7 +296,9 @@ Replaying an episode's own recorded decisions is a **determinism check, not gene
 
 Input: `session_id`, optional `sensor_types`, `include_objects`, `include_pose`, `artifact_threshold_bytes`.
 
-Output: compact text/JSON observation, object references, pose, timestamp, coordinate-frame ID, schema version and artifact references. Large RGB/depth/point-cloud payloads are stored externally with checksum and retention metadata.
+Implemented: `sensor_types`, `include_objects`, and `include_pose`. A sensor absent from the declared profile is refused, so a caller cannot read a channel the backend never claimed to have. `artifact_threshold_bytes` is not implemented because no adapter yet produces a payload large enough to externalise; the artifact store and its retention policy are in place for when one does.
+
+Output: compact text/JSON observation, object references, pose, timestamp, coordinate-frame ID, schema version and artifact references. Large RGB/depth/point-cloud payloads are stored externally with checksum and retention metadata. The frame ID and schema version are always reported, whichever sensors were read: without the frame a pose is an ambiguous triple of numbers, and without the version a consumer cannot tell which schema it is parsing.
 
 #### `embodied_act`
 

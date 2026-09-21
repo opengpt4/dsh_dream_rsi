@@ -1,9 +1,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { MOCK_FRAME_ID } from './embodied/mock-adapter.js';
 import { EMBODIED_ACTION_TYPES } from './embodied/protocol.js';
-import { MOCK_CAPABILITY_PROFILE } from './safety/capability.js';
 import type { PolicyRegistry } from './registry/policy-registry.js';
 import type { DreamRsiRuntime } from './runtime.js';
 
@@ -46,7 +44,7 @@ export interface ReadinessInput {
 export function verifyReadiness(input: ReadinessInput): ReadinessReport {
   const checks: ReadinessCheck[] = [
     storageCheck(input),
-    capabilityProfileCheck(),
+    capabilityProfileCheck(input.runtime),
     evaluatorWorkerCheck(input.evaluatorWorkerPath)
   ];
   if (input.registry !== undefined) checks.push(currentPolicyCheck(input.registry));
@@ -82,8 +80,9 @@ function storageCheck(input: ReadinessInput): ReadinessCheck {
  * A capability profile that declares an action outside the MVP vocabulary would
  * be silently unusable; readiness catches it before an episode does.
  */
-function capabilityProfileCheck(): ReadinessCheck {
-  const actions = Object.keys(MOCK_CAPABILITY_PROFILE.actions);
+function capabilityProfileCheck(runtime: DreamRsiRuntime): ReadinessCheck {
+  const profile = runtime.adapter.capability();
+  const actions = Object.keys(profile.actions);
   if (actions.length === 0) {
     return { name: 'capabilityProfile', state: 'not-ready', detail: 'the profile declares no actions' };
   }
@@ -97,17 +96,16 @@ function capabilityProfileCheck(): ReadinessCheck {
       detail: `the profile declares actions outside the MVP vocabulary: ${undeclared.join(', ')}`
     };
   }
-  if (!MOCK_CAPABILITY_PROFILE.coordinateFrames.includes(MOCK_FRAME_ID)) {
-    return {
-      name: 'capabilityProfile',
-      state: 'not-ready',
-      detail: `the profile does not declare the frame ${MOCK_FRAME_ID}`
-    };
+  // Without a frame, an observation's pose cannot be interpreted, and the
+  // perceive tool would have nothing to report.
+  const frame = runtime.adapter.capability().coordinateFrames[0];
+  if (frame === undefined) {
+    return { name: 'capabilityProfile', state: 'not-ready', detail: 'the profile declares no coordinate frame' };
   }
   return {
     name: 'capabilityProfile',
     state: 'ready',
-    detail: `${actions.length} actions across ${MOCK_CAPABILITY_PROFILE.coordinateFrames.length} frame(s)`
+    detail: `${actions.length} actions across ${profile.coordinateFrames.length} frame(s)`
   };
 }
 

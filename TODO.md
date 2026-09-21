@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：310 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：319 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -16,7 +16,7 @@
 - [x] Cordis `apply(ctx, config?)` plugin entrypoint
 - [x] `ctx.effect()` reversible tool registration/disposal
 - [x] Mock embodied backend 與 per-session state isolation
-- [x] `embodied_perceive`、`embodied_act`、`embodied_query_state`
+- [x] `embodied_perceive`、`embodied_act`、`embodied_query_state`（perceive 輸出帶 `frame_id` 與 `schema_version`，接受 `sensor_types`／`include_pose`，未宣告的 sensor 直接拒絕）
 - [x] `embodied_act` 逾時與取消對非同步 backend 真正生效（backend 可注入延遲並回應 `AbortSignal`，逾時/取消都不會讓 state 被 mutate）
 - [x] Typed embodied action events
 - [x] In-memory 與 SQLite Discovery Store
@@ -67,7 +67,7 @@
 
 ### 4. Action Safety Contract
 
-- [x] Implement capability profiles for sensors, actions, coordinate frames, limits, and risk levels (`src/safety/capability.ts`); an undeclared action, frame, parameter, or limit is denied, never defaulted.
+- [x] Implement capability profiles for sensors, actions, coordinate frames, limits, and risk levels. The declaration lives in the environment layer (`src/embodied/capability.ts`) and enforcement in the safety layer (`src/safety/capability.ts`), because a backend declares its profile and safety checks it; `EnvironmentAdapter.capability()` exposes it. An undeclared action, frame, parameter, limit, or **sensor** is denied, never defaulted.
 - [x] Implement action state machine `REQUESTED -> AUTHORIZED -> EXECUTING -> terminal` (`src/safety/action-state.ts`); the spec diagram is the transition table and terminal states absorb.
 - [x] Add action lease, session mutex, idempotency, rate limit, timeout, cancellation, and emergency stop (`src/safety/action-guard.ts`), dispatched by the episode runner through `RunEpisodeOptions.guard`.
 - [x] Prohibit automatic retry after emergency stop: the latch is checked before the idempotency lookup, so a previously recorded result cannot be replayed as a retry.

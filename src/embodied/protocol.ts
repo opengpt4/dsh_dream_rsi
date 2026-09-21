@@ -1,4 +1,5 @@
 import type { JsonObject } from '../discovery/models.js';
+import type { CapabilityProfile } from './capability.js';
 
 /**
  * Environment-facing contract shared by every adapter.
@@ -90,6 +91,14 @@ export interface ActionResult {
 }
 
 export interface EnvironmentAdapter {
+  /**
+   * What this backend can sense and do.
+   *
+   * Every backend declares one, and a capability absent from it is denied
+   * rather than defaulted, so a caller can never invoke an undeclared sensor or
+   * action and receive whatever the SDK happens to return.
+   */
+  capability(): CapabilityProfile;
   observe(request: ObserveRequest): Promise<Observation>;
   availableActions(): Promise<readonly EmbodiedActionType[]>;
   /**

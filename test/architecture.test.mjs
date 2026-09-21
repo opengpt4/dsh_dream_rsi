@@ -65,8 +65,19 @@ test('the mock simulator SDK is reached only through its adapter', () => {
   ]);
 });
 
-test('the environment protocol depends on nothing but the core data model', () => {
-  assert.deepEqual(GRAPH.get('embodied/protocol.ts'), ['discovery/models.ts']);
+test('the environment protocol depends on nothing but the core data model and its own layer', () => {
+  // The capability profile is an environment declaration, not a safety concept,
+  // so the protocol may name it; a backend declares a profile and the safety
+  // layer enforces it. Depending on `safety/` instead would invert that.
+  assert.deepEqual(GRAPH.get('embodied/protocol.ts'), ['discovery/models.ts', 'embodied/capability.ts']);
+});
+
+test('the capability declaration does not depend on the layer that enforces it', () => {
+  const specifiers = GRAPH.get('embodied/capability.ts');
+  assert.ok(
+    !specifiers.some((specifier) => specifier.startsWith('safety/')),
+    'the environment layer must not reach into safety'
+  );
 });
 
 test('the embodied tools depend on the adapter contract, not on a simulator', () => {

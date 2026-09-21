@@ -1,40 +1,21 @@
-import type { JsonObject } from '../discovery/models.js';
-import { EMBODIED_ACTION_TYPES, type EmbodiedActionType } from '../embodied/protocol.js';
+import { EMBODIED_ACTION_TYPES } from '../embodied/protocol.js';
+import type { ActionCapability, CapabilityProfile } from '../embodied/capability.js';
 
 /**
- * What an embodied backend declares it can do.
+ * Capability enforcement.
  *
- * A capability absent from the profile is denied, not defaulted: an undeclared
- * action, frame, sensor, or limit must never be invoked.
+ * The profile a backend declares lives in the environment layer; this module
+ * checks a request against it. A capability absent from the profile is denied,
+ * never defaulted.
  */
 
-export type RiskLevel = 'safe' | 'guarded' | 'high';
-
-export interface ActionLimits {
-  /** Parameter names this action accepts. An undeclared name is rejected. */
-  readonly allowedParameters: readonly string[];
-  /** Ceiling on the magnitude of any numeric parameter. */
-  readonly maxNumericMagnitude: number;
-  /** Ceiling on the deadline a caller may request. */
-  readonly maxDurationMs: number;
-}
-
-export interface ActionCapability {
-  readonly actionType: EmbodiedActionType;
-  readonly risk: RiskLevel;
-  /** High-risk actions need an explicit confirmation before authorization. */
-  readonly requiresConfirmation: boolean;
-  readonly limits: ActionLimits;
-}
-
-export interface CapabilityProfile {
-  readonly profileId: string;
-  /** Sensor identifiers the backend actually reports. */
-  readonly sensors: readonly string[];
-  /** Coordinate frames an observation or action may be expressed in. */
-  readonly coordinateFrames: readonly string[];
-  readonly actions: Readonly<Partial<Record<EmbodiedActionType, ActionCapability>>>;
-}
+export {
+  MOCK_CAPABILITY_PROFILE,
+  type ActionCapability,
+  type ActionLimits,
+  type CapabilityProfile,
+  type RiskLevel
+} from '../embodied/capability.js';
 
 export type RejectionCode =
   | 'session_stopped'
@@ -60,9 +41,9 @@ export type CapabilityCheck =
   | { readonly allowed: false; readonly rejection: CapabilityRejection };
 
 export interface CapabilityQuery {
-  readonly actionType: EmbodiedActionType;
+  readonly actionType: string;
   readonly frameId: string;
-  readonly parameters: JsonObject;
+  readonly parameters: Record<string, unknown>;
   readonly timeoutMs: number;
 }
 
@@ -74,7 +55,7 @@ export function checkCapability(profile: CapabilityProfile, query: CapabilityQue
     return deny('action_not_declared', `action ${query.actionType} is not part of the MVP action vocabulary`);
   }
 
-  const capability = profile.actions[query.actionType];
+  const capability = profile.actions[query.actionType as keyof CapabilityProfile['actions']];
   if (capability === undefined) {
     return deny('action_not_declared', `action ${query.actionType} is not declared by ${profile.profileId}`);
   }
@@ -110,46 +91,3 @@ export function checkCapability(profile: CapabilityProfile, query: CapabilityQue
 function deny(code: RejectionCode, reason: string): CapabilityCheck {
   return { allowed: false, rejection: { code, reason } };
 }
-
-/**
- * The capability profile the mock backend declares. `pick` and `place` carry
- * confirmation because they act on an object rather than on the agent's own
- * pose.
- */
-export const MOCK_CAPABILITY_PROFILE: CapabilityProfile = {
-  profileId: 'mock-room-v1/capabilities@1',
-  sensors: ['pose', 'gripper', 'objects'],
-  coordinateFrames: ['mock-room-v1/world'],
-  actions: {
-    move_relative: {
-      actionType: 'move_relative',
-      risk: 'safe',
-      requiresConfirmation: false,
-      limits: { allowedParameters: ['dx', 'dy', 'dz'], maxNumericMagnitude: 5, maxDurationMs: 30_000 }
-    },
-    goto: {
-      actionType: 'goto',
-      risk: 'guarded',
-      requiresConfirmation: false,
-      limits: { allowedParameters: ['x', 'y', 'z'], maxNumericMagnitude: 100, maxDurationMs: 30_000 }
-    },
-    pick: {
-      actionType: 'pick',
-      risk: 'guarded',
-      requiresConfirmation: true,
-      limits: { allowedParameters: ['objectId'], maxNumericMagnitude: 0, maxDurationMs: 30_000 }
-    },
-    place: {
-      actionType: 'place',
-      risk: 'guarded',
-      requiresConfirmation: true,
-      limits: { allowedParameters: ['x', 'y', 'z'], maxNumericMagnitude: 100, maxDurationMs: 30_000 }
-    },
-    open: {
-      actionType: 'open',
-      risk: 'safe',
-      requiresConfirmation: false,
-      limits: { allowedParameters: [], maxNumericMagnitude: 0, maxDurationMs: 30_000 }
-    }
-  }
-};

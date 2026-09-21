@@ -1,3 +1,4 @@
+import { MOCK_CAPABILITY_PROFILE, type CapabilityProfile } from './capability.js';
 import { MockEmbodiedBackend } from './backend.js';
 import {
   EMBODIED_ACTION_TYPES,
@@ -26,6 +27,10 @@ export class MockEnvironmentAdapter implements EnvironmentAdapter {
   private readonly stoppedSessions = new Set<string>();
 
   constructor(private readonly backend = new MockEmbodiedBackend()) {}
+
+  capability(): CapabilityProfile {
+    return MOCK_CAPABILITY_PROFILE;
+  }
 
   async observe(request: ObserveRequest): Promise<Observation> {
     const raw = this.backend.observe(request.sessionId);
