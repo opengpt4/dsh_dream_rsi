@@ -45,12 +45,22 @@ export function splitDiscoveryNodes(
   return { ...split, taskAssignments };
 }
 
-function assignTask(taskId: string, config: EvaluationSplitConfig): EvaluationSplitName {
-  const digest = createHash('sha256').update(`${config.seed}:${taskId}`).digest();
+/**
+ * Deterministic partition for a key.
+ *
+ * Exported so every caller buckets identically: an ablation that partitioned
+ * with a different hash would be comparing its own bug against the real split.
+ */
+export function bucketFor(key: string, config: EvaluationSplitConfig): EvaluationSplitName {
+  const digest = createHash('sha256').update(`${config.seed}:${key}`).digest();
   const bucket = digest.readUInt32BE(0) / 0x1_0000_0000;
   if (bucket < config.trainRatio) return 'train';
   if (bucket < config.trainRatio + config.validationRatio) return 'validation';
   return 'holdout';
+}
+
+function assignTask(taskId: string, config: EvaluationSplitConfig): EvaluationSplitName {
+  return bucketFor(taskId, config);
 }
 
 function validateRatios(config: EvaluationSplitConfig): void {

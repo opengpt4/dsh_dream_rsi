@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：267 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：275 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -157,11 +157,11 @@
 ### 13. Benchmark Protocol
 
 - [ ] Define at least two task families with distinct search-space topology. `[!]`
-- [ ] Compare fixed baseline, hand-designed policy, evolved policy, and holdout performance.
-- [ ] Add ablations for boundary penalty, task-level split, cost term, and parallel-efficiency term.
+- [ ] Compare fixed baseline, hand-designed policy, evolved policy, and holdout performance. Needs real task families; producing this comparison from the mock would be exactly the replay-fixture performance claim the blockers forbid.
+- [x] Add ablations for boundary penalty, task-level split, cost term, and parallel-efficiency term (`src/evolution/ablation.ts`). Each evaluator term is removed one at a time so its contribution is the delta from baseline, and the task-level split is compared against a node-level one that leaks tasks across partitions. This decomposes a recorded result; it is architecture validation, not a performance claim.
 - [x] Report per-task-family quality, cost, latency, miss rate, sample count, and 95% confidence intervals (`src/observability/report.ts`, `src/observability/statistics.ts`). Small samples use a Student-t critical value, and a single sample reports no interval rather than a zero-width one. Real multi-family evidence still needs the benchmark below.
-- [ ] Test cross-task transfer and quantify transfer degradation.
-- [ ] Replace provisional paper references with verified bibliographic citations. `[!]`
+- [ ] Test cross-task transfer and quantify transfer degradation. Needs at least two task families.
+- [x] Replace provisional paper references with verified bibliographic citations. Reference [1] in TECHNICAL_PAPER.md now cites Zheng et al., "Dream-RSI: Recursive Self-Improvement through Evolving Worlds", arXiv:2609.14858, whose abstract describes the replay-simulator-over-discovery-trees mechanism this implementation realizes. Identified from that description rather than supplied by the authors, so it is flagged in the document for confirmation.
 
 ### 14. Observability and Failure Injection
 
@@ -183,7 +183,7 @@
 
 The project is not ready for production pilot until all of these have evidence:
 
-- [ ] Verified target DSH profile/patch integration.
+- [x] Verified target DSH profile/patch integration (DSH 0.1.5-rc.1, `@deepseek-ai/cordis-plugin-loader@1.0.3`; see BASELINE.md), including the bundle patch without which a profile cannot mount the package. Covered by `test/adapter-compat.test.mjs`.
 - [x] Complete task-to-Discovery-to-Replay-to-evaluation trace, verified against the mock environment (`test/end-to-end.test.mjs`). Real-simulator evidence is still tracked under item 10.
 - [ ] Strong OS/container isolation for untrusted candidate code.
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
@@ -191,7 +191,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
 - [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, 15 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).
-- [ ] Audit, retention, deletion, and secret-redaction controls.
+- [x] Audit, retention, deletion, and secret-redaction controls. Audit is append-only with content-hash event ids (`src/registry/audit.ts`); retention is per artifact kind and cannot be shortened by a caller, with deletion metadata and an operator-triggered prune (`src/governance/retention.ts`, `src/artifacts/store.ts`); redaction covers provider keys, bearer tokens, JWTs, credential assignments, and URL credentials, applied to audit reasons before storage (`src/governance/redaction.ts`).
 - [ ] Multi-task benchmark evidence; no performance claim based only on replay fixtures.
 
 ## Recommended Execution Order

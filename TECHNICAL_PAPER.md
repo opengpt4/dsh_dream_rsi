@@ -549,7 +549,9 @@ The current implementation demonstrates these foundations with a reproducible 24
 
 ## References
 
-[1] Dream-RSI discussion and design requirements supplied for this project. The final publication should replace this entry with the verified bibliographic citation for the underlying Dream-RSI paper, including authors, title, venue, year, and DOI or URL.
+[1] Tong Zheng, Xidong Wu, Zheng Zhang, Zhankui He, Chaoyi Zhang, Benjamin Coleman, Ruoqiao Wei, Di Bai, Haolin Liu, Rui Liu, Xue Wang, Yue Zhuan, Wang-Cheng Kang, Renkai Xiang, Heng Huang, Xinwu Cheng, and Yunsong Guo. "Dream-RSI: Recursive Self-Improvement through Evolving Worlds." arXiv:2609.14858 [cs.CL], 14 September 2026. DOI: [10.48550/arXiv.2609.14858](https://doi.org/10.48550/arXiv.2609.14858).
+
+This is the reference the architecture is derived from: the paper's replay simulator over historical discovery trees is the mechanism this implementation realizes in `src/replay/` and `src/evolution/snapshot.ts`. The citation was identified from that description rather than supplied by the paper's authors, so it should be confirmed against the source before publication.
 
 [2] DeepSeek Harness and Cordis technical baseline used by this implementation: `@deepseek-ai/cordis@4.0.2` and `@deepseek-ai/dsh-tools@0.1.5-rc.2`. See the repository's [BASELINE.md](BASELINE.md) for the verified local contract.
 

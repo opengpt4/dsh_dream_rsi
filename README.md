@@ -61,6 +61,8 @@ Implemented and tested capabilities include:
   before evaluation
 - canonical ReplayKey and deterministic counterfactual replay
 - Q/C/P/M evaluation, task-level data splits, and monotonic gating
+- ablation study over the evaluator terms and the split strategy, reporting each term's contribution
+  and the task leakage a node-level split would introduce
 - holdout gate over two evaluation reports: holdout-only and same-configuration requirements, independent
   quality/cost/parallel/miss-rate/sample budgets, candidate guard failures, and per-task-family verdicts,
   with a passing verdict required before any promotion
@@ -80,7 +82,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 267 passing tests. OS/container sandboxing, candidate
+The current suite contains 275 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

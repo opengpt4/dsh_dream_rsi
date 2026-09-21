@@ -197,7 +197,18 @@ export {
 } from './evolution/candidate-generator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
 export { evaluateReplayIsolated, DEFAULT_MAX_OUTPUT_BYTES, type IsolatedEvaluatorOptions } from './evolution/isolated-evaluator.js';
-export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
+export { splitDiscoveryNodes, bucketFor, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
+export {
+  ablateEvaluator,
+  ablateSplit,
+  buildAblationStudy,
+  evaluatorAblations,
+  ABLATION_SCHEMA_VERSION,
+  type AblationRun,
+  type AblationStudy,
+  type AblationVariant,
+  type SplitAblation
+} from './evolution/ablation.js';
 export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG, type MonotonicGateConfig, type MonotonicGateResult, type PolicyCaseEvaluation } from './evolution/monotonic-gate.js';
 export {
   evaluateHoldoutGate,
