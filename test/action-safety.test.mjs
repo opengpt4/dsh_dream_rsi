@@ -134,6 +134,71 @@ test('the wall-clock budget clamps each action deadline', async () => {
   }
 });
 
+test('a stopped or cancelled episode reads nothing from the environment', async () => {
+  // The runner checks both at the top of its loop, before the observation. Those
+  // checks are what make a stop refuse the episode rather than let it touch the
+  // environment first and notice afterwards: dropping them survives every other
+  // test, because the post-decision checks still catch the outcome.
+  const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+  try {
+    const real = runtime.adapter;
+    let observes = 0;
+    // Spelled out rather than spread: the adapter's methods live on its
+    // prototype, so a spread copies none of them.
+    const adapter = {
+      capability: () => real.capability(),
+      observe: async (request) => {
+        observes += 1;
+        return real.observe(request);
+      },
+      availableActions: () => real.availableActions(),
+      execute: (request, signal) => real.execute(request, signal),
+      emergencyStop: (sessionId) => real.emergencyStop(sessionId),
+      reset: (sessionId) => real.reset(sessionId),
+      releaseAllSessions: () => real.releaseAllSessions()
+    };
+    const options = (overrides) => ({
+      task: {
+        taskId: 'task-1',
+        goal: 'never reached',
+        environmentId: MOCK_ENVIRONMENT_ID,
+        policyVersion: 'v1',
+        budget: { maxSteps: 3, wallClockMs: 30_000 },
+        metadata: {}
+      },
+      episodeId: 'episode-1',
+      sessionId: SESSION_ID,
+      adapter,
+      store: runtime.store,
+      policy: planPolicy([{ actionType: 'move_relative', parameters: { dx: 1, dy: 0, dz: 0 } }]),
+      ...overrides
+    });
+
+    const stop = new AbortController();
+    stop.abort();
+    observes = 0;
+    const stopped = await runEpisode(options({ emergencyStop: stop.signal }));
+    assert.equal(stopped.episode.status, 'emergency_stop');
+    assert.equal(stopped.cause, 'emergency stop requested');
+    assert.equal(observes, 0, 'a stopped episode read the environment');
+
+    const cancel = new AbortController();
+    cancel.abort();
+    observes = 0;
+    const cancelled = await runEpisode(options({ episodeId: 'episode-2', sessionId: 'session-2', signal: cancel.signal }));
+    assert.equal(cancelled.episode.status, 'cancelled');
+    assert.equal(observes, 0, 'a cancelled episode read the environment');
+
+    // The counter-check: an unrestricted run does read, so the zeros above are
+    // about the checks rather than about an adapter nothing ever calls.
+    observes = 0;
+    await runEpisode(options({ episodeId: 'episode-3', sessionId: 'session-3' }));
+    assert.ok(observes > 0);
+  } finally {
+    runtime.dispose();
+  }
+});
+
 test('the MVP action vocabulary has no representation for raw motor or joint control', () => {
   // The allowlist is closed: only high-level primitives exist, so there is no
   // value a candidate could name to reach joint velocity or a motor channel.

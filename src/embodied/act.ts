@@ -70,6 +70,22 @@ export function createActTool(ctx: Context, adapter: EnvironmentAdapter, guard: 
       const parameters = args.parameters ?? {};
       const timeoutMs = args.timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const requestedAt = new Date().toISOString();
+
+      // A call the caller already abandoned reads nothing and announces nothing.
+      // Observing is what opens or creates the session in a backend, so checking
+      // after it left environment state behind for an action cancelled before it
+      // began, and emitting `action-started` first left a host holding a start
+      // it could never pair with a terminal event.
+      if (exec.signal.aborted) {
+        return {
+          success: false,
+          action_id: actionId,
+          state: 'CANCELLED',
+          status: 'cancelled',
+          error: 'action was cancelled before dispatch'
+        };
+      }
+
       ctx.emit('embodied/action-started', { actionId, sessionId: args.session_id, actionType });
 
       // An action is expressed in the frame of the state it was decided from, so

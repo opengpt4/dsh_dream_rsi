@@ -319,6 +319,7 @@ Input: `session_id`, `action_type`, `parameters`, optional `timeout_ms`, `confir
 
 Processing:
 
+0. Refuse a call whose request was already cancelled: it returns `success: false` with `status: cancelled` without observing and without emitting, because step 1 is what creates the session and because a host holding an `action-started` it can never pair with a terminal event is worse off than a host that saw nothing.
 1. Observe, to learn the coordinate frame the action will be expressed in.
 2. Hand the action to `ActionGuard`, which validates the capability profile, confirmation, session mutex, idempotency key and rate limit, then holds the action lease (§5.6).
 3. Emit `embodied/action-started`.

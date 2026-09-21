@@ -50,6 +50,53 @@ test('embodied_act times out a slow action and leaves state unmutated', async ()
   assert.equal(backend.queryState('session-a').pose.x, 0);
 });
 
+test('an action cancelled before dispatch reads nothing and emits nothing', async () => {
+  // The guard would refuse it anyway, but only after the tool had observed the
+  // environment to learn the frame — and observing is what creates the session.
+  // A cancelled call must not leave one behind, nor announce a start it can
+  // never pair with a terminal event.
+  const controller = new AbortController();
+  controller.abort();
+  const context = fakeCtx();
+  const real = new MockEnvironmentAdapter(new MockEmbodiedBackend(0));
+  let observes = 0;
+  // Written out rather than spread: the adapter's methods are on its prototype,
+  // so a spread would copy none of them.
+  const adapter = {
+    capability: () => real.capability(),
+    observe: async (request) => {
+      observes += 1;
+      return real.observe(request);
+    },
+    availableActions: () => real.availableActions(),
+    execute: (request, signal) => real.execute(request, signal),
+    emergencyStop: (sessionId) => real.emergencyStop(sessionId),
+    reset: (sessionId) => real.reset(sessionId),
+    releaseAllSessions: () => real.releaseAllSessions()
+  };
+  const guard = new ActionGuard({
+    profile: MOCK_CAPABILITY_PROFILE,
+    actionLeaseMs: 30_000,
+    maxActionsPerMinute: 30,
+    requireConfirmation: true
+  });
+  const tool = createActTool(context, adapter, guard);
+
+  const result = await tool.execute({ session_id: 'session-a', ...MOVE }, fakeExec(controller.signal));
+
+  assert.equal(result.success, false);
+  assert.equal(result.status, 'cancelled');
+  assert.equal(result.state, 'CANCELLED');
+  assert.match(result.error, /cancelled before dispatch/);
+  assert.equal(observes, 0, 'a cancelled call read the environment');
+  assert.deepEqual(context.emitted, []);
+
+  // The counter-check: an unabandoned call does read, so the zero above is
+  // about the check rather than about an adapter nothing ever calls.
+  await tool.execute({ session_id: 'session-a', ...MOVE }, fakeExec());
+  assert.equal(observes, 1);
+});
+
 test('embodied_act cancels an in-flight action via the caller abort signal and leaves state unmutated', async () => {
   const { backend, tool } = makeTool(50);
   const controller = new AbortController();
