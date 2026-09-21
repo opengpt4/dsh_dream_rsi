@@ -5,8 +5,9 @@ import { verifySynthesizedTool, type SynthesizedTool } from './synthesized-tool.
  * Dynamic tool registry: versioned, reviewable, and reversible.
  *
  * A tool enters as a `candidate` and is selectable only while `enabled`. A
- * disabled tool is invisible to task selection rather than merely discouraged,
- * and a rollback re-enables the version that was live before.
+ * disabled tool is invisible to task selection rather than merely discouraged.
+ * At most one version of a name is enabled: enabling another supersedes it, and
+ * a rollback re-enables the version that was live before.
  */
 
 export type ToolStatus = 'candidate' | 'enabled' | 'disabled';
@@ -61,7 +62,7 @@ export class DynamicToolRegistry {
    * Enable a candidate. Requires an operator and a clean gate: a tool with any
    * failed guard cannot be enabled by supplying a different verdict later.
    */
-  enable(toolId: string, operator: string): ToolRegistryEntry {
+  enable(toolId: string, operator: string, reason?: string): ToolRegistryEntry {
     const entry = this.require(toolId);
     if (entry.status === 'enabled') throw new Error(`tool ${toolId} is already enabled`);
     if (operator.trim().length === 0) throw new Error('enabling a tool requires an operator');
@@ -70,12 +71,32 @@ export class DynamicToolRegistry {
       throw new Error(`tool ${toolId} cannot be enabled: ${failed.length} failed gate(s)`);
     }
 
+    // Enabling a version supersedes whatever is live under that name, so a name
+    // resolves to exactly one version. Leaving both enabled meant `resolve`
+    // returned whichever was inserted first -- the oldest -- and rollback then
+    // targeted that one and failed for having no previous version.
     const current = this.enabledForName(entry.name);
+    if (current !== undefined && current.toolId !== entry.toolId) {
+      this.record({
+        ...current,
+        status: 'disabled',
+        operator,
+        reason: reason ?? `superseded by ${entry.version}`,
+        updatedAt: this.timestamp()
+      });
+    }
+
+    // Built field by field rather than spread, so a previous disable reason is
+    // not carried into an enabled record.
     return this.record({
-      ...entry,
+      toolId: entry.toolId,
+      name: entry.name,
+      version: entry.version,
       status: 'enabled',
-      operator,
       previousToolId: current?.toolId ?? null,
+      operator,
+      ...(reason !== undefined ? { reason } : {}),
+      gateResults: [...entry.gateResults],
       updatedAt: this.timestamp()
     });
   }
@@ -103,8 +124,10 @@ export class DynamicToolRegistry {
     if (current === undefined) throw new Error(`no enabled tool named ${name} to roll back`);
     if (current.previousToolId === null) throw new Error(`tool ${name} has no previous version to roll back to`);
 
-    this.disable(current.toolId, operator, reason);
-    return this.enable(current.previousToolId, operator);
+    // Enabling the previous version supersedes the current one, so the two
+    // steps are one and the current version is recorded as disabled with the
+    // operator's reason rather than an internal one.
+    return this.enable(current.previousToolId, operator, reason);
   }
 
   entry(toolId: string): ToolRegistryEntry | undefined {
@@ -112,10 +135,12 @@ export class DynamicToolRegistry {
     return entry === undefined ? undefined : { ...entry };
   }
 
+  /** Every version of one tool name, in the order they were proposed. */
   versions(name: string): readonly ToolRegistryEntry[] {
-    return [...this.entries.values()]
-      .filter((entry) => entry.name === name)
-      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
+    // Insertion order is proposal order. Sorting by `updatedAt` would reorder
+    // versions every time one of them changed status, and ties would fall
+    // wherever the sort left them.
+    return [...this.entries.values()].filter((entry) => entry.name === name);
   }
 
   /** Tools a new task may select. Disabled tools are absent, not deprioritised. */

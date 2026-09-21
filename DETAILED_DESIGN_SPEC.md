@@ -651,7 +651,11 @@ Natural-language summaries may be retained for diagnostics but cannot become aut
 
 This is process isolation, not a sandbox. Filesystem and network confinement remains the open blocker.
 
-**Registry** (`tool-registry.ts`). A tool enters as `candidate` and is selectable only while `enabled`. Enabling requires an operator and a clean gate: a tool with any failed guard cannot be enabled later by presenting a different verdict, because the verdict is stored with the candidate. Disabled tools are absent from `selectable()` and resolve to nothing, not to a deprioritised entry. Rollback restores the version that was live before, so the registry never shows two enabled versions of one name.
+**Registry** (`tool-registry.ts`). A tool enters as `candidate` and is selectable only while `enabled`. Enabling requires an operator and a clean gate: a tool with any failed guard cannot be enabled later by presenting a different verdict, because the verdict is stored with the candidate. Disabled tools are absent from `selectable()` and resolve to nothing, not to a deprioritised entry.
+
+**At most one version of a name is enabled.** Enabling another supersedes the live one, recording it disabled with the reason. Leaving both enabled made `resolve` return whichever was proposed first — the oldest — so enabling a new version had no effect on task selection, and `rollback` then targeted that older entry and failed for having no previous version. Rollback re-enables the version that was live before, superseding the current one in turn, so the two steps are one operation.
+
+`versions(name)` lists versions in **proposal order**, not by `updatedAt`: sorting by last status change reorders the list every time a version is enabled or disabled.
 
 ### 9.3 Guard pipeline
 

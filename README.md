@@ -55,7 +55,8 @@ Implemented and tested capabilities include:
   timeout, cancellation, and rollback failure
 - tool synthesis from repeated successful action sequences, with content-addressed artifacts, permissions
   limited to high-level action primitives, AST/dependency/capability gates plus process-isolated test
-  execution, and a dynamic registry where disabled tools are unselectable
+  execution, and a dynamic registry where disabled tools are unselectable and at most one version of a
+  name is enabled
 - deployment state machine under a writer lease: propose, approve, canary, activate, degrade, roll back,
   with stable versions ordered by activation so retention cannot discard the newest,
   with a checksum and baseline check before activation, canary thresholds, rollback to the previous stable
@@ -102,7 +103,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 356 passing tests. OS/container sandboxing and a real
+The current suite contains 357 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

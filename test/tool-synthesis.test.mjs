@@ -309,7 +309,7 @@ test('a disabled tool cannot be selected by a new task', () => {
   assert.equal(registry.entry(tool.toolId).reason, 'caused a regression');
 });
 
-test('enabling a new version records the one it replaced', () => {
+test('enabling a new version supersedes the one it replaced', () => {
   const registry = new DynamicToolRegistry();
   const first = customTool({ version: '1.0.0' });
   const second = customTool({ version: '2.0.0' });
@@ -320,8 +320,26 @@ test('enabling a new version records the one it replaced', () => {
   const enabled = registry.enable(second.toolId, 'operator-1');
 
   assert.equal(enabled.previousToolId, first.toolId);
-  assert.equal(registry.selectable().length, 2, 'the older version is still enabled until explicitly disabled');
+  // One version per name: leaving both enabled made resolve() return whichever
+  // was proposed first, so enabling a new version had no effect.
+  assert.deepEqual(registry.selectable().map((tool) => tool.version), ['2.0.0']);
+  assert.equal(registry.resolve('custom_macro').version, '2.0.0');
+  assert.equal(registry.entry(first.toolId).status, 'disabled');
+  assert.equal(registry.entry(first.toolId).reason, 'superseded by 2.0.0');
   assert.deepEqual(registry.versions('custom_macro').map((entry) => entry.version), ['1.0.0', '2.0.0']);
+});
+
+test('versions are listed in the order they were proposed', () => {
+  const registry = new DynamicToolRegistry();
+  const versions = ['1.0.0', '2.0.0', '1.5.0'];
+  for (const version of versions) registry.propose(customTool({ version }), cleanGates());
+  for (const version of versions) {
+    registry.enable(registry.versions('custom_macro').find((e) => e.version === version).toolId, 'operator-1');
+  }
+
+  // Proposal order, not status-change order: sorting by updatedAt would reorder
+  // the list every time a version changed status.
+  assert.deepEqual(registry.versions('custom_macro').map((entry) => entry.version), ['1.0.0', '2.0.0', '1.5.0']);
 });
 
 test('rollback restores the previous version and disables the current one', () => {
@@ -332,7 +350,6 @@ test('rollback restores the previous version and disables the current one', () =
   registry.propose(second, cleanGates());
   registry.enable(first.toolId, 'operator-1');
   registry.enable(second.toolId, 'operator-1');
-  registry.disable(first.toolId, 'operator-1', 'superseded');
 
   const restored = registry.rollback('custom_macro', 'operator-2', 'regression in 2.0.0');
 
@@ -360,12 +377,13 @@ test('every registry transition is recorded in order', () => {
   registry.propose(second, cleanGates());
   registry.enable(first.toolId, 'operator-1');
   registry.enable(second.toolId, 'operator-1');
-  registry.disable(first.toolId, 'operator-1', 'superseded');
   registry.rollback('custom_macro', 'operator-2', 'regression');
 
   assert.deepEqual(
     registry.history().map((entry) => `${entry.version}:${entry.status}`),
-    ['1.0.0:candidate', '2.0.0:candidate', '1.0.0:enabled', '2.0.0:enabled', '1.0.0:disabled', '2.0.0:disabled', '1.0.0:enabled']
+    // The superseded version is disabled as part of enabling its replacement,
+    // so the disable precedes the enable that caused it.
+    ['1.0.0:candidate', '2.0.0:candidate', '1.0.0:enabled', '1.0.0:disabled', '2.0.0:enabled', '2.0.0:disabled', '1.0.0:enabled']
   );
 });
 
