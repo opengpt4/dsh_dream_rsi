@@ -24,7 +24,13 @@ export interface AblationVariant {
   readonly evaluator: EvaluatorConfig;
 }
 
-/** Each variant removes one term, so its contribution is the delta from baseline. */
+/**
+ * Each variant removes one term.
+ *
+ * A variant's `scoreDelta` is its score minus the baseline's, so the sign
+ * depends on the term: removing a penalty raises the score by that penalty's
+ * magnitude, while removing the parallel bonus lowers it by the bonus.
+ */
 export function evaluatorAblations(
   baseline: EvaluatorConfig = DEFAULT_EVALUATOR_CONFIG
 ): readonly AblationVariant[] {

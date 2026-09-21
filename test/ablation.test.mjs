@@ -81,6 +81,20 @@ test('removing a term moves the score by exactly that term', () => {
   // The boundary term is the penalty times the miss rate, which is exactly the gain.
   const expectedBoundaryGain = DEFAULT_EVALUATOR_CONFIG.boundaryPenalty * (2 / 5);
   assert.equal(byName.get('no-boundary-penalty').scoreDelta, expectedBoundaryGain);
+
+  // The parallel term is the only one that adds to the score, so removing it
+  // lowers the score: three nodes of 10ms on a 30ms critical path is efficiency
+  // 1, weighted by `parallelWeight`. Nothing else pins this sign.
+  assert.equal(byName.get('no-parallel-term').scoreDelta, -DEFAULT_EVALUATOR_CONFIG.parallelWeight);
+
+  // And the three compose: `quality-only` is the baseline with all three terms
+  // removed, so its delta is their sum. That checks the variant really zeroes
+  // every weight rather than merely listing three of them.
+  const composed =
+    byName.get('no-boundary-penalty').scoreDelta +
+    byName.get('no-cost-term').scoreDelta +
+    byName.get('no-parallel-term').scoreDelta;
+  assert.ok(Math.abs(byName.get('quality-only').scoreDelta - composed) < 1e-9);
 });
 
 test('zero tokens still costs work, because the cost term carries a time component', () => {
