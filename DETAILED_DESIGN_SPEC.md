@@ -71,6 +71,10 @@ Core modules receive plain TypeScript interfaces and must not import Cordis type
 | Policy and replay | never import the environment layer |
 | Registry | never imports the environment layer |
 | Cordis registration | only `adapter/cordis.ts` calls `ctx.tools.register` or `ctx.effect` |
+| Module reachability | every source module is reachable from the entry or listed as a path-spawned entry point |
+| Mounting contract | the manifest patch path resolves, the patch parses to one row, and that row's id and name agree with the plugin and the package |
+
+The reachability check catches a module that was written and never wired up. Two modules are legitimately unreachable and are declared as such: `index.ts` is the root, and `evolution/evaluator-worker.ts` is spawned by path rather than imported.
 
 The Cordis check is deliberately narrow. Taking a `Context` to emit an event does not couple a module to the loader; calling the registration API does, because that is what must be reversible on unload. A tool registered outside the adapter's disposer chain would never be unregistered, which is why the one such helper that existed was removed rather than left unused.
 

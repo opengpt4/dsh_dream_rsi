@@ -91,7 +91,7 @@ export {
   type ToolStatus
 } from './tools/tool-registry.js';
 export {
-  DEFAULT_MAX_OUTPUT_BYTES as ISOLATED_CHILD_MAX_OUTPUT_BYTES,
+  DEFAULT_MAX_OUTPUT_BYTES,
   runIsolatedChild,
   type ChildConfinement,
   type IsolatedChildResult,
@@ -210,7 +210,7 @@ export {
   type ParseCandidateContext
 } from './evolution/candidate-generator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
-export { evaluateReplayIsolated, DEFAULT_MAX_OUTPUT_BYTES, type IsolatedEvaluatorOptions } from './evolution/isolated-evaluator.js';
+export { evaluateReplayIsolated, type IsolatedEvaluatorOptions } from './evolution/isolated-evaluator.js';
 export { splitDiscoveryNodes, bucketFor, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
 export {
   ablateEvaluator,

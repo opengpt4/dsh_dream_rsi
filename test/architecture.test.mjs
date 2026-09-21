@@ -32,8 +32,11 @@ function importGraph() {
       if (!entry.name.endsWith('.ts')) continue;
 
       const file = relative(SRC, absolute);
-      const specifiers = [...readFileSync(absolute, 'utf8').matchAll(/from\s+'([^']+)'/g)]
-        .map((match) => match[1])
+      const source = readFileSync(absolute, 'utf8');
+      // Both forms: `import x from` and the side-effect `import '...'`, so a
+      // module pulled in only for its type augmentation is not called an orphan.
+      const specifiers = [...source.matchAll(/from\s+'([^']+)'|import\s+'([^']+)'/g)]
+        .map((match) => match[1] ?? match[2])
         .map((specifier) =>
           specifier.startsWith('.')
             ? relative(SRC, join(absolute, '..', specifier)).replace(/\.js$/, '.ts')
@@ -130,4 +133,41 @@ test('Cordis types are imported only by modules that take a Context', () => {
   // perceive and query-state take only the adapter contract now, so they carry
   // no Cordis type at all.
   assert.deepEqual(importers, ['adapter/cordis.ts', 'embodied/act.ts', 'embodied/query-state.ts']);
+});
+
+/**
+ * Modules the entry does not import but the build still needs.
+ *
+ * `evaluator-worker.ts` is spawned by path, so nothing imports it; the bundler
+ * and TypeScript still treat it as an entry point.
+ */
+const NON_IMPORTED_ENTRY_POINTS = ['evolution/evaluator-worker.ts', 'index.ts'];
+
+test('every source module is reachable from the entry or a declared entry point', () => {
+  const reachable = new Set();
+  const stack = ['index.ts'];
+  while (stack.length > 0) {
+    const file = stack.pop();
+    if (reachable.has(file)) continue;
+    reachable.add(file);
+    for (const specifier of GRAPH.get(file) ?? []) {
+      if (specifier.endsWith('.ts')) stack.push(specifier);
+    }
+  }
+
+  const orphans = [...GRAPH.keys()]
+    .filter((file) => !reachable.has(file))
+    .filter((file) => !NON_IMPORTED_ENTRY_POINTS.includes(file))
+    .sort();
+
+  // A module nothing imports is either an entry point or a file that was
+  // written and never wired up.
+  assert.deepEqual(orphans, []);
+});
+
+test('the declared non-imported entry points are the only ones', () => {
+  const imported = new Set([...GRAPH.values()].flat());
+  const unimported = [...GRAPH.keys()].filter((file) => !imported.has(file)).sort();
+
+  assert.deepEqual(unimported, NON_IMPORTED_ENTRY_POINTS);
 });

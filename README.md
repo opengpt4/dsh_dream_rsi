@@ -95,7 +95,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 326 passing tests. OS/container sandboxing and a real
+The current suite contains 334 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not
@@ -103,4 +103,6 @@ generalization evidence: every replayed decision was recorded from the state it
 is replayed against. Generalization needs holdout tasks the policy never saw,
 which the multi-task benchmark is what produces.
 
-See [examples/](examples/README.md) for mounting the package into a profile.
+See [examples/](examples/README.md) for mounting the package into a profile. The mounting contract — the
+manifest's patch path, the patch row's id and name, and the example override — is checked by
+`test/mounting-contract.test.mjs`, so a rename fails a test instead of silently breaking mounting.

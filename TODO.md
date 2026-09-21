@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：326 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：334 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -43,7 +43,7 @@
 - [x] Add `src/adapter/cordis.ts` so core modules do not depend directly on Cordis APIs.
 - [x] Add profile and patch examples for local development (`cordis.patch.yml`, `examples/README.md`).
 - [x] Add compatibility tests for mount, duplicate mount, partial setup failure, dispose, and reload (`test/adapter-compat.test.mjs`).
-- [x] Verify that tool, event, service, command, and worker registrations leave no residue after disposal.
+- [x] Verify that tool, event, service, command, and worker registrations leave no residue after disposal, and that the mounting contract holds: the manifest points at a patch that exists, the patch parses and inserts one row whose id and name agree with the plugin and the package, the example override addresses that same row id, and the package publishes and exports the patch.
 - [x] Ship the bundle patch (`cordis.patch.yml` plus `dsh.bundle.patch`), without which a profile cannot mount the package at all.
 
 ### 2. Configuration and Runtime Wiring
