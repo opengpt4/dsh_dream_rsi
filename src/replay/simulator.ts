@@ -1,5 +1,5 @@
 import type { DiscoveryNode } from '../discovery/models.js';
-import { createReplayKey, type ReplayKeyInput } from './key.js';
+import { createReplayKey, replayKeyInputFromNode, type ReplayKeyInput } from './key.js';
 
 export interface ReplayHit {
   readonly kind: 'hit';
@@ -33,7 +33,7 @@ export class ReplaySimulator {
   }
 
   register(node: DiscoveryNode): void {
-    const replayKey = createReplayKey(this.keyInput(node));
+    const replayKey = createReplayKey(replayKeyInputFromNode(node));
     this.nodesByReplayKey.set(replayKey, node);
     const stateKey = this.stateKey(node);
     const actionTypes = this.actionTypesByState.get(stateKey) ?? new Set<string>();
@@ -64,16 +64,6 @@ export class ReplaySimulator {
       hitCount: this.hitCount,
       missCount: this.missCount,
       visitedNodeIds: [...this.visitedNodeIds]
-    };
-  }
-
-  private keyInput(node: DiscoveryNode): ReplayKeyInput {
-    return {
-      environmentVersion: node.environmentVersion,
-      stateHash: node.stateHash,
-      actionType: node.actionType,
-      normalizedActionParams: node.actionParams,
-      observationHash: node.observationHash
     };
   }
 

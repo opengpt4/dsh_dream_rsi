@@ -2,8 +2,23 @@ import { validateDreamRsiConfig, type DreamRsiConfig } from './config.js';
 import { InMemoryDiscoveryStore, type DiscoveryStore } from './discovery/models.js';
 import { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 import { MockEmbodiedBackend } from './embodied/backend.js';
+import { MockEnvironmentAdapter } from './embodied/mock-adapter.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/split.js';
 import { SingleWriterLock } from './operations/single-writer-lock.js';
+
+/** Replay ceilings derived from config, consumed by the episode pipeline. */
+export interface ReplaySettings {
+  readonly maxNodes: number;
+  readonly missRateMax: number;
+  readonly keySchemaVersion: number;
+}
+
+/** Evaluation ceilings derived from config, consumed by the episode pipeline. */
+export interface EvaluationSettings {
+  readonly timeoutMs: number;
+  readonly minimumHoldoutSamples: number;
+  readonly splitConfig: EvaluationSplitConfig;
+}
 
 /**
  * Resources constructed from a validated config, so every consumer reads the
@@ -14,7 +29,11 @@ export interface DreamRsiRuntime {
   /** Materialized on first access; see {@link createDreamRsiRuntime}. */
   readonly store: DiscoveryStore;
   readonly backend: MockEmbodiedBackend;
+  /** Same backend as {@link backend}, so tools and episodes share session state. */
+  readonly adapter: MockEnvironmentAdapter;
   readonly splitConfig: EvaluationSplitConfig;
+  readonly replaySettings: ReplaySettings;
+  readonly evaluationSettings: EvaluationSettings;
   readonly evolutionLock: SingleWriterLock;
   readonly deploymentLock: SingleWriterLock;
   /** Releases every resource this runtime owns. Safe to call more than once. */
@@ -37,6 +56,15 @@ export function createDreamRsiRuntime(config: DreamRsiConfig): DreamRsiRuntime {
   let disposed = false;
   let sqlite: SQLiteDiscoveryStore | undefined;
   let store: DiscoveryStore | undefined;
+  const backend = new MockEmbodiedBackend();
+  const splitConfig: EvaluationSplitConfig = {
+    trainRatio: config.evaluation.trainRatio,
+    validationRatio: config.evaluation.validationRatio,
+    holdoutRatio: config.evaluation.holdoutRatio,
+    // Stable seed: one task must land in the same partition on every run, or
+    // replay scores are not comparable between evaluations.
+    seed: DEFAULT_SPLIT_CONFIG.seed
+  };
 
   return {
     config,
@@ -49,14 +77,20 @@ export function createDreamRsiRuntime(config: DreamRsiConfig): DreamRsiRuntime {
       }
       return store;
     },
-    backend: new MockEmbodiedBackend(),
-    splitConfig: {
-      trainRatio: config.evaluation.trainRatio,
-      validationRatio: config.evaluation.validationRatio,
-      holdoutRatio: config.evaluation.holdoutRatio,
-      // Stable seed: one task must land in the same partition on every run, or
-      // replay scores are not comparable between evaluations.
-      seed: DEFAULT_SPLIT_CONFIG.seed
+    backend,
+    // One backend instance behind both surfaces, so an action taken through a
+    // tool and an action taken by an episode observe the same environment.
+    adapter: new MockEnvironmentAdapter(backend),
+    splitConfig,
+    replaySettings: {
+      maxNodes: config.replay.maxNodes,
+      missRateMax: config.replay.missRateMax,
+      keySchemaVersion: config.replay.keySchemaVersion
+    },
+    evaluationSettings: {
+      timeoutMs: config.evaluation.timeoutMs,
+      minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples,
+      splitConfig
     },
     evolutionLock: new SingleWriterLock(config.operations.evolutionLock, config.operations.jobLeaseMs),
     deploymentLock: new SingleWriterLock(config.operations.deploymentLock, config.operations.jobLeaseMs),

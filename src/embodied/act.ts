@@ -1,9 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 
-import type { ActionResult, EmbodiedActionType, MockEmbodiedBackend } from './backend.js';
-
-const allowedActions: readonly EmbodiedActionType[] = ['move_relative', 'goto', 'pick', 'place', 'open'];
+import type { EmbodiedActionType, MockActionResult, MockEmbodiedBackend } from './backend.js';
+import { EMBODIED_ACTION_TYPES } from './protocol.js';
 
 export function createActTool(ctx: Context, backend: MockEmbodiedBackend) {
   return defineTool({
@@ -51,7 +50,7 @@ export function createActTool(ctx: Context, backend: MockEmbodiedBackend) {
     timeoutMs: 30000,
     async execute(args, exec: ToolRunContext) {
       const actionId = `${args.session_id}:${exec.callId}`;
-      if (!allowedActions.includes(args.action_type as EmbodiedActionType)) {
+      if (!EMBODIED_ACTION_TYPES.includes(args.action_type as EmbodiedActionType)) {
         const error = `action ${args.action_type} is not allowed`;
         ctx.emit('embodied/error', { actionId, sessionId: args.session_id, error });
         return { success: false, action_id: actionId, error };
@@ -93,10 +92,10 @@ export function createActTool(ctx: Context, backend: MockEmbodiedBackend) {
 }
 
 function executeWithTimeout(
-  operation: (signal: AbortSignal) => Promise<ActionResult>,
+  operation: (signal: AbortSignal) => Promise<MockActionResult>,
   timeoutMs: number,
   signal: AbortSignal
-): Promise<ActionResult> {
+): Promise<MockActionResult> {
   if (signal.aborted) return Promise.reject(new Error('action cancelled'));
 
   const combinedController = new AbortController();

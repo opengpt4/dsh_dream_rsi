@@ -22,6 +22,12 @@ Implemented and tested capabilities include:
 - host-facing `Config` schema, validated by the Cordis loader before `apply` runs
 - runtime binding validated config to the Discovery store, embodied backend, split config, and writer locks
 - session-isolated mock embodied backend and typed events, with real async timeout/cancellation
+- environment protocol (`Observation`, `ActionRequest`, `ActionResult`) and a mock adapter that resolves
+  every attempt to a terminal status and latches a stopped session until reset
+- end-to-end episode runner recording one Discovery node per step, including failed, timed-out, and
+  cancelled attempts, with task, episode, session, policy, correlation, and action IDs on every node
+- episode pipeline: snapshot -> replay -> evaluator, applying the runtime's derived replay and
+  evaluation ceilings
 - idempotent in-memory and SQLite Discovery stores
 - canonical ReplayKey and deterministic counterfactual replay
 - Q/C/P/M evaluation, task-level data splits, and monotonic gating
@@ -38,8 +44,13 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 57 passing tests. An end-to-end mock task,
-OS/container sandboxing, candidate generation, canary deployment, tool
-synthesis, and a real simulator adapter remain planned work.
+The current suite contains 77 passing tests. OS/container sandboxing, candidate
+generation, canary deployment, tool synthesis, and a real simulator adapter
+remain planned work.
+
+Replaying an episode's own recorded decisions is a determinism check, not
+generalization evidence: every replayed decision was recorded from the state it
+is replayed against. Generalization needs holdout tasks the policy never saw,
+which the multi-task benchmark is what produces.
 
 See [examples/](examples/README.md) for mounting the package into a profile.

@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
-
-import type { JsonValue } from '../discovery/models.js';
+import type { DiscoveryNode, JsonValue } from '../discovery/models.js';
+import { hashJson } from '../hash.js';
 
 export const REPLAY_KEY_SCHEMA_VERSION = 1;
 
@@ -12,17 +11,7 @@ export interface ReplayKeyInput {
   readonly observationHash: string;
 }
 
-export function canonicalJson(value: JsonValue): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-export function hashJson(value: JsonValue): string {
-  return createHash('sha256').update(canonicalJson(value)).digest('hex');
-}
+export { canonicalJson, hashJson } from '../hash.js';
 
 export function createReplayKey(input: ReplayKeyInput): string {
   return hashJson({
@@ -33,4 +22,19 @@ export function createReplayKey(input: ReplayKeyInput): string {
     normalizedActionParams: input.normalizedActionParams,
     observationHash: input.observationHash
   });
+}
+
+/**
+ * The decision a recorded node represents. Replaying a node means re-issuing
+ * exactly this input, so the key a writer produced and the key a reader looks
+ * up can never diverge.
+ */
+export function replayKeyInputFromNode(node: DiscoveryNode): ReplayKeyInput {
+  return {
+    environmentVersion: node.environmentVersion,
+    stateHash: node.stateHash,
+    actionType: node.actionType,
+    normalizedActionParams: node.actionParams,
+    observationHash: node.observationHash
+  };
 }

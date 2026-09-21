@@ -51,17 +51,17 @@
 - [x] Add typed configuration defaults and validation.
 - [x] Add configuration schema export for the host Harness (`Config`, Schemastery; the Cordis loader validates each fiber's `config` against it before `apply` runs).
 - [x] Connect validated config to Discovery store, embodied backend, split config, and writer lock construction (`src/runtime.ts`).
-- [ ] Derive replay and evaluator settings (`replay.maxNodes`, `replay.missRateMax`, `evaluation.timeoutMs`, `evaluation.minimumHoldoutSamples`) in the runtime. Deferred until the end-to-end pipeline consumes them.
+- [x] Derive replay and evaluator settings (`replay.maxNodes`, `replay.missRateMax`, `evaluation.timeoutMs`, `evaluation.minimumHoldoutSamples`) in the runtime, applied by `src/tasks/pipeline.ts`.
 - [x] Add `dream status` read-only runtime facade (exposed as the `dream_status` tool, since no verified Cordis/DSH command contract exists yet; see `src/status.ts`).
 - [x] Reject invalid configuration before any persistent resource or tool registration is created (the schema runs in `apply` before `ctx.effect`; `createDreamRsiRuntime` validates before opening SQLite).
 
 ### 3. End-to-End Mock Task
 
-- [ ] Define `Task`, `Episode`, `Observation`, `ActionRequest`, and `ActionResult` schemas.
-- [ ] Execute one complete mock task through perceive -> policy/tool action -> result -> Discovery node.
-- [ ] Link task, episode, session, policy version, correlation ID, and action ID in every trace.
-- [ ] Run the same episode through snapshot -> Replay -> evaluator.
-- [ ] Add success, failure, timeout, cancellation, and emergency-stop fixtures.
+- [x] Define `Task`, `Episode`, and `ResourceBudget` schemas (`src/tasks/models.ts`) and `Observation`, `ActionRequest`, `ActionResult`, and `EnvironmentAdapter` (`src/embodied/protocol.ts`).
+- [x] Execute one complete mock task through perceive -> policy/tool action -> result -> Discovery node (`src/tasks/runner.ts`); one node per step, including failed, timed-out, and cancelled attempts.
+- [x] Link task, episode, session, policy version, correlation ID, and action ID in every trace (`episodeId` added to `DiscoveryNode` and persisted in the SQLite store).
+- [x] Run the same episode through snapshot -> Replay -> evaluator (`src/tasks/pipeline.ts`). Documented as a determinism check, not generalization evidence.
+- [x] Add success, failure, timeout, cancellation, and emergency-stop fixtures, plus budget, environment-binding, idempotency, and boundary-miss cases (`test/end-to-end.test.mjs`, 77 tests total).
 
 ## P1: Safety and Evaluation Readiness
 
@@ -176,7 +176,7 @@
 The project is not ready for production pilot until all of these have evidence:
 
 - [ ] Verified target DSH profile/patch integration.
-- [ ] Complete task-to-Discovery-to-Replay-to-evaluation trace.
+- [x] Complete task-to-Discovery-to-Replay-to-evaluation trace, verified against the mock environment (`test/end-to-end.test.mjs`). Real-simulator evidence is still tracked under item 10.
 - [ ] Strong OS/container isolation for untrusted candidate code.
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
 - [ ] AST, dependency, resource, and network guards.

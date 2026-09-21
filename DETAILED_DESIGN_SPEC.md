@@ -84,14 +84,14 @@ All model requests pass through `HarnessLlm.invoke`. The adapter records request
 ```ts
 export interface EnvironmentAdapter {
   observe(request: ObserveRequest): Promise<Observation>;
-  availableActions(request: AvailableActionsRequest): Promise<readonly ActionSchema[]>;
-  execute(request: ExecuteActionRequest): Promise<ActionResult>;
-  reset(request: ResetRequest): Promise<void>;
-  emergencyStop(request: EmergencyStopRequest): Promise<void>;
+  availableActions(): Promise<readonly EmbodiedActionType[]>;
+  execute(request: ActionRequest, signal?: AbortSignal): Promise<ActionResult>;
+  emergencyStop(sessionId: string): Promise<void>;
+  reset(sessionId: string): void;
 }
 ```
 
-The adapter is the only component permitted to know a simulator or hardware SDK. Core policy sees action schemas and structured observations, not raw motor channels.
+The adapter is the only component permitted to know a simulator or hardware SDK. Core policy sees action schemas and structured observations, not raw motor channels. Full request/result shapes are in §5.2; `execute` resolves to a terminal result rather than throwing.
 
 ## 4. Cordis Plugin Lifecycle
 
@@ -142,6 +142,11 @@ Defaults: `enabled=true`, `evolution.enabled=false`, `evolution.autoDeploy=false
 ### 5.1 Task and episode
 
 ```ts
+export interface ResourceBudget {
+  maxSteps: number;
+  wallClockMs: number;
+}
+
 export interface Task {
   taskId: string;
   goal: string;
@@ -151,20 +156,102 @@ export interface Task {
   metadata: JsonObject;
 }
 
+export type EpisodeStatus =
+  | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'emergency_stop';
+
 export interface Episode {
   episodeId: string;
   taskId: string;
   sessionId: string;
   environmentId: string;
+  policyVersion: string;
   step: number;
-  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  status: EpisodeStatus;
   correlationId: string;
+  startedAt: string;
+  endedAt?: string;
 }
 ```
 
 Every task receives a policy version at start. A later deployment cannot mutate the policy used by an already-running episode unless the host explicitly supports a version boundary.
 
-### 5.2 Embodied tools
+`emergency_stop` is a terminal episode status distinct from `cancelled`: an operator stop forbids automatic retry. `wallClockMs` is enforced between steps and clamps each action deadline; `maxSteps` bounds recorded nodes.
+
+### 5.2 Environment protocol
+
+The contract in `src/embodied/protocol.ts`. Adapters translate a simulator SDK into these types; core policy never sees the SDK.
+
+```ts
+export interface Observation {
+  sessionId: string;
+  environmentId: string;
+  environmentVersion: string;
+  frameId: string;
+  step: number;
+  pose: Pose;
+  gripper: GripperState;
+  objects: ObservedObject[];
+  schemaVersion: number;
+  timestamp: string;
+}
+
+export interface ActionRequest {
+  actionId: string;
+  sessionId: string;
+  taskId: string;
+  episodeId: string;
+  correlationId: string;
+  actionType: EmbodiedActionType;
+  parameters: JsonObject;
+  timeoutMs: number;
+  requestedAt: string;
+}
+
+export type ActionStatus = 'completed' | 'failed' | 'timeout' | 'cancelled' | 'emergency_stop';
+
+export interface ActionResult {
+  actionId: string;
+  status: ActionStatus;
+  step: number;
+  pose: Pose;
+  gripper: GripperState;
+  message: string;
+  execTimeMs: number;
+  completedAt: string;
+  error?: string;
+}
+
+export interface EnvironmentAdapter {
+  observe(request: ObserveRequest): Promise<Observation>;
+  availableActions(): Promise<readonly EmbodiedActionType[]>;
+  execute(request: ActionRequest, signal?: AbortSignal): Promise<ActionResult>;
+  emergencyStop(sessionId: string): Promise<void>;
+  reset(sessionId: string): void;
+}
+```
+
+`execute` resolves to a terminal `ActionResult`; it does not throw for an action-level failure, timeout, cancellation, or stop. The caller records these as outcomes, so a rejected promise means the adapter itself is unusable. A session stopped through `emergencyStop` stays latched until `reset`.
+
+### 5.3 Replay hashes
+
+A `DiscoveryNode` carries two hashes, both computed from the pre-action observation:
+
+| Hash | Covers | Excludes |
+|---|---|---|
+| `stateHash` | `pose`, `gripper` | `step`, `timestamp`, `objects` |
+| `observationHash` | `environmentId`, `environmentVersion`, `frameId`, `schemaVersion`, `pose`, `gripper`, `objects` | `step`, `timestamp` |
+
+Both exclusions are load-bearing: `step` and `timestamp` differ on every run, so covering either would make every replay lookup a miss. `stateHash` is the Markov state, so a policy reaching an equivalent state at a later step still resolves to the recorded outcome.
+
+### 5.4 Episode pipeline
+
+`src/tasks/runner.ts` records exactly one Discovery node per step — including failed, timed-out, and cancelled attempts, because a negative result is evidence and dropping it would make the recorded tree disagree with what the environment did.
+
+`src/tasks/pipeline.ts` then runs `runEpisode -> createEvaluationSnapshot -> replay -> evaluateReplay` and applies the runtime's derived ceilings (`replay.maxNodes`, `replay.missRateMax`, `evaluation.timeoutMs`, `evaluation.minimumHoldoutSamples`).
+
+Replaying an episode's own recorded decisions is a **determinism check, not generalization evidence**: every replayed decision was recorded from the state it is replayed against, so a clean run only proves the replay key is stable and the state index resolves. Generalization requires holdout tasks the policy never saw — the multi-task benchmark, which is still an open release blocker.
+
+### 5.5 Embodied tools
 
 #### `embodied_perceive`
 
@@ -193,7 +280,7 @@ Output always contains `success`, `actionId`, terminal `status`, result/error an
 
 Input is a bounded query enum or approved DSL. The tool may return room graph, objects, navigation nodes and last state reference. It must reject arbitrary code, unbounded graph traversal and unauthorized session access.
 
-### 5.3 Action state machine
+### 5.6 Action state machine
 
 ```mermaid
 stateDiagram-v2
@@ -237,6 +324,7 @@ export interface DiscoveryNode {
   execTimeMs: number;
   criticalPathMs?: number;
   sessionId?: string;
+  episodeId?: string;
   episodeStep?: number;
   correlationId?: string;
   idempotencyKey: string;

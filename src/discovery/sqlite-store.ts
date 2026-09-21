@@ -27,6 +27,7 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
         exec_time_ms REAL NOT NULL,
         critical_path_ms REAL,
         session_id TEXT,
+        episode_id TEXT,
         episode_step INTEGER,
         correlation_id TEXT,
         idempotency_key TEXT NOT NULL UNIQUE,
@@ -39,6 +40,19 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
       CREATE INDEX IF NOT EXISTS idx_discovery_environment ON discovery_nodes(environment_version);
       CREATE INDEX IF NOT EXISTS idx_discovery_created_at ON discovery_nodes(created_at);
     `);
+    this.migrate();
+  }
+
+  /**
+   * `CREATE TABLE IF NOT EXISTS` leaves an existing database at its old shape,
+   * so a column added to the schema above has to be added here too.
+   */
+  private migrate(): void {
+    const columns = this.database.prepare('PRAGMA table_info(discovery_nodes)').all() as unknown as Array<{ name: string }>;
+    const existing = new Set(columns.map((column) => column.name));
+    for (const [name, definition] of [['episode_id', 'TEXT']] as const) {
+      if (!existing.has(name)) this.database.exec(`ALTER TABLE discovery_nodes ADD COLUMN ${name} ${definition}`);
+    }
   }
 
   append(node: DiscoveryNode): DiscoveryNode {
@@ -52,9 +66,9 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
         node_id, task_id, parent_id, policy_version, environment_version,
         state_hash, observation_hash, action_type, action_params_json,
         result_json, score, token_cost, exec_time_ms, critical_path_ms,
-        session_id, episode_step, correlation_id, idempotency_key,
+        session_id, episode_id, episode_step, correlation_id, idempotency_key,
         schema_version, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       node.nodeId,
       node.taskId,
@@ -71,6 +85,7 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
       node.execTimeMs,
       node.criticalPathMs ?? null,
       node.sessionId ?? null,
+      node.episodeId ?? null,
       node.episodeStep ?? null,
       node.correlationId ?? null,
       node.idempotencyKey,
@@ -115,6 +130,7 @@ interface SqliteRow {
   exec_time_ms: number;
   critical_path_ms: number | null;
   session_id: string | null;
+  episode_id: string | null;
   episode_step: number | null;
   correlation_id: string | null;
   idempotency_key: string;
@@ -139,6 +155,7 @@ function deserializeNode(row: SqliteRow): DiscoveryNode {
     execTimeMs: row.exec_time_ms,
     ...(row.critical_path_ms !== null ? { criticalPathMs: row.critical_path_ms } : {}),
     ...(row.session_id !== null ? { sessionId: row.session_id } : {}),
+    ...(row.episode_id !== null ? { episodeId: row.episode_id } : {}),
     ...(row.episode_step !== null ? { episodeStep: row.episode_step } : {}),
     ...(row.correlation_id !== null ? { correlationId: row.correlation_id } : {}),
     idempotencyKey: row.idempotency_key,

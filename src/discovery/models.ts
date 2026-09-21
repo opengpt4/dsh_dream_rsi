@@ -1,5 +1,9 @@
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { readonly [key: string]: JsonValue };
+
+/** Stored in every node so a reader can tell which schema wrote it. */
+export const DISCOVERY_NODE_SCHEMA_VERSION = 1;
 
 export interface DiscoveryNode {
   readonly nodeId: string;
@@ -17,6 +21,7 @@ export interface DiscoveryNode {
   readonly execTimeMs: number;
   readonly criticalPathMs?: number;
   readonly sessionId?: string;
+  readonly episodeId?: string;
   readonly episodeStep?: number;
   readonly correlationId?: string;
   readonly idempotencyKey: string;

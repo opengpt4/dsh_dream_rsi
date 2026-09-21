@@ -1,3 +1,5 @@
+import type { EmbodiedActionType, GripperState, Pose } from './protocol.js';
+
 export interface MockObject {
   readonly id: string;
   readonly label: string;
@@ -8,34 +10,32 @@ export interface MockObservation {
   readonly sessionId: string;
   readonly environmentId: 'mock-room-v1';
   readonly step: number;
-  readonly pose: {
-    readonly x: number;
-    readonly y: number;
-    readonly z: number;
-    readonly yaw: number;
-  };
+  readonly pose: Pose;
+  readonly gripper: GripperState;
   readonly objects: readonly MockObject[];
   readonly timestamp: string;
 }
 
-interface SessionState {
-  step: number;
-  pose: {
-    x: number;
-    y: number;
-    z: number;
-    yaw: number;
-  };
-  gripper: 'open' | 'closed';
+interface MutablePose {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
 }
 
-export type EmbodiedActionType = 'move_relative' | 'goto' | 'pick' | 'place' | 'open';
+interface SessionState {
+  step: number;
+  pose: MutablePose;
+  gripper: GripperState;
+}
 
-export interface ActionResult {
+export type { EmbodiedActionType };
+
+export interface MockActionResult {
   readonly actionType: EmbodiedActionType;
   readonly step: number;
-  readonly pose: MockObservation['pose'];
-  readonly gripper: 'open' | 'closed';
+  readonly pose: Pose;
+  readonly gripper: GripperState;
   readonly message: string;
 }
 
@@ -51,13 +51,13 @@ export class MockEmbodiedBackend {
 
   observe(sessionId: string): MockObservation {
     const state = this.getState(sessionId);
-    this.sessions.set(sessionId, state);
 
     return {
       sessionId,
       environmentId: 'mock-room-v1',
       step: state.step,
-      pose: state.pose,
+      pose: { ...state.pose },
+      gripper: state.gripper,
       objects: [
         { id: 'red-mug', label: 'red mug', position: [1, 0, 0] },
         { id: 'wooden-table', label: 'wooden table', position: [2, 0, 0] }
@@ -71,7 +71,7 @@ export class MockEmbodiedBackend {
     actionType: EmbodiedActionType,
     parameters: Record<string, unknown>,
     signal?: AbortSignal
-  ): Promise<ActionResult> {
+  ): Promise<MockActionResult> {
     if (signal?.aborted) return Promise.reject(new Error('action cancelled'));
 
     return new Promise((resolve, reject) => {
@@ -95,7 +95,7 @@ export class MockEmbodiedBackend {
     sessionId: string,
     actionType: EmbodiedActionType,
     parameters: Record<string, unknown>
-  ): ActionResult {
+  ): MockActionResult {
     const state = this.getState(sessionId);
     if (actionType === 'move_relative') {
       state.pose.x += this.numberParameter(parameters, 'dx');
@@ -115,13 +115,13 @@ export class MockEmbodiedBackend {
     return {
       actionType,
       step: state.step,
-      pose: state.pose,
+      pose: { ...state.pose },
       gripper: state.gripper,
       message: `${actionType} completed in mock-room-v1`
     };
   }
 
-  queryState(sessionId: string): { readonly pose: MockObservation['pose']; readonly gripper: 'open' | 'closed'; readonly objects: readonly MockObject[] } {
+  queryState(sessionId: string): { readonly pose: Pose; readonly gripper: GripperState; readonly objects: readonly MockObject[] } {
     const observation = this.observe(sessionId);
     const state = this.getState(sessionId);
     return { pose: observation.pose, gripper: state.gripper, objects: observation.objects };
