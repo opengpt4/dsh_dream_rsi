@@ -2,8 +2,7 @@
 
 6 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
 repository because they choose a provider, a runtime, a benchmark, or a person.
-Of the 16 open items, 14 wait on one of these six; the remaining 2 are in-tree
-work (§8). Sections whose decision has been made are kept as the record of what
+All 14 open items wait on one of these six (§8 is empty). Sections whose decision has been made are kept as the record of what
 was chosen.
 
 Each section states what already exists, the decision, the options with the
@@ -181,11 +180,7 @@ profile now or waits for the real adapter.
 
 ## 8. Open items that do not wait on these
 
-- `TODO: Sign snapshots — which requires persisting them first, since a signature on a record that exists only in memory has no reader — and emit a candidate `signature` guard`
-  — the scheme is chosen (§1) and applied to policy artifacts and evaluation
-  reports; snapshots and the candidate guard are what remain.
-- `TODO: Immutable signed policy/evaluation/snapshot artifacts` — the release
-  blocker whose scheme is decided in §1; only the item above closes it.
+- None. Every open item waits on one of the six decisions above.
 
 ---
 

@@ -122,6 +122,17 @@ export interface EvaluationReport {
   readonly guardResults: readonly GuardResult[];
   readonly createdAt: string;
   /**
+   * Where the evaluated snapshot is stored. Absent when the run did not
+   * persist one.
+   *
+   * Not part of the report id, and it does not have to be: `snapshotId` is in
+   * the body, and loading through this reference re-derives that id from the
+   * bytes and refuses a mismatch. A reference is a location, and the content it
+   * points at must be the snapshot the report names — the same split as
+   * `sourceRef` against `sourceSha256`.
+   */
+  readonly snapshotRef?: ArtifactRef;
+  /**
    * Detached signature over {@link EvaluationReport.evaluationId}.
    *
    * The deployment gate refuses to canary a deployment whose evidence is

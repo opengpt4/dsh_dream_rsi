@@ -24,10 +24,13 @@ export const DEFAULT_RETENTION_POLICY: RetentionPolicy = {
     observation: 7 * 24 * 60 * 60 * 1_000,
     'sandbox-output': 24 * 60 * 60 * 1_000,
     'llm-response': 30 * 24 * 60 * 60 * 1_000,
-    // Policy, tool, and evaluation artifacts are the audit trail itself.
+    // Policy, tool, evaluation, and snapshot artifacts are the audit trail
+    // itself: a report says which snapshot it evaluated, and that claim is only
+    // checkable while the snapshot can still be retrieved.
     policy: null,
     tool: null,
-    'evaluation-report': null
+    'evaluation-report': null,
+    snapshot: null
   }
 };
 

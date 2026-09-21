@@ -18,7 +18,8 @@ export type ArtifactKind =
   | 'sandbox-output'
   | 'policy'
   | 'tool'
-  | 'evaluation-report';
+  | 'evaluation-report'
+  | 'snapshot';
 
 export const ARTIFACT_KINDS: readonly ArtifactKind[] = [
   'observation',
@@ -26,7 +27,8 @@ export const ARTIFACT_KINDS: readonly ArtifactKind[] = [
   'sandbox-output',
   'policy',
   'tool',
-  'evaluation-report'
+  'evaluation-report',
+  'snapshot'
 ];
 
 export interface ArtifactMetadata {

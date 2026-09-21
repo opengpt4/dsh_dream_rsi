@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：487 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：496 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -82,7 +82,7 @@
 - [x] Materialize ReplaySnapshot from a consistent SQLite read transaction: `DiscoveryStore.readAll()` serves the tree under one deferred transaction, and `EpisodePipelineOptions.snapshotSource: 'store'` snapshots the persisted tree rather than the run in memory.
 - [x] Revised: snapshot identity covers content only (`schemaVersion` + `splits`), with `createdAt` recorded but excluded. Including creation time meant two snapshots of the identical tree never shared an id, so the id was not the content address the design claims. Node-level `createdAt` values remain part of the content.
 - [x] Add artifact checksum verification before evaluation (`assertArtifactsVerified` runs before the evaluator and fails the run). Deployment does not exist yet; it must call the same function rather than re-implement the check.
-- [ ] Sign snapshots — which requires persisting them first, since a signature on a record that exists only in memory has no reader — and emit a candidate `signature` guard. Ed25519 detached signatures over the record id, with an SPKI PEM key ring carrying validity windows, rotation, and named refusal reasons (`src/registry/signing.ts`, `test/signing.test.mjs`), now cover policy artifacts and evaluation reports: `DeploymentWriter` refuses to canary a deployment whose artifact or evidence report is unsigned, tampered, or signed by a key outside the ring. Snapshots carry no signature field — the report that names a `snapshotId` is signed, and the snapshot itself is frozen in memory only — and no `signature` guard is emitted in candidate `guardResults`.
+- [x] Sign snapshots, and persist them so the signature has a reader: `signEvaluationSnapshot` over the id, stored under a `snapshot` artifact kind, with the report carrying a `snapshotRef` and `loadEvaluationSnapshot` checking the store digest, the id recomputation, and the signature when a ring is supplied. A candidate `signature` guard is still not emitted in `guardResults`, and no gate loads a snapshot, because a deployment rests on the report. Ed25519 detached signatures over the record id, with an SPKI PEM key ring carrying validity windows, rotation, and named refusal reasons (`src/registry/signing.ts`, `test/signing.test.mjs`), now cover policy artifacts and evaluation reports: `DeploymentWriter` refuses to canary a deployment whose artifact or evidence report is unsigned, tampered, or signed by a key outside the ring. Snapshots carry no signature field — the report that names a `snapshotId` is signed, and the snapshot itself is frozen in memory only — and no `signature` guard is emitted in candidate `guardResults`.
 
 ### 6. Strong Evaluator Isolation
 
@@ -187,7 +187,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [x] Verified target DSH profile/patch integration (DSH 0.1.5-rc.1, `@deepseek-ai/cordis-plugin-loader@1.0.3`; see BASELINE.md), including the bundle patch without which a profile cannot mount the package. Covered by `test/adapter-compat.test.mjs`.
 - [x] Complete task-to-Discovery-to-Replay-to-evaluation trace, verified against the mock environment (`test/end-to-end.test.mjs`). Real-simulator evidence is still tracked under item 10.
 - [ ] Strong OS/container isolation for untrusted candidate code.
-- [ ] Immutable signed policy/evaluation/snapshot artifacts. Policy artifacts and evaluation reports are signed, and both signatures are enforced at activation; snapshots are not signed, and their integrity rests on the frozen in-memory copy plus the signed report that names their id.
+- [x] Immutable signed policy/evaluation/snapshot artifacts. All three carry detached Ed25519 signatures over their ids, excluded from the id so signing does not re-identify a record. Policy artifacts and evaluation reports are enforced at activation; a snapshot is verified when a reader loads it with a key ring, which is where snapshots are consumed — the deployment path rests on the report, whose signed body carries the `snapshotId`.
 - [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested; runtime filesystem writes and process spawning are denied by Node's permission model, and the child's heap is capped by `--max-old-space-size`. Runtime CPU-time and network limits do not, so this stays open.
 - [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
 - [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, covered by `test/deployment.test.mjs`, 28 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.

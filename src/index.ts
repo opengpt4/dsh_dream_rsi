@@ -161,6 +161,7 @@ export {
   Ed25519SignatureVerifier,
   loadKeyRing,
   signEvaluationReport,
+  signEvaluationSnapshot,
   signPolicyArtifact,
   type KeyRing,
   type KeyRingEntry,
@@ -250,7 +251,14 @@ export {
   type HoldoutGateInput,
   type HoldoutGateResult
 } from './evolution/holdout-gate.js';
-export { createEvaluationSnapshot, type EvaluationSnapshot } from './evolution/snapshot.js';
+export {
+  createEvaluationSnapshot,
+  loadEvaluationSnapshot,
+  persistEvaluationSnapshot,
+  verifyEvaluationSnapshot,
+  type EvaluationSnapshot,
+  type SnapshotSignatureVerifier
+} from './evolution/snapshot.js';
 export { SingleWriterLock } from './operations/single-writer-lock.js';
 export { runAstGuard, type AstGuardResult, type AstGuardViolation } from './guardrails/ast-guard.js';
 export {

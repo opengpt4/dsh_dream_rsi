@@ -16,6 +16,11 @@ import {
   pipelineSettings,
   planPolicy,
   resolveDreamRsiConfig,
+  InMemoryPolicyRegistryStore,
+  PolicyRegistry,
+  createPolicyArtifact,
+  hashDreamRsiConfig,
+  loadEvaluationSnapshot,
   runEpisodePipeline
 } from '../dist/index.js';
 
@@ -385,6 +390,61 @@ test('the pipeline verifies artifacts before evaluating', async () => {
         ),
         /checksum_mismatch/
       );
+    } finally {
+      runtime.dispose();
+    }
+  });
+});
+
+test('the pipeline stores the snapshot it evaluated and the report points at it', async () => {
+  await withTempDirAsync(async (dir) => {
+    const artifacts = new FileArtifactStore(dir);
+    const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+    try {
+      const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+      const artifact = createPolicyArtifact({
+        version: 'v1',
+        parentVersion: null,
+        source: 'export const decide = () => 1;',
+        manifest: { entrypoint: 'src/policy.ts', dependencies: [], schemaVersion: 1 },
+        allowedCapabilities: ['scheduling'],
+        createdBy: 'human',
+        createdAt: '2026-01-01T00:00:00.000Z'
+      });
+      registry.registerPolicy(artifact);
+      const reporting = {
+        registry,
+        policyArtifactId: artifact.artifactId,
+        evaluatorVersion: '0.1.0',
+        sourceHash: artifact.sourceSha256,
+        configHash: hashDreamRsiConfig(runtime.config),
+        split: 'validation',
+        taskFamily: 'mock-room'
+      };
+
+      const run = await runEpisodePipeline(
+        makePipelineOptions(runtime, { artifacts: { store: artifacts, artifactIds: [] }, reporting })
+      );
+
+      // The report says which snapshot it evaluated; the reference is where
+      // that snapshot can be read back from.
+      assert.equal(run.report.snapshotId, run.snapshot.snapshotId);
+      assert.ok(run.report.snapshotRef, 'a run with a store must record where the snapshot went');
+      const loaded = loadEvaluationSnapshot(artifacts, run.report.snapshotRef);
+      assert.equal(loaded.snapshotId, run.report.snapshotId, 'the stored snapshot must be the one the report names');
+      assert.deepEqual(loaded.splits, run.snapshot.splits);
+
+      // Without a store there is nothing to point at, and nothing is written.
+      const bare = await runEpisodePipeline(
+        makePipelineOptions(runtime, {
+          episodeId: 'episode-2',
+          sessionId: 'session-2',
+          reporting
+        })
+      );
+      assert.equal(bare.report.snapshotRef, undefined);
+      assert.equal('snapshotRef' in bare.report, false);
+      assert.equal(registry.listEvaluations().length, 2);
     } finally {
       runtime.dispose();
     }

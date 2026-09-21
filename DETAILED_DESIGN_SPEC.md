@@ -644,7 +644,7 @@ Verification refuses with a reason: an unsigned artifact, a body that does not m
 
 Enforcement is the deployment gate. `DeploymentWriter` refuses to leave `APPROVED` when no verifier is configured, so an unsigned artifact cannot reach production because nobody wired the check, and it verifies the evaluation report the deployment rests on as well: a signature over the policy says what is being deployed, and one over the report says why it is allowed to be. Both are required of the verifier, so a verifier that can only check artifacts refuses by returning a reason rather than by being skipped.
 
-Snapshots carry no signature. Their integrity rests on two things: `createEvaluationSnapshot` deep-freezes the node sets it copies, and the report that evaluated a snapshot names its `snapshotId` and is signed, so a rewritten snapshot cannot be presented under a signed report.
+Snapshots are signed as well, and persisted: with an artifact store in hand the run stores the snapshot under its own kind and the report carries a `snapshotRef` beside the `snapshotId` in its body. Reading one back checks three layers in order — the stored bytes against the reference's digest, the record's body against the `snapshotId` it claims, and the signature when the reader supplies a key ring. The first catches an edited file, the second a record whose id was rewritten consistently, the third a record no key vouches for. `createdAt` stays outside the id: two snapshots of one tree are one tree.
 
 ### 9.2 Candidate generation
 
@@ -800,6 +800,7 @@ Takeover renames the stale directory aside rather than removing and recreating i
 | `propose` | the artifact is registered, the evaluation covers it and passed, and the holdout gate passed and covers that evaluation. Records `rollbackTarget` as the policy live at proposal time |
 | `decide` | `PROPOSED -> APPROVED` or `PROPOSED -> REJECTED`, with an operator identity |
 | `startCanary` | `APPROVED -> CANARY`, after verifying the artifact checksum and signature, and the signature on the evidence report |
+| — | a deployment rests on the report, not on retrieving the snapshot: the report's `snapshotId` is in its signed body, and the snapshot is verified when a reader loads it |
 | `completeCanary` | `CANARY -> ACTIVE` or `CANARY -> ROLLED_BACK` from the threshold verdict |
 | `markDegraded` | `ACTIVE -> DEGRADED` |
 | `rollback` | to `ROLLED_BACK`, degrading an active deployment first, then restoring the pointer |

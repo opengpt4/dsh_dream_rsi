@@ -1,4 +1,4 @@
-import { assertArtifactsVerified, type ArtifactStore } from '../artifacts/store.js';
+import { assertArtifactsVerified, type ArtifactRef, type ArtifactStore } from '../artifacts/store.js';
 import { assertCandidateAccepted, type CandidateGateOptions } from '../guardrails/candidate-gate.js';
 import {
   createEvaluationReport,
@@ -16,6 +16,7 @@ import {
   type EvaluatorConfig
 } from '../evolution/evaluator.js';
 import { evaluateReplayIsolated } from '../evolution/isolated-evaluator.js';
+import { persistEvaluationSnapshot } from '../evolution/snapshot.js';
 import { createEvaluationSnapshot, type EvaluationSnapshot } from '../evolution/snapshot.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig, type EvaluationSplitName } from '../evolution/split.js';
 import { canonicalJson } from '../hash.js';
@@ -262,6 +263,11 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
   const outcome = await runEpisode(options);
   const nodes = options.snapshotSource === 'store' ? options.store.readAll() : outcome.nodes;
   const snapshot = createEvaluationSnapshot(nodes, options.splitConfig ?? DEFAULT_SPLIT_CONFIG);
+  // Stored wherever the caller already gave us an artifact store, so the report
+  // that names this snapshot can be checked against it later. A run without one
+  // persists nothing and reports no location.
+  const snapshotRef =
+    options.artifacts === undefined ? undefined : persistEvaluationSnapshot(options.artifacts.store, snapshot);
   const { report } = replayNodes(nodes, settings);
   const evaluationInput = toEvaluationInput(nodes, report);
   const evaluate = options.evaluate
@@ -284,7 +290,16 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
 
   const evaluationReport = options.reporting === undefined
     ? undefined
-    : buildReport(options.reporting, outcome, snapshot, evaluation, report, gates, settings.missRateMax);
+    : buildReport(
+        options.reporting,
+        outcome,
+        snapshot,
+        evaluation,
+        report,
+        gates,
+        settings.missRateMax,
+        snapshotRef
+      );
 
   recordRunMetrics(options, outcome, evaluation, report, evaluationReport);
 
@@ -350,7 +365,8 @@ function buildReport(
   evaluation: EvaluationResult,
   replay: ReplayReport,
   gates: EpisodeGates,
-  missRateMax: number
+  missRateMax: number,
+  snapshotRef: ArtifactRef | undefined
 ): EvaluationReport {
   const episode = outcome.episode;
   const caseResults: CaseResult[] = [
@@ -406,7 +422,10 @@ function buildReport(
     passed: gates.missRateWithinBudget && episode.status === 'completed',
     guardResults
   });
-  reporting.registry.registerEvaluation(report);
-  return report;
+  // Attached after construction: the id is computed from the body field by
+  // field, and a reference is not identity.
+  const located = snapshotRef === undefined ? report : { ...report, snapshotRef };
+  reporting.registry.registerEvaluation(located);
+  return located;
 }
 

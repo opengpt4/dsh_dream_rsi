@@ -172,12 +172,16 @@ test('the decision brief accounts for every open item exactly once', () => {
   );
 
   const bangClaim = /(\d+) items in `TODO.md` are marked/.exec(brief);
-  const splitClaim = /Of the (\d+) open items, (\d+) wait on one of these \w+; the remaining (\d+)/.exec(brief);
+  const splitClaim = /Of the (\d+) open items, (\d+) wait on one of these \w+; the remaining (\d+)|All (\d+) open items wait on one of these \w+/.exec(brief);
   assert.ok(bangClaim !== null && splitClaim !== null, 'the brief must state how many items it accounts for');
   assert.equal(Number(bangClaim[1]), gated.length, 'the brief miscounts the [!] items');
-  assert.equal(Number(splitClaim[1]), open.length, 'the brief miscounts the open items');
-  assert.equal(Number(splitClaim[2]), gatingClaims.size, 'the brief miscounts the items waiting on a decision');
-  assert.equal(Number(splitClaim[3]), inTreeClaims.size, 'the brief miscounts the items that wait on no decision');
+  // Either shape: a stated split, or "all N wait" when nothing is in-tree.
+  const statedOpen = splitClaim[1] ?? splitClaim[4];
+  const statedGating = splitClaim[2] ?? splitClaim[4];
+  const statedInTree = splitClaim[3] ?? 0;
+  assert.equal(Number(statedOpen), open.length, 'the brief miscounts the open items');
+  assert.equal(Number(statedGating), gatingClaims.size, 'the brief miscounts the items waiting on a decision');
+  assert.equal(Number(statedInTree), inTreeClaims.size, 'the brief miscounts the items that wait on no decision');
 });
 
 test('the design spec quotes the interval widening the t table produces', () => {

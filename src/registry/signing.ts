@@ -1,6 +1,7 @@
 import { createPrivateKey, createPublicKey, sign, verify, type KeyObject } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
+import { verifyEvaluationSnapshot, type EvaluationSnapshot } from '../evolution/snapshot.js';
 import type { SignatureVerifier, SignatureVerdict } from './deployment-writer.js';
 import {
   SIGNATURE_ALGORITHM,
@@ -109,6 +110,20 @@ export function signEvaluationReport(report: EvaluationReport, input: SignArtifa
   return { ...report, signature: createSignature(report.evaluationId, input) };
 }
 
+/**
+ * Attach a detached signature over the snapshot's id.
+ *
+ * The result is frozen again: the snapshot constructor's deep freeze is part of
+ * what makes a snapshot immutable, and a spread would hand back a mutable shell
+ * carrying the same id.
+ */
+export function signEvaluationSnapshot(snapshot: EvaluationSnapshot, input: SignArtifactInput): EvaluationSnapshot {
+  if (!verifyEvaluationSnapshot(snapshot)) {
+    throw new Error(`refusing to sign snapshot ${snapshot.snapshotId}: its body does not match its id`);
+  }
+  return Object.freeze({ ...snapshot, signature: createSignature(snapshot.snapshotId, input) });
+}
+
 function createSignature(recordId: string, input: SignArtifactInput): ArtifactSignature {
   const key = createPrivateKey(input.privateKeyPem);
   if (key.asymmetricKeyType !== SIGNATURE_ALGORITHM) {
@@ -145,6 +160,18 @@ export class Ed25519SignatureVerifier implements SignatureVerifier {
   verifyReport(report: EvaluationReport): SignatureVerdict {
     if (!verifyEvaluationReport(report)) return refuse('its body does not match its id');
     return this.check(report.evaluationId, report.signature, 'report');
+  }
+
+  /**
+   * Verify a persisted snapshot.
+   *
+   * Not part of `SignatureVerifier`: that interface is the deployment seam, and
+   * a reader loading a snapshot is not deploying anything. The class is the
+   * scheme, so a method here costs no implementer anything.
+   */
+  verifySnapshot(snapshot: EvaluationSnapshot): SignatureVerdict {
+    if (!verifyEvaluationSnapshot(snapshot)) return refuse('its body does not match its id');
+    return this.check(snapshot.snapshotId, snapshot.signature, 'snapshot');
   }
 
   private check(recordId: string, signature: ArtifactSignature | undefined, noun: string): SignatureVerdict {
