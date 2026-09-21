@@ -46,6 +46,21 @@ export interface ChildConfinement {
   readonly allowChildProcess?: boolean;
 }
 
+/**
+ * A command the host supplies to confine the child.
+ *
+ * The plugin bundles no runtime: a container, an OS sandbox, or a wrapper script
+ * is the host's to name, and its own flags are where CPU, memory, process and
+ * network limits are expressed. The command line is built as
+ * `[...args, node, ...nodeArgs, entryPath]`, with no shell in between, so a
+ * template cannot turn into a command injection.
+ */
+export interface SandboxCommand {
+  readonly command: string;
+  /** Everything before the child's own command line. */
+  readonly args: readonly string[];
+}
+
 export interface RunIsolatedChildOptions {
   readonly entryPath: string;
   /** Names the child in timeout and overflow messages. */
@@ -58,6 +73,8 @@ export interface RunIsolatedChildOptions {
   readonly maxOldSpaceSizeMb?: number;
   readonly signal?: AbortSignal;
   readonly env?: NodeJS.ProcessEnv;
+  /** Confinement the host provides. Absent runs the child directly, as before. */
+  readonly sandbox?: SandboxCommand;
   readonly execPath?: string;
   /** `false` disables confinement entirely. A host that cannot use the flag must say so. */
   readonly confinement?: ChildConfinement | false;
@@ -142,9 +159,17 @@ export function runIsolatedChild(options: RunIsolatedChildOptions): Promise<Isol
   // path the child computes when it resolves itself, and the child dies before
   // it can run anything.
   const entryPath = resolveEntryPath(options.entryPath);
+  const nodePath = options.execPath ?? process.execPath;
+  const nodeArgs = [...resourceArgs(options), ...permissionArgs(options, entryPath), entryPath];
+  // The sandbox, when there is one, wraps the node command rather than replacing
+  // it: the child still runs under the resource and permission arguments.
+  const sandbox = options.sandbox;
+  if (sandbox !== undefined && sandbox.command.trim().length === 0) {
+    return Promise.reject(new Error(`${label} sandbox command must not be empty`));
+  }
   const child = spawn(
-    options.execPath ?? process.execPath,
-    [...resourceArgs(options), ...permissionArgs(options, entryPath), entryPath],
+    sandbox?.command ?? nodePath,
+    sandbox === undefined ? nodeArgs : [...sandbox.args, nodePath, ...nodeArgs],
     {
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: true,

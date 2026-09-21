@@ -86,6 +86,8 @@ Implemented and tested capabilities include:
   checked, and every refusal names its reason
 - process-isolated evaluator with timeout, and Node's permission model applied to every isolated child by
   default: reads scoped to the child's own directory, writes and child processes denied
+- the evaluator child can be wrapped in a runtime the host names (`evaluation.sandboxCommand`/`sandboxArgs`),
+  which is where CPU-time and network limits live because nothing in-process can express them
 - lease-based single-writer lock with heartbeat and stale-lock recovery, where takeover is an atomic rename
   and a lock with no lease yet counts as live rather than stale
 - validated configuration with evolution and auto-deployment disabled by default, including the holdout
@@ -110,7 +112,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 496 passing tests. OS/container sandboxing and a real
+The current suite contains 502 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work; the seven decisions those and the other
 outstanding items depend on are set out with their options in `DECISIONS.md`.
 

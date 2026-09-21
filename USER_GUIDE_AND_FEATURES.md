@@ -45,7 +45,7 @@ The central usage principle is simple: use real execution to collect evidence, u
 | Artifact signing | Available for policy artifacts, evaluation reports, and snapshots | `signPolicyArtifact()` / `signEvaluationReport()` / `signEvaluationSnapshot()` and `Ed25519SignatureVerifier` over a ring from `loadKeyRing()`; `persistEvaluationSnapshot()` and `loadEvaluationSnapshot()` |
 | Profile/patch integration | Available | Bundle patch shipped (`cordis.patch.yml`, `dsh.bundle.patch`) |
 | Candidate policy generation | Available, evaluate-only | Generate through the guard pipeline; no path to the pointer |
-| AST/resource/network guard | Static guards available; OS-level CPU and network limits pending | Required before untrusted candidates |
+| AST/resource/network guard | Static guards available; CPU and network limits come from a host-named runtime | `evaluation.sandboxCommand` / `sandboxArgs`; see `dream_status` |
 | Canary deployment and rollback | Available; activation requires a signature verifier | `DeploymentWriter` state machine |
 | Tool synthesis | Available, process isolation only | Synthesize, gate, and register via the Dynamic Tool Registry |
 | Real simulator adapter | Planned | Mock backend only at present |
@@ -60,7 +60,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 496 passing tests. The suite validates implementation invariants; it does not prove cross-task benchmark improvement or physical robot safety.
+The current suite contains 502 passing tests. The suite validates implementation invariants; it does not prove cross-task benchmark improvement or physical robot safety.
 
 ## 4. Loading the Plugin
 

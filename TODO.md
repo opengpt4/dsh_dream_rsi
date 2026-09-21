@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：496 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：502 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -90,7 +90,7 @@
 - [x] Add cancellation and process-group termination. The child leads its own process group (`detached: true`), so a deadline or abort kills everything it spawned; killing only the direct child leaves grandchildren running with host privileges.
 - [x] Add output schema validation and bounded stdout/stderr. Captured output is capped at `maxOutputBytes`, and the result is rebuilt field by field from untrusted JSON rather than cast, so a crafted response cannot smuggle extra properties.
 - [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits. Wall-time, output bound, and process-count termination are in place, the child's V8 heap is capped by `--max-old-space-size` (default 512 MiB, applied whether or not confinement is on), and Node's permission model denies filesystem writes and child processes (see `src/operations/isolated-child.ts`). CPU time and network remain unbounded: a probe confirms the permission model does not restrict `net.connect`, and Node exposes no CPU-time ceiling, so both still need OS-level confinement.
-- [ ] Select and implement container or OS-level sandbox before running untrusted candidate code. `[!]`
+- [ ] Exercise a named runtime end to end before running untrusted candidate code. The seam is in place and tested: `evaluation.sandboxCommand`/`sandboxArgs` form a prefix, the child is launched as `[...args, node, ...nodeArgs, entryPath]` with no shell, a real-runtime stand-in in `test/sandbox.test.mjs` proves the configured runtime is the one that runs the child, an empty command is refused, and `dream_status` reports the prefix. `[!]` The host still has to name and install the runtime, and no in-tree evidence shows a specific runtime confining a candidate.
 - [x] Keep host secrets and evaluator internals out of a candidate's reach: the child is spawned with `PATH` only, so inheriting `process.env` cannot hand it the host's API keys.
 - [x] Ensure holdout data is inaccessible to candidates: `GenerateCandidateInput` carries train and validation metrics only, and the prompt projection is asserted free of holdout markers. The holdout mechanism itself arrives with the benchmark (item 13).
 

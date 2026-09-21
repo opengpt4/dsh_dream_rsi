@@ -292,7 +292,11 @@ test('the status reports the limits the evaluator enforces', async () => {
   assert.deepEqual(status.resources, {
     heapCapMb: DEFAULT_MAX_OLD_SPACE_SIZE_MB,
     wallClockMs: 12_345,
-    maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES
+    maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
+    // No runtime named, so nothing confines the child; the sandbox is reported
+    // rather than omitted because an operator asking what bounds a candidate
+    // needs to see that nothing does.
+    sandbox: null
   });
 
   const tool = createStatusTool(config);
@@ -300,7 +304,9 @@ test('the status reports the limits the evaluator enforces', async () => {
   assert.deepEqual(result.resources, {
     heap_cap_mb: DEFAULT_MAX_OLD_SPACE_SIZE_MB,
     wall_clock_ms: 12_345,
-    max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES
+    max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
+    sandbox_command: null,
+    sandbox_args: []
   });
   // No runtime means no registry to read, so the tool omits it rather than
   // reporting an empty one.

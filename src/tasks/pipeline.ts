@@ -16,6 +16,7 @@ import {
   type EvaluatorConfig
 } from '../evolution/evaluator.js';
 import { evaluateReplayIsolated } from '../evolution/isolated-evaluator.js';
+import type { SandboxCommand } from '../operations/isolated-child.js';
 import { persistEvaluationSnapshot } from '../evolution/snapshot.js';
 import { createEvaluationSnapshot, type EvaluationSnapshot } from '../evolution/snapshot.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig, type EvaluationSplitName } from '../evolution/split.js';
@@ -32,6 +33,8 @@ export interface EpisodePipelineSettings {
   readonly missRateMax: number;
   /** Deadline handed to the isolated evaluator. */
   readonly evaluatorTimeoutMs: number;
+  /** The host-named confinement for the evaluator child, when there is one. */
+  readonly evaluatorSandbox?: SandboxCommand;
   /** Holdout nodes required before a score may be treated as generalizing. */
   readonly minimumHoldoutSamples: number;
 }
@@ -50,13 +53,20 @@ export const DEFAULT_EPISODE_PIPELINE_SETTINGS: EpisodePipelineSettings = {
  */
 export function pipelineSettings(source: {
   readonly replaySettings: { readonly maxNodes: number; readonly missRateMax: number };
-  readonly evaluationSettings: { readonly timeoutMs: number; readonly minimumHoldoutSamples: number };
+  readonly evaluationSettings: {
+    readonly timeoutMs: number;
+    readonly minimumHoldoutSamples: number;
+    readonly sandbox?: SandboxCommand;
+  };
 }): EpisodePipelineSettings {
   return {
     replayMaxNodes: source.replaySettings.maxNodes,
     missRateMax: source.replaySettings.missRateMax,
     evaluatorTimeoutMs: source.evaluationSettings.timeoutMs,
-    minimumHoldoutSamples: source.evaluationSettings.minimumHoldoutSamples
+    minimumHoldoutSamples: source.evaluationSettings.minimumHoldoutSamples,
+    ...(source.evaluationSettings.sandbox !== undefined
+      ? { evaluatorSandbox: source.evaluationSettings.sandbox }
+      : {})
   };
 }
 
@@ -178,9 +188,11 @@ export function replayNodes(
  */
 export function createIsolatedEvaluation(
   timeoutMs: number,
-  config?: EvaluatorConfig
+  config?: EvaluatorConfig,
+  sandbox?: SandboxCommand
 ): (input: EvaluationInput) => Promise<EvaluationResult> {
-  return (input) => evaluateReplayIsolated(input, config, { timeoutMs });
+  return (input) =>
+    evaluateReplayIsolated(input, config, { timeoutMs, ...(sandbox !== undefined ? { sandbox } : {}) });
 }
 
 function toEvaluationInput(nodes: readonly DiscoveryNode[], report: ReplayReport): EvaluationInput {
@@ -272,7 +284,7 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
   const evaluationInput = toEvaluationInput(nodes, report);
   const evaluate = options.evaluate
     ?? (options.isolated === true
-      ? createIsolatedEvaluation(settings.evaluatorTimeoutMs, options.evaluatorConfig)
+      ? createIsolatedEvaluation(settings.evaluatorTimeoutMs, options.evaluatorConfig, settings.evaluatorSandbox)
       : (input: EvaluationInput) => Promise.resolve(evaluateReplay(input, options.evaluatorConfig)));
   const evaluation = await evaluate(evaluationInput);
 

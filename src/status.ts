@@ -45,6 +45,13 @@ export interface ResourceLimits {
   readonly heapCapMb: number;
   readonly wallClockMs: number;
   readonly maxOutputBytes: number;
+  /**
+   * The confinement the host named, or `null` when the child runs directly.
+   *
+   * Reported because CPU-time and network limits are the runtime's flags, not
+   * the plugin's: an operator asking what bounds a candidate has to see this.
+   */
+  readonly sandbox: { readonly command: string; readonly args: readonly string[] } | null;
 }
 
 export interface DreamRsiStatus {
@@ -116,7 +123,11 @@ export function getDreamRsiStatus(config: DreamRsiConfig, runtime?: DreamRsiRunt
     resources: {
       heapCapMb: DEFAULT_MAX_OLD_SPACE_SIZE_MB,
       wallClockMs: config.evaluation.timeoutMs,
-      maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES
+      maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
+      sandbox:
+        config.evaluation.sandboxCommand.trim().length === 0
+          ? null
+          : { command: config.evaluation.sandboxCommand, args: [...config.evaluation.sandboxArgs] }
     },
     // Storage is never probed here: opening it would create a database file,
     // and this tool is documented as side-effect free. The registry is read
@@ -265,7 +276,9 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
             properties: {
               heap_cap_mb: { type: 'integer', required: true },
               wall_clock_ms: { type: 'integer', required: true },
-              max_output_bytes: { type: 'integer', required: true }
+              max_output_bytes: { type: 'integer', required: true },
+              sandbox_command: { type: 'json', required: true },
+              sandbox_args: { type: 'array', items: { type: 'string' }, required: true }
             }
           },
           // Present only when the tool was given a runtime to inspect. Flat, with
@@ -334,7 +347,9 @@ export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRunti
         resources: {
           heap_cap_mb: status.resources.heapCapMb,
           wall_clock_ms: status.resources.wallClockMs,
-          max_output_bytes: status.resources.maxOutputBytes
+          max_output_bytes: status.resources.maxOutputBytes,
+          sandbox_command: status.resources.sandbox?.command ?? null,
+          sandbox_args: status.resources.sandbox === null ? [] : [...status.resources.sandbox.args]
         },
         replay: { max_nodes: status.replay.maxNodes, miss_rate_max: status.replay.missRateMax },
         evaluation: {

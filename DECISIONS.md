@@ -41,9 +41,16 @@ candidate `signature` guard need no answer from anyone; they are in §8.
 
 ---
 
-## 2. Container or OS-level sandbox
+## 2. Container or OS-level sandbox — answered
 
-**Claims** `TODO: Select and implement container or OS-level sandbox`, release
+**Answered: the host provides the runtime.** The seam is implemented and tested —
+`evaluation.sandboxCommand` and `evaluation.sandboxArgs` are a prefix, the child
+runs as `[...args, node, ...nodeArgs, entryPath]` with no shell, an empty command
+is refused, and `dream_status` reports the prefix. What the answer does not do is
+install or exercise a runtime: that is the host's, and it is why the items below
+stay open.
+
+**Claims** `TODO: Exercise a named runtime end to end before running untrusted candidate code`, release
 blocker `TODO: Strong OS/container isolation for untrusted candidate code`, and
 the remaining CPU and network limits of
 `TODO: Add CPU, memory, process-count, wall-time, filesystem, and network limits`
@@ -191,7 +198,7 @@ profile now or waits for the real adapter.
 | Simulator (§3) | the simulator, adapter, seed, holdout-evidence, and benchmark items — the largest single block, and the only route to real holdout evidence |
 | Schema freeze (§4) | the freeze item, and the comparability of every score after it |
 | Signing (§1) — answered | kept as the record; the remaining report and snapshot signing is in §8 |
-| Sandbox (§2) | the sandbox item, the remaining CPU and network limits, and the OS/container release blocker |
+| Sandbox (§2) — answered | the seam and its tests; exercising a named runtime is the host's, so the item, the CPU/network limits, and the release blocker stay open |
 | Task families (§5) | the two-family and cross-task-transfer items |
 | Safety owner (§7) | the human-review item |
 

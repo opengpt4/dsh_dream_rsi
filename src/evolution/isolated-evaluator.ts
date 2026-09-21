@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_MAX_OLD_SPACE_SIZE_MB, runIsolatedChild, type ChildConfinement } from '../operations/isolated-child.js';
+import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_MAX_OLD_SPACE_SIZE_MB, runIsolatedChild, type ChildConfinement, type SandboxCommand } from '../operations/isolated-child.js';
 import type { EvaluationInput, EvaluationResult, EvaluatorConfig } from './evaluator.js';
 
 export { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_MAX_OLD_SPACE_SIZE_MB };
@@ -29,6 +29,8 @@ export interface IsolatedEvaluatorOptions {
   readonly workerPath?: string;
   /** Runtime confinement. Defaults to on; `false` disables it. */
   readonly confinement?: ChildConfinement | false;
+  /** A runtime the host provides to confine the child, such as a container or OS sandbox. */
+  readonly sandbox?: SandboxCommand;
 }
 
 /**
@@ -53,7 +55,8 @@ export async function evaluateReplayIsolated(
     ...(options.maxOldSpaceSizeMb !== undefined ? { maxOldSpaceSizeMb: options.maxOldSpaceSizeMb } : {}),
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
     ...(options.env !== undefined ? { env: options.env } : {}),
-    ...(options.confinement !== undefined ? { confinement: options.confinement } : {})
+    ...(options.confinement !== undefined ? { confinement: options.confinement } : {}),
+    ...(options.sandbox !== undefined ? { sandbox: options.sandbox } : {})
   });
 
   if (result.exitCode !== 0) {

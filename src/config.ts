@@ -27,6 +27,10 @@ export interface DreamRsiConfig {
     readonly holdoutRatio: number;
     readonly minimumHoldoutSamples: number;
     readonly timeoutMs: number;
+    /** Empty means the child is launched directly; see {@link sandboxArgs}. */
+    readonly sandboxCommand: string;
+    /** The runtime's own limits live here, because only the runtime enforces them. */
+    readonly sandboxArgs: string[];
   };
   readonly operations: {
     readonly evolutionLock: string;
@@ -89,7 +93,11 @@ export const DreamRsiConfigSchema = Schema.object({
     validationRatio: Schema.number().default(0.15),
     holdoutRatio: Schema.number().default(0.15),
     minimumHoldoutSamples: Schema.number().default(20),
-    timeoutMs: Schema.number().default(5_000)
+    timeoutMs: Schema.number().default(5_000),
+    sandboxCommand: Schema.string().default('')
+      .description('Host-provided confinement for the evaluator child. Empty runs it directly.'),
+    sandboxArgs: Schema.array(Schema.string()).default([])
+      .description('Arguments before the child command line: the runtime flags that set cpu, memory, process and network limits.')
   }),
   operations: Schema.object({
     evolutionLock: Schema.string().default('data/locks/evolution.lock'),
@@ -185,6 +193,12 @@ export function validateDreamRsiConfig(config: DreamRsiConfig): void {
   }
   if (config.evolution.autoDeploy && !config.evolution.enabled) {
     throw new Error('evolution.autoDeploy requires evolution.enabled');
+  }
+  if (config.evaluation.sandboxCommand.trim().length === 0 && config.evaluation.sandboxArgs.length > 0) {
+    throw new Error('evaluation.sandboxArgs require evaluation.sandboxCommand; arguments with no runtime confine nothing');
+  }
+  for (const argument of config.evaluation.sandboxArgs) {
+    if (argument.trim().length === 0) throw new Error('evaluation.sandboxArgs must not contain an empty argument');
   }
 }
 

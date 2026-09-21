@@ -7,6 +7,7 @@ import { MockEnvironmentAdapter } from './embodied/mock-adapter.js';
 import { DEFAULT_HOLDOUT_GATE_CONFIG, type HoldoutGateConfig } from './evolution/holdout-gate.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/split.js';
 import { SingleWriterLock } from './operations/single-writer-lock.js';
+import type { SandboxCommand } from './operations/isolated-child.js';
 import { InMemoryAuditLog, type AuditSink } from './registry/audit.js';
 import { PolicyRegistry, ReadOnlyFilePolicyRegistryStore } from './registry/policy-registry.js';
 import { ActionGuard, type ConfirmationRequest } from './safety/action-guard.js';
@@ -32,6 +33,13 @@ export interface EvaluationSettings {
    * `evolution.minimumImprovement` was configurable in name only.
    */
   readonly holdoutGate: HoldoutGateConfig;
+  /**
+   * The confinement the host named, or absent when the child runs directly.
+   *
+   * Carried rather than applied here: the queue of the child's launch belongs to
+   * `runIsolatedChild`, and only the host knows which runtime is installed.
+   */
+  readonly sandbox?: SandboxCommand;
 }
 
 /**
@@ -152,6 +160,9 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
       timeoutMs: config.evaluation.timeoutMs,
       minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples,
       splitConfig,
+      ...(config.evaluation.sandboxCommand.trim().length === 0
+        ? {}
+        : { sandbox: { command: config.evaluation.sandboxCommand, args: [...config.evaluation.sandboxArgs] } }),
       holdoutGate: {
         ...DEFAULT_HOLDOUT_GATE_CONFIG,
         minimumPassRatio: config.evolution.minimumPassRatio,
