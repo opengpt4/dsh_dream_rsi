@@ -578,6 +578,50 @@ test('a tampered evaluation record is refused rather than trusted', () => {
   }
 });
 
+test('an identity is compared whole, not by prefix', () => {
+  // Flipping the last character is enough to show the comparison covers the whole
+  // value: a prefix comparison accepts it, while finding a real prefix collision
+  // would take 2^32 work. All three verifications passed on an eight-character
+  // prefix before this.
+  const flipLast = (hex) => hex.slice(0, -1) + (hex.endsWith('0') ? '1' : '0');
+
+  const artifact = policy();
+  assert.equal(verifyPolicyArtifact(artifact), true);
+  assert.equal(verifyPolicyArtifact({ ...artifact, artifactId: flipLast(artifact.artifactId) }), false);
+
+  const evaluation = report(artifact.artifactId);
+  assert.equal(verifyEvaluationReport(evaluation), true);
+  assert.equal(verifyEvaluationReport({ ...evaluation, evaluationId: flipLast(evaluation.evaluationId) }), false);
+
+  const { dir, recordPath } = promotedDeploymentOnDisk();
+  try {
+    const body = JSON.parse(readFileSync(recordPath, 'utf8'));
+    assert.equal(verifyDeployment(body), true);
+    assert.equal(verifyDeployment({ ...body, recordHash: flipLast(body.recordHash) }), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a stable version is listed once however many deployments carry it', () => {
+  // `stableVersions` answers "which artifacts are stable", so two records of the
+  // same artifact are one version. Deduplicating by deployment instead listed it
+  // twice, and the existing tests each promote a distinct artifact, so the
+  // distinction never came up. Two approvals for one artifact is enough to
+  // produce the second deployment.
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const artifact = policy();
+  registry.registerPolicy(artifact);
+  registry.registerEvaluation(report(artifact.artifactId));
+  const evaluationId = registry.evaluationsFor(artifact.artifactId)[0].evaluationId;
+
+  registry.promotePolicy(artifact.artifactId, promotion(evaluationId));
+  registry.promotePolicy(artifact.artifactId, promotion(evaluationId, { approval: { ...APPROVAL, approvalId: 'approval-2' } }));
+
+  assert.equal(registry.listDeployments().length, 2);
+  assert.deepEqual(registry.stableVersions(), [artifact.artifactId]);
+});
+
 test('a pointer at an unregistered current policy is refused', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
   try {

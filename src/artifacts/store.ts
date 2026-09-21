@@ -185,6 +185,13 @@ export class FileArtifactStore implements ArtifactStore {
     const bytes = readFileSync(blobPath);
     const digest = createHash('sha256').update(bytes).digest('hex');
     if (digest !== artifactId) return failed(artifactId, 'checksum_mismatch', `blob hashes to ${digest}`);
+    // The record's own claim about its identity, which nothing else compared: the
+    // checks around this one use the id they were asked about, so metadata edited
+    // to name a different artifact was accepted, and a reference built from it
+    // pointed at something other than the bytes it describes.
+    if (digest !== metadata.artifactId) {
+      return failed(artifactId, 'checksum_mismatch', `blob hashes to ${digest}, metadata says ${metadata.artifactId}`);
+    }
     if (bytes.length !== metadata.byteLength) {
       return failed(artifactId, 'checksum_mismatch', `blob is ${bytes.length} bytes, metadata says ${metadata.byteLength}`);
     }

@@ -68,6 +68,35 @@ test('a capability-granting built-in cannot be allowlisted, even by name', () =>
   assert.equal(result.violations[0].rule, 'capability-process');
 });
 
+test('a subpath inherits the name of the module it extends', () => {
+  // Both classifications resolve a subpath to its parent: `fs/promises` is the
+  // filesystem, and `assert/strict` is admitted by admitting `assert`. The
+  // `node:`-prefixed forms are classified by their prefix, which is why the
+  // plugin's own sources hid this — dropping either clause from `isBuiltinName`
+  // changed only the plain forms, and no test used one.
+  const capabilities = checkImports("import { readFile } from 'fs/promises';");
+  assert.equal(capabilities.passed, false);
+  assert.deepEqual(capabilities.capabilities, ['filesystem']);
+
+  const allowed = checkImports("import assert from 'assert/strict';", { allowedBuiltins: ['assert'] });
+  assert.equal(allowed.passed, true);
+  assert.deepEqual(allowed.specifiers, ['assert/strict']);
+
+  // And naming the subpath itself does not smuggle in a capability.
+  const evaded = checkImports("import { readFile } from 'fs/promises';", { allowedBuiltins: ['fs', 'fs/promises'] });
+  assert.equal(evaded.passed, false);
+  assert.deepEqual(evaded.capabilities, ['filesystem']);
+
+  // The case that makes the parent lookup load-bearing: `dns/promises` is a real
+  // built-in that is *not* enumerated in the capability map, so without the
+  // parent lookup it is classified as the package `dns` — and a host that
+  // allowlisted `dns` would then admit a network capability. `fs/promises` is in
+  // the map, which is why it did not catch this.
+  const unenumerated = checkImports("import { lookup } from 'dns/promises';", { allowedPackages: ['dns'] });
+  assert.equal(unenumerated.passed, false);
+  assert.deepEqual(unenumerated.violations.map((violation) => violation.rule), ['capability-network']);
+});
+
 test('packages are judged against the package allowlist, not the builtin one', () => {
   const source = "import lodash from 'lodash';\nimport { z } from '@scope/tool';\nexport const both = [lodash, z];";
 

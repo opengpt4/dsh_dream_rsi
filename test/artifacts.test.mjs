@@ -108,6 +108,32 @@ test('verify catches a metadata byte length that disagrees with the blob', () =>
   });
 });
 
+test('verification compares the whole digest, not a prefix', () => {
+  // `verify` looks the record up by the id it is given, so a corrupted id cannot
+  // reach the comparison at all — the field itself has to disagree with the blob
+  // for the comparison to run. The last character is enough to tell a whole-value
+  // comparison from a prefix one, without needing a prefix collision.
+  withTempDir((dir) => {
+    const store = new FileArtifactStore(dir);
+    const { artifactId } = store.put({
+      bytes: Buffer.from('whole digest'),
+      kind: 'observation',
+      mediaType: 'text/plain',
+      schemaVersion: 1
+    });
+    assert.equal(store.verify(artifactId).ok, true);
+
+    const metadataPath = join(dir, 'metadata', `${artifactId}.json`);
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+    const flipped = metadata.artifactId.slice(0, -1) + (metadata.artifactId.endsWith('0') ? '1' : '0');
+    writeFileSync(metadataPath, JSON.stringify({ ...metadata, artifactId: flipped }));
+
+    const verdict = store.verify(artifactId);
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.reason, 'checksum_mismatch');
+  });
+});
+
 test('put rejects empty bytes and a non-positive schema version', () => {
   withTempDir((dir) => {
     const store = new FileArtifactStore(dir);
