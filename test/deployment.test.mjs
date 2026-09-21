@@ -14,7 +14,8 @@ import {
   canTransitionDeployment,
   createEvaluationReport,
   createPolicyArtifact,
-  transitionDeployment
+  transitionDeployment,
+  verifyDeployment
 } from '../dist/index.js';
 
 const AT = '2026-01-01T00:00:00.000Z';
@@ -164,6 +165,51 @@ test('a deployment moves PROPOSED -> APPROVED -> CANARY -> ACTIVE and moves the 
     ]);
   } finally {
     context.cleanup();
+  }
+});
+
+test('a second writer instance can activate what the first proposed', () => {
+  // Activation restamps `lockOwner`, which is part of the hashed body. A writer
+  // other than the one that proposed holds a different owner, so the record has
+  // to be resealed rather than edited, or it stops matching its own hash.
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-deploy-'));
+  try {
+    const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+    const artifact = policy('v1');
+    registry.registerPolicy(artifact);
+    const evaluation = report(artifact.artifactId);
+    registry.registerEvaluation(evaluation);
+    const proposerLock = new SingleWriterLock(join(dir, 'deployment.lock'), 30_000);
+    const activatorLock = new SingleWriterLock(join(dir, 'deployment.lock'), 30_000);
+    assert.notEqual(proposerLock.owner, activatorLock.owner);
+
+    const makeWriter = (lock) => new DeploymentWriter({
+      registry,
+      lock,
+      audit: new InMemoryAuditLog(),
+      principal: { principalId: 'operator-1', roles: ['admin'] },
+      signatureVerifier: { verify: () => true }
+    });
+    const proposer = makeWriter(proposerLock);
+    const proposed = proposer.propose({
+      policyArtifactId: artifact.artifactId,
+      evaluationId: evaluation.evaluationId,
+      holdoutGate: { passed: true, candidateEvaluationId: evaluation.evaluationId }
+    });
+    // The proposing writer stamps its own owner through approve and canary, so
+    // the activating writer is the only one that changes it — which is what
+    // makes the activation edit need a reseal rather than a spread.
+    proposer.decide(proposed.deploymentId, APPROVAL);
+    proposer.startCanary(proposed.deploymentId);
+    const active = makeWriter(activatorLock).completeCanary(proposed.deploymentId, HEALTHY, THRESHOLDS);
+
+    assert.equal(active.state, 'ACTIVE');
+    assert.equal(active.lockOwner, activatorLock.owner);
+    assert.equal(verifyDeployment(active), true);
+    assert.equal(verifyDeployment(registry.latestDeployment()), true);
+    assert.equal(registry.currentPolicyArtifactId(), artifact.artifactId);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

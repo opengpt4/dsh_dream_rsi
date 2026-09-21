@@ -5,6 +5,8 @@ import { hashJson } from '../hash.js';
 import { transitionDeployment } from './deployment-state.js';
 import {
   advanceDeployment,
+  sealDeployment,
+  verifyDeployment,
   verifyEvaluationReport,
   verifyPolicyArtifact,
   type Approval,
@@ -190,7 +192,7 @@ export class PolicyRegistry {
     // Finalizing a record the writer advanced validates the transition; the
     // one-shot path has no prior state and starts at ACTIVE.
     const deployment: Deployment = existing === undefined
-      ? {
+      ? sealDeployment({
           deploymentId,
           policyArtifactId: artifactId,
           state: 'ACTIVE',
@@ -204,7 +206,7 @@ export class PolicyRegistry {
           activatedAt: promotion.approval.decidedAt,
           createdAt: promotion.approval.decidedAt,
           updatedAt: promotion.approval.decidedAt
-        }
+        })
       : advanceDeployment(
           { ...existing, ...changes },
           transitionDeployment(existing.state, 'ACTIVE'),
@@ -220,9 +222,13 @@ export class PolicyRegistry {
 
   /**
    * Persist a deployment record. The deployment writer owns state transitions;
-   * this only stores what it produced.
+   * this only stores what it produced, and refuses a record that does not carry
+   * its own content hash so a hand-built one cannot enter the registry.
    */
   saveDeployment(deployment: Deployment): void {
+    if (!verifyDeployment(deployment)) {
+      throw new Error(`deployment ${deployment.deploymentId} does not match its content`);
+    }
     this.deployments.set(deployment.deploymentId, deployment);
     this.persist();
   }
@@ -328,6 +334,27 @@ export class FilePolicyRegistryStore implements PolicyRegistryStore {
     for (const report of evaluations) {
       if (!verifyEvaluationReport(report)) {
         throw new Error(`registry is corrupt: evaluation ${report.evaluationId} does not match its content`);
+      }
+    }
+    for (const deployment of deployments) {
+      if (!verifyDeployment(deployment)) {
+        throw new Error(`registry is corrupt: deployment ${deployment.deploymentId} does not match its content`);
+      }
+      // A deployment names the artifact it deploys and the evaluation it rests
+      // on. Either reference pointing at a record this registry does not hold
+      // means the record is not the one that was written.
+      if (!policies.some((policy) => policy.artifactId === deployment.policyArtifactId)) {
+        throw new Error(
+          `registry is corrupt: deployment ${deployment.deploymentId} names unregistered policy ${deployment.policyArtifactId}`
+        );
+      }
+      if (
+        deployment.evaluationId !== null &&
+        !evaluations.some((report) => report.evaluationId === deployment.evaluationId)
+      ) {
+        throw new Error(
+          `registry is corrupt: deployment ${deployment.deploymentId} names unknown evaluation ${deployment.evaluationId}`
+        );
       }
     }
     if (currentPolicyArtifactId !== null) {

@@ -9,6 +9,7 @@ import {
   InMemoryPolicyRegistryStore,
   MOCK_ENVIRONMENT_ID,
   PolicyRegistry,
+  advanceDeployment,
   createDreamRsiRuntime,
   createEvaluationReport,
   createPolicyArtifact,
@@ -16,9 +17,11 @@ import {
   pipelineSettings,
   planPolicy,
   resolveDreamRsiConfig,
+  sealDeployment,
   runEpisodePipeline,
   summarizeCanary,
   summarizeCaseResults,
+  verifyDeployment,
   verifyEvaluationReport,
   verifyPolicyArtifact
 } from '../dist/index.js';
@@ -413,6 +416,98 @@ test('a tampered registry record is refused rather than trusted', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/** A registry holding one promoted policy, and the path to its deployment file. */
+function promotedDeploymentOnDisk() {
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
+  const registry = new PolicyRegistry(new FilePolicyRegistryStore(dir));
+  const artifact = policy();
+  registry.registerPolicy(artifact);
+  registry.registerEvaluation(report(artifact.artifactId));
+  const deployment = registry.promotePolicy(
+    artifact.artifactId,
+    promotion(registry.evaluationsFor(artifact.artifactId)[0].evaluationId)
+  );
+  return { dir, deployment, recordPath: join(dir, 'deployments', `${deployment.deploymentId}.json`) };
+}
+
+test('a deployment record that does not match its content is refused', () => {
+  const { dir, recordPath } = promotedDeploymentOnDisk();
+  try {
+    const written = JSON.parse(readFileSync(recordPath, 'utf8'));
+    // The state moves and the history does not follow: a tamper that rewrites
+    // what the audit trail says happened without touching any other file.
+    written.state = 'ROLLED_BACK';
+    writeFileSync(recordPath, JSON.stringify(written));
+
+    assert.throws(
+      () => new PolicyRegistry(new FilePolicyRegistryStore(dir)),
+      /deployment .* does not match its content/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a deployment resealed to name a record the registry does not hold is refused', () => {
+  const { dir, recordPath } = promotedDeploymentOnDisk();
+  try {
+    const { recordHash, ...body } = JSON.parse(readFileSync(recordPath, 'utf8'));
+    // Sealed, so the hash check passes: only the cross-reference can catch this.
+    writeFileSync(recordPath, JSON.stringify(sealDeployment({ ...body, evaluationId: 'f'.repeat(64) })));
+
+    assert.throws(
+      () => new PolicyRegistry(new FilePolicyRegistryStore(dir)),
+      /names unknown evaluation/
+    );
+
+    writeFileSync(recordPath, JSON.stringify(sealDeployment({ ...body, policyArtifactId: 'e'.repeat(64) })));
+    assert.throws(
+      () => new PolicyRegistry(new FilePolicyRegistryStore(dir)),
+      /names unregistered policy/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a deployment carries a content hash that is restamped on every transition', () => {
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const artifact = policy();
+  registry.registerPolicy(artifact);
+  registry.registerEvaluation(report(artifact.artifactId));
+  const active = registry.promotePolicy(
+    artifact.artifactId,
+    promotion(registry.evaluationsFor(artifact.artifactId)[0].evaluationId)
+  );
+
+  assert.equal(verifyDeployment(active), true);
+
+  const degraded = advanceDeployment(active, 'DEGRADED', { reason: 'latency' }, AT);
+  assert.equal(verifyDeployment(degraded), true);
+  assert.notEqual(degraded.recordHash, active.recordHash);
+  // The record is mutated in place by the hash, not by a field the caller set.
+  assert.equal(advanceDeployment(active, 'DEGRADED', { reason: 'latency' }, AT).recordHash, degraded.recordHash);
+  assert.equal(verifyDeployment({ ...degraded, reason: 'because' }), false);
+});
+
+test('an edited deployment is refused at the write boundary, not only on load', () => {
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const artifact = policy();
+  registry.registerPolicy(artifact);
+  registry.registerEvaluation(report(artifact.artifactId));
+  const active = registry.promotePolicy(
+    artifact.artifactId,
+    promotion(registry.evaluationsFor(artifact.artifactId)[0].evaluationId)
+  );
+
+  assert.throws(
+    () => registry.saveDeployment({ ...active, state: 'ROLLED_BACK' }),
+    /does not match its content/
+  );
+  assert.equal(registry.listDeployments().length, 1);
+  assert.equal(registry.latestDeployment().state, 'ACTIVE');
 });
 
 test('a pointer at an unregistered current policy is refused', () => {

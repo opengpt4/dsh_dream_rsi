@@ -14,6 +14,7 @@ import type { EvaluationSplitName } from '../evolution/split.js';
  */
 
 export const POLICY_ARTIFACT_SCHEMA_VERSION = 1;
+export const DEPLOYMENT_SCHEMA_VERSION = 1;
 
 export type CreatedBy = 'human' | 'evolution-agent';
 
@@ -152,6 +153,15 @@ export interface CanaryResult {
 
 export interface Deployment {
   readonly deploymentId: string;
+  /**
+   * SHA-256 over the body below.
+   *
+   * A deployment is mutable while it moves through the state machine, so its id
+   * cannot be its content hash the way a policy artifact's is: the record has to
+   * keep the file it lives in. This carries the same tamper evidence without
+   * moving it, and is restamped on every transition.
+   */
+  readonly recordHash: string;
   readonly policyArtifactId: string;
   readonly state: DeploymentState;
   /** Every state this deployment passed through, in order. */
@@ -192,14 +202,84 @@ export function advanceDeployment(
   changes: Partial<Pick<Deployment, 'evaluationId' | 'approval' | 'canary' | 'holdoutGate' | 'lockOwner' | 'reason'>>,
   updatedAt: string
 ): Deployment {
-  return {
+  return sealDeployment({
     ...deployment,
     ...changes,
     state: to,
     history: [...deployment.history, to],
     ...(to === 'ACTIVE' ? { activatedAt: updatedAt } : {}),
     updatedAt
+  });
+}
+
+/**
+ * Body the deployment's `recordHash` covers.
+ *
+ * Field by field rather than a spread, so the hash cannot accidentally cover
+ * `recordHash` itself and cannot depend on how the caller built the record.
+ * Nested records are expanded for the same reason `evaluationReportBody`
+ * expands case results: a field that is not named here is not covered.
+ */
+function deploymentBody(deployment: Omit<Deployment, 'recordHash'>): JsonValue {
+  return {
+    schemaVersion: DEPLOYMENT_SCHEMA_VERSION,
+    deploymentId: deployment.deploymentId,
+    policyArtifactId: deployment.policyArtifactId,
+    state: deployment.state,
+    history: [...deployment.history],
+    evaluationId: deployment.evaluationId,
+    approval: deployment.approval === null
+      ? null
+      : {
+          approvalId: deployment.approval.approvalId,
+          operator: deployment.approval.operator,
+          decision: deployment.approval.decision,
+          ...(deployment.approval.reason !== undefined ? { reason: deployment.approval.reason } : {}),
+          decidedAt: deployment.approval.decidedAt
+        },
+    canary: deployment.canary === null
+      ? null
+      : {
+          passed: deployment.canary.passed,
+          observation: {
+            quality: deployment.canary.observation.quality,
+            errorRate: deployment.canary.observation.errorRate,
+            latencyMs: deployment.canary.observation.latencyMs,
+            cost: deployment.canary.observation.cost,
+            missRate: deployment.canary.observation.missRate
+          },
+          thresholds: {
+            minQuality: deployment.canary.thresholds.minQuality,
+            maxErrorRate: deployment.canary.thresholds.maxErrorRate,
+            maxLatencyMs: deployment.canary.thresholds.maxLatencyMs,
+            maxCost: deployment.canary.thresholds.maxCost,
+            maxMissRate: deployment.canary.thresholds.maxMissRate
+          },
+          failures: [...deployment.canary.failures],
+          observedAt: deployment.canary.observedAt
+        },
+    holdoutGate: deployment.holdoutGate === null
+      ? null
+      : {
+          passed: deployment.holdoutGate.passed,
+          candidateEvaluationId: deployment.holdoutGate.candidateEvaluationId
+        },
+    rollbackTarget: deployment.rollbackTarget,
+    lockOwner: deployment.lockOwner,
+    ...(deployment.reason !== undefined ? { reason: deployment.reason } : {}),
+    ...(deployment.activatedAt !== undefined ? { activatedAt: deployment.activatedAt } : {}),
+    createdAt: deployment.createdAt,
+    updatedAt: deployment.updatedAt
   };
+}
+
+/** Stamp a deployment body with its record hash. The single way to build one. */
+export function sealDeployment(body: Omit<Deployment, 'recordHash'>): Deployment {
+  return { ...body, recordHash: hashJson(deploymentBody(body)) };
+}
+
+export function verifyDeployment(deployment: Deployment): boolean {
+  return deployment.recordHash === hashJson(deploymentBody(deployment));
 }
 
 export interface PolicyArtifactInput {

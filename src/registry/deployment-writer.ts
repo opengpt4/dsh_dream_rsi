@@ -4,6 +4,7 @@ import { isRollbackReachable, transitionDeployment } from './deployment-state.js
 import type { AuditEventType, AuditSink } from './audit.js';
 import {
   advanceDeployment,
+  sealDeployment,
   summarizeCanary,
   verifyPolicyArtifact,
   type Approval,
@@ -90,7 +91,7 @@ export class DeploymentWriter {
       if (!input.holdoutGate.passed) throw new Error('holdout gate did not pass');
 
       const at = this.timestamp();
-      const deployment: Deployment = {
+      const deployment = sealDeployment({
         deploymentId: this.nextDeploymentId(artifact.artifactId, report.evaluationId),
         policyArtifactId: artifact.artifactId,
         state: 'PROPOSED',
@@ -104,7 +105,7 @@ export class DeploymentWriter {
         lockOwner: this.options.lock.owner,
         createdAt: at,
         updatedAt: at
-      };
+      });
       this.options.registry.saveDeployment(deployment);
       return { deployment, policyArtifactId: artifact.artifactId, lockOwner: deployment.lockOwner ?? undefined };
     }).deployment;
@@ -177,7 +178,10 @@ export class DeploymentWriter {
         approval: current.approval,
         canary
       });
-      const withOwner = { ...activated, lockOwner: this.options.lock.owner };
+      // Resealed rather than spread: `lockOwner` is part of the hashed body, so
+      // editing the record here without restamping it would leave a deployment
+      // whose hash does not cover what it holds.
+      const withOwner = sealDeployment({ ...activated, lockOwner: this.options.lock.owner });
       this.options.registry.saveDeployment(withOwner);
       return { deployment: withOwner, policyArtifactId: withOwner.policyArtifactId, lockOwner: withOwner.lockOwner ?? undefined };
     }).deployment;
