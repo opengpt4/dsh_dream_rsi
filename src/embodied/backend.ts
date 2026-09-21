@@ -42,6 +42,13 @@ export interface ActionResult {
 export class MockEmbodiedBackend {
   private readonly sessions = new Map<string, SessionState>();
 
+  /** actionLatencyMs simulates asynchronous actuation time so cancellation/timeout paths are real. */
+  constructor(private readonly actionLatencyMs = 0) {
+    if (!Number.isFinite(actionLatencyMs) || actionLatencyMs < 0) {
+      throw new Error('actionLatencyMs must be a non-negative finite number');
+    }
+  }
+
   observe(sessionId: string): MockObservation {
     const state = this.getState(sessionId);
     this.sessions.set(sessionId, state);
@@ -59,7 +66,36 @@ export class MockEmbodiedBackend {
     };
   }
 
-  execute(sessionId: string, actionType: EmbodiedActionType, parameters: Record<string, unknown>): ActionResult {
+  execute(
+    sessionId: string,
+    actionType: EmbodiedActionType,
+    parameters: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<ActionResult> {
+    if (signal?.aborted) return Promise.reject(new Error('action cancelled'));
+
+    return new Promise((resolve, reject) => {
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        reject(new Error('action cancelled'));
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        try {
+          resolve(this.applyAction(sessionId, actionType, parameters));
+        } catch (error) {
+          reject(error);
+        }
+      }, this.actionLatencyMs);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  private applyAction(
+    sessionId: string,
+    actionType: EmbodiedActionType,
+    parameters: Record<string, unknown>
+  ): ActionResult {
     const state = this.getState(sessionId);
     if (actionType === 'move_relative') {
       state.pose.x += this.numberParameter(parameters, 'dx');

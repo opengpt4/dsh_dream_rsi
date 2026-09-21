@@ -66,7 +66,7 @@ export function createActTool(ctx: Context, backend: MockEmbodiedBackend) {
       ctx.emit('embodied/action-started', { actionId, sessionId: args.session_id, actionType });
       try {
         const result = await executeWithTimeout(
-          () => backend.execute(args.session_id, actionType, args.parameters ?? {}),
+          (signal) => backend.execute(args.session_id, actionType, args.parameters ?? {}, signal),
           args.timeout_ms ?? 30000,
           exec.signal
         );
@@ -93,27 +93,34 @@ export function createActTool(ctx: Context, backend: MockEmbodiedBackend) {
 }
 
 function executeWithTimeout(
-  operation: () => ActionResult,
+  operation: (signal: AbortSignal) => Promise<ActionResult>,
   timeoutMs: number,
   signal: AbortSignal
 ): Promise<ActionResult> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new Error('action cancelled'));
-      return;
-    }
-    const timer = setTimeout(() => reject(new Error('action timed out')), timeoutMs);
-    const abort = () => reject(new Error('action cancelled'));
-    signal.addEventListener('abort', abort, { once: true });
-    try {
-      const result = operation();
+  if (signal.aborted) return Promise.reject(new Error('action cancelled'));
+
+  const combinedController = new AbortController();
+  const onCallerAbort = (): void => combinedController.abort();
+  signal.addEventListener('abort', onCallerAbort, { once: true });
+
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    combinedController.abort();
+  }, timeoutMs);
+
+  return operation(combinedController.signal).then(
+    (result) => {
       clearTimeout(timer);
-      signal.removeEventListener('abort', abort);
-      resolve(result);
-    } catch (error) {
+      signal.removeEventListener('abort', onCallerAbort);
+      return result;
+    },
+    (error: unknown) => {
       clearTimeout(timer);
-      signal.removeEventListener('abort', abort);
-      reject(error);
+      signal.removeEventListener('abort', onCallerAbort);
+      if (timedOut) throw new Error('action timed out');
+      if (signal.aborted) throw new Error('action cancelled');
+      throw error;
     }
-  });
+  );
 }
