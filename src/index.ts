@@ -1,11 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis';
-
-import { resolveDreamRsiConfig, type DreamRsiConfigInput } from './config.js';
-import { createPerceiveTool } from './embodied/perceive.js';
-import { MockEmbodiedBackend } from './embodied/backend.js';
-import { createActTool } from './embodied/act.js';
-import { createQueryStateTool } from './embodied/query-state.js';
-import './embodied/events.js';
+import { apply } from './adapter/cordis.js';
 
 export { InMemoryDiscoveryStore } from './discovery/models.js';
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
@@ -17,6 +10,8 @@ export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js'
 export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG } from './evolution/monotonic-gate.js';
 export { createEvaluationSnapshot } from './evolution/snapshot.js';
 export { SingleWriterLock } from './operations/single-writer-lock.js';
+export { runAstGuard, type AstGuardResult, type AstGuardViolation } from './guardrails/ast-guard.js';
+export { getDreamRsiStatus, createStatusTool, type DreamRsiStatus } from './status.js';
 export {
   DEFAULT_DREAM_RSI_CONFIG,
   resolveDreamRsiConfig,
@@ -29,23 +24,9 @@ export const name = 'dream-rsi';
 export const inject: string[] = [];
 
 /**
- * Cordis entrypoint for the Dream-RSI plugin.
- *
- * Capability registration is intentionally deferred until the DSH tool and
- * event contracts are pinned in the next implementation phase.
+ * Cordis entrypoint for the Dream-RSI plugin. All Cordis-specific wiring
+ * lives in `adapter/cordis.ts` so the rest of the package stays testable
+ * without a Cordis context.
  */
-export function apply(ctx: Context, input?: DreamRsiConfigInput): void {
-  const config = resolveDreamRsiConfig(input);
-  if (!config.enabled) return;
-  ctx.effect(() => {
-    const backend = new MockEmbodiedBackend();
-    const disposers = [
-      ctx.tools.register(createPerceiveTool(backend)),
-      ctx.tools.register(createActTool(ctx, backend)),
-      ctx.tools.register(createQueryStateTool(backend))
-    ];
-    return () => {
-      for (const dispose of disposers.reverse()) dispose();
-    };
-  }, 'dream-rsi/tools');
-}
+export { apply };
+

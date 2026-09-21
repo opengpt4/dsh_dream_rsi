@@ -24,6 +24,7 @@ test('apply registers embodied tools and disposes every registration', () => {
 
   apply(context);
   assert.deepEqual(definitions.map((definition) => definition.name).sort(), [
+    'dream_status',
     'embodied_act',
     'embodied_perceive',
     'embodied_query_state'
