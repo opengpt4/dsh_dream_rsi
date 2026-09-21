@@ -25,7 +25,7 @@ os.environ.setdefault("MUJOCO_GL", "glfw")
 try:
     import numpy as np  # noqa: F401  (robosuite needs it; imported for the error path)
     import robosuite
-    from robosuite.controllers import load_controller_config
+    from robosuite import load_composite_controller_config
 except Exception as error:  # pragma: no cover - exercised by the missing-venv test
     sys.stderr.write(f"robosuite is not importable: {error}\n")
     raise SystemExit(3)
@@ -49,7 +49,9 @@ class Session:
                 + ", ".join(sorted(ENVIRONMENTS))
             )
         self.environment = environment
-        controller = load_controller_config(default_controller="OSC_POSE")
+        # 1.5.2 renamed the loader: `load_controller_config` is gone and the
+        # default is a composite configuration per robot.
+        controller = load_composite_controller_config(robot="Panda")
         self.env = robosuite.make(
             environment,
             robots="Panda",
