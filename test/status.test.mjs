@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import { getDreamRsiStatus, createStatusTool } from '../dist/status.js';
-import { DEFAULT_DREAM_RSI_CONFIG, createDreamRsiRuntime, resolveDreamRsiConfig } from '../dist/index.js';
+import {
+  DEFAULT_DREAM_RSI_CONFIG,
+  createDreamRsiRuntime,
+  resolveDreamRsiConfig,
+  verifyReadiness
+} from '../dist/index.js';
 
 test('getDreamRsiStatus projects safety-relevant config without mutation risk', () => {
   const status = getDreamRsiStatus(DEFAULT_DREAM_RSI_CONFIG);
@@ -54,4 +62,32 @@ test('the tool omits readiness rather than inventing it when given no runtime', 
 
   assert.equal(result.readiness, undefined);
   assert.equal('readiness' in result, false);
+});
+
+test('the status tool does not create the storage it reports on', async () => {
+  // The tool advertises "no side effects", and opening the store is what creates
+  // the database file and its directory. Readiness reports `not-probed` rather
+  // than opening it, which is what keeps a read-only surface read-only.
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-status-'));
+  const sqlitePath = join(dir, 'nested', 'discovery.sqlite');
+  const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath } }));
+  try {
+    const tool = createStatusTool(runtime.config, runtime);
+    const result = await tool.execute({}, { callId: 'call-1', signal: new AbortController().signal });
+
+    assert.equal(existsSync(sqlitePath), false, 'the status tool created the database');
+    assert.equal(
+      result.readiness.checks.find((check) => check.name === 'storage').state,
+      'not-probed',
+      'readiness opened the store'
+    );
+
+    // The counter-check. Without it the assertion above would also pass if the
+    // path were simply wrong or nothing ever opened it.
+    verifyReadiness({ runtime, probeStorage: true });
+    assert.equal(existsSync(sqlitePath), true, 'probing is what opens the store');
+  } finally {
+    runtime.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

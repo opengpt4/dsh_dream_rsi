@@ -96,6 +96,43 @@ test('the record holds hashes rather than the prompt or the response', async () 
   assert.ok(!serialized.includes('SECRET-RESPONSE-BODY'));
 });
 
+test('a provider error that echoes the prompt does not put it in the record', async () => {
+  // The failure path is the one place provider text could reach a persisted
+  // record. `errorClass` is the code or the error name, never the message, so an
+  // error that quotes the prompt leaves the marker out of both the record and
+  // the metrics emitted from it.
+  const metrics = new InMemoryMetrics();
+  const failing = createRecordingLlm(
+    fakeLlm(() => {
+      const error = new Error('provider rejected: SECRET-PROMPT-BODY');
+      error.code = 'ERR_PROVIDER_ECHO';
+      throw error;
+    }),
+    { maxAttempts: 2, metrics }
+  );
+
+  await assert.rejects(
+    failing.invoke({ model: 'm', prompt: 'SECRET-PROMPT-BODY', correlationId: 'c' }),
+    LlmRecordingError
+  );
+
+  const [record] = failing.records();
+  assert.equal(record.errorClass, 'ERR_PROVIDER_ECHO');
+  assert.equal(record.attempts, 2);
+  assert.equal(record.responseHash, null);
+  assert.ok(!JSON.stringify(record).includes('SECRET-PROMPT-BODY'));
+  assert.ok(!JSON.stringify(metrics.list()).includes('SECRET-PROMPT-BODY'));
+  // Read through the samples rather than `total(name)`, which sums one label set
+  // and so counts nothing for a labelled sample.
+  const failures = metrics.list().filter((sample) => sample.name === 'llm.failure');
+  assert.equal(failures.length, 1);
+  // The label is the error class, which is the point: the provider's message,
+  // the part that quotes the prompt, is never a label.
+  assert.equal(failures[0].labels.outcome, 'ERR_PROVIDER_ECHO');
+  const retries = metrics.list().filter((sample) => sample.name === 'llm.retry');
+  assert.deepEqual(retries.map((sample) => sample.value), [1]);
+});
+
 test('retries are bounded, counted, and reported', async () => {
   let calls = 0;
   const flaky = createRecordingLlm(

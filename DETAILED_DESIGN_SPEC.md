@@ -117,7 +117,7 @@ export interface HarnessAdapter {
 
 All model requests pass through `HarnessLlm.invoke`. The adapter records request/response hashes, token usage, latency, retry count, provider error class and correlation ID. API credentials are resolved by the host secret provider and never passed into candidate code.
 
-`createRecordingLlm` (`src/evolution/llm-recorder.ts`) is that recording adapter. It holds **hashes, not bodies**: an observability log that keeps the prompt and response is a second copy of the data it exists to describe, and the prompt can carry candidate and observation text. Retries are bounded by `maxAttempts` and counted; an exhausted call throws with the provider error class and a record whose `responseHash` is null. Given a `MetricsSink` it emits per-task `llm.inputTokens`, `llm.outputTokens`, `llm.latencyMs`, `llm.retry`, and `llm.failure`.
+`createRecordingLlm` (`src/evolution/llm-recorder.ts`) is that recording adapter. It holds **hashes, not bodies**: an observability log that keeps the prompt and response is a second copy of the data it exists to describe, and the prompt can carry candidate and observation text. Retries are bounded by `maxAttempts` and counted; an exhausted call throws with the provider error class and a record whose `responseHash` is null. The failure path is the one place provider text could reach a persisted record, so `errorClass` is the error's `code` or its name and never its message: a provider that rejects by quoting the prompt leaves that text out of the record and out of the `llm.failure` label. Given a `MetricsSink` it emits per-task `llm.inputTokens`, `llm.outputTokens`, `llm.latencyMs`, `llm.retry`, and `llm.failure`.
 
 ### 3.3 Environment adapter
 
