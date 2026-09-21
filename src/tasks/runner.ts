@@ -6,12 +6,13 @@ import {
   type JsonValue
 } from '../discovery/models.js';
 import { hashEnvironmentState, hashObservation } from '../embodied/hash.js';
-import type {
-  ActionRequest,
-  ActionResult,
-  EmbodiedActionType,
-  EnvironmentAdapter,
-  Observation
+import {
+  assertObservationSchema,
+  type ActionRequest,
+  type ActionResult,
+  type EmbodiedActionType,
+  type EnvironmentAdapter,
+  type Observation
 } from '../embodied/protocol.js';
 import type { ActionGuard } from '../safety/action-guard.js';
 import { validateTask, type Episode, type EpisodeStatus, type Task } from './models.js';
@@ -137,6 +138,16 @@ export async function runEpisode(options: RunEpisodeOptions): Promise<EpisodeOut
     if (Date.now() >= deadlineMs) return conclude('timeout', 'wall-clock budget exhausted');
 
     const observation = await adapter.observe({ sessionId, correlationId, includeObjects: true });
+
+    // A version mismatch would otherwise reach the replay key and produce a
+    // silently different key rather than an error, which is the one thing a
+    // version field exists to prevent.
+    try {
+      assertObservationSchema(observation);
+    } catch (error) {
+      return conclude('failed', error instanceof Error ? error.message : String(error));
+    }
+
     if (observation.environmentId !== task.environmentId) {
       return conclude(
         'failed',

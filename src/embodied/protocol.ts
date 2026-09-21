@@ -100,4 +100,24 @@ export interface EnvironmentAdapter {
   execute(request: ActionRequest, signal?: AbortSignal): Promise<ActionResult>;
   emergencyStop(sessionId: string): Promise<void>;
   reset(sessionId: string): void;
+  /**
+   * Drop every session's state.
+   *
+   * Part of disposal, not a convenience: a backend that keeps sessions alive
+   * past unload leaves a real environment holding whatever pose and gripper the
+   * last episode left it in.
+   */
+  releaseAllSessions(): void;
+}
+
+/** A recorded observation must carry the schema this build understands. */
+export function assertObservationSchema(
+  observation: Observation,
+  expected: number = OBSERVATION_SCHEMA_VERSION
+): void {
+  if (observation.schemaVersion !== expected) {
+    throw new Error(
+      `observation schema version ${observation.schemaVersion} is not the expected ${expected}`
+    );
+  }
 }

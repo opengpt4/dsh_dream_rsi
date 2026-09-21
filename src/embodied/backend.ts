@@ -131,6 +131,10 @@ export class MockEmbodiedBackend {
     this.sessions.delete(sessionId);
   }
 
+  resetAll(): void {
+    this.sessions.clear();
+  }
+
   private getState(sessionId: string): SessionState {
     const existing = this.sessions.get(sessionId);
     if (existing !== undefined) return existing;

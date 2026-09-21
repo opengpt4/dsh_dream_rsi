@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：288 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：299 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -149,7 +149,7 @@
 - [ ] Select first simulator and task family. `[!]`
 - [ ] Freeze observation schema, coordinate system, action capability profile, and scoring function. `[!]`
 - [ ] Implement one real `EnvironmentAdapter`; `[!]` blocked on the simulator selection. The boundary it requires is in place and now enforced: the SDK is reached only through `embodied/mock-adapter.ts`, the protocol depends on nothing but the core data model, and all three embodied tools take `EnvironmentAdapter` rather than the SDK. `test/architecture.test.mjs` fails if that changes.
-- [ ] Add simulator reset, deterministic seed, artifact capture, and failure fixtures.
+- [ ] Add deterministic seed and large-payload artifact capture; both need a simulator that produces randomness or payloads. `reset` and the failure fixtures exist, and disposal now releases every session rather than only closing storage, so an environment is not left holding a pose after unload.
 - [x] Keep raw motor/joint control outside the MVP action allowlist. The vocabulary is closed: `checkCapability` denies any action absent from `EMBODIED_ACTION_TYPES`, so a forged capability profile cannot widen it. A future simulator adapter must preserve this.
 
 ## P2: Scientific Evaluation and Operations

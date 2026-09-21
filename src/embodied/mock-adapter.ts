@@ -124,4 +124,9 @@ export class MockEnvironmentAdapter implements EnvironmentAdapter {
     this.stoppedSessions.delete(sessionId);
     this.backend.reset(sessionId);
   }
+
+  releaseAllSessions(): void {
+    this.stoppedSessions.clear();
+    this.backend.resetAll();
+  }
 }

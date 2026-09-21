@@ -145,6 +145,10 @@ A setup failure must dispose any registrations already created, then fail startu
 
 `ready` verifies storage schema, current policy artifact, evaluator worker availability and backend capability profile. `dispose` cancels evolution jobs, waits for bounded shutdown, closes SQLite/artifact handles, resets session backends and unregisters all effects.
 
+Implemented as `verifyReadiness` (`src/readiness.ts`), surfaced through `dream_status`. Each check reports `ready`, `not-ready`, or `not-probed` rather than a boolean, because opening the store creates the database file and the status tool is documented as side-effect free: storage is left `not-probed` there and probed only when a caller asks. A `not-probed` check does not make the report claim readiness.
+
+`dispose` releases adapter sessions and guard latches before closing storage. Releasing sessions is not housekeeping: a backend that keeps them past unload leaves a real environment holding whatever pose and gripper the last episode left it in. Guard latches go with them, because the sessions a guard knew about belong to a runtime that no longer exists.
+
 ### 4.3 Configuration defaults
 
 ```ts
@@ -792,6 +796,8 @@ The evaluator runs in a child process that leads its own process group (`detache
 | Output bound | `maxOutputBytes` on stdout and on stderr, default 1 MiB |
 | Environment | `PATH` only. Inheriting `process.env` would hand the child every API key the parent holds |
 | Result validation | Fields are rebuilt from untrusted JSON rather than cast, so a crafted response cannot inject extra properties |
+
+An observation whose `schemaVersion` is not the expected one fails the episode before a Discovery node is built. Recording it would put the mismatch into the replay key, producing a silently different key instead of an error — the one thing a version field exists to prevent.
 
 Every child is spawned under Node's permission model (`--experimental-permission`) with a read grant scoped to its own directory and no write or `child_process` grant, which bounds filesystem writes and process count. CPU, memory, and network limits still require OS-level confinement and are not implemented; Node documents the permission model as not a security boundary against hostile native code.
 

@@ -75,7 +75,16 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
   let sqlite: SQLiteDiscoveryStore | undefined;
   let store: DiscoveryStore | undefined;
   const backend = new MockEmbodiedBackend();
+  const adapter = new MockEnvironmentAdapter(backend);
   const audit = hooks.audit ?? new InMemoryAuditLog();
+  const guard = new ActionGuard({
+    profile: MOCK_CAPABILITY_PROFILE,
+    actionLeaseMs: config.embodied.actionLeaseMs,
+    maxActionsPerMinute: config.embodied.maxActionsPerMinute,
+    requireConfirmation: config.embodied.requireConfirmation,
+    audit,
+    ...(hooks.confirm !== undefined ? { confirm: hooks.confirm } : {})
+  });
   const splitConfig: EvaluationSplitConfig = {
     trainRatio: config.evaluation.trainRatio,
     validationRatio: config.evaluation.validationRatio,
@@ -99,7 +108,7 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
     backend,
     // One backend instance behind both surfaces, so an action taken through a
     // tool and an action taken by an episode observe the same environment.
-    adapter: new MockEnvironmentAdapter(backend),
+    adapter,
     splitConfig,
     replaySettings: {
       maxNodes: config.replay.maxNodes,
@@ -111,20 +120,17 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
       minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples,
       splitConfig
     },
-    guard: new ActionGuard({
-      profile: MOCK_CAPABILITY_PROFILE,
-      actionLeaseMs: config.embodied.actionLeaseMs,
-      maxActionsPerMinute: config.embodied.maxActionsPerMinute,
-      requireConfirmation: config.embodied.requireConfirmation,
-      audit,
-      ...(hooks.confirm !== undefined ? { confirm: hooks.confirm } : {})
-    }),
+    guard,
     audit,
     evolutionLock: new SingleWriterLock(config.operations.evolutionLock, config.operations.jobLeaseMs),
     deploymentLock: new SingleWriterLock(config.operations.deploymentLock, config.operations.jobLeaseMs),
     dispose() {
       if (disposed) return;
       disposed = true;
+      // Sessions before storage: an environment left holding a pose is the
+      // failure that outlives the process.
+      adapter.releaseAllSessions();
+      guard.releaseAllSessions();
       sqlite?.close();
     }
   };

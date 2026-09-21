@@ -238,6 +238,13 @@ export {
 } from './guardrails/candidate-gate.js';
 export { getDreamRsiStatus, createStatusTool, type DreamRsiStatus } from './status.js';
 export {
+  verifyReadiness,
+  type ReadinessCheck,
+  type ReadinessInput,
+  type ReadinessReport,
+  type ReadinessState
+} from './readiness.js';
+export {
   DEFAULT_DREAM_RSI_CONFIG,
   hashDreamRsiConfig,
   resolveDreamRsiConfig,
@@ -285,6 +292,7 @@ export {
 export {
   EMBODIED_ACTION_TYPES,
   OBSERVATION_SCHEMA_VERSION,
+  assertObservationSchema,
   type ActionRequest,
   type ActionResult,
   type ActionStatus,

@@ -1,6 +1,8 @@
 import { defineTool } from '@deepseek-ai/dsh-tools';
 
 import type { DreamRsiConfig } from './config.js';
+import { verifyReadiness, type ReadinessReport } from './readiness.js';
+import type { DreamRsiRuntime } from './runtime.js';
 
 export interface DreamRsiStatus {
   readonly enabled: boolean;
@@ -15,10 +17,12 @@ export interface DreamRsiStatus {
     readonly holdoutRatio: number;
     readonly minimumHoldoutSamples: number;
   };
+  /** Present when the status tool was given a runtime to inspect. */
+  readonly readiness?: ReadinessReport;
 }
 
 /** Pure projection of config into the read-only status the `dream_status` tool exposes. */
-export function getDreamRsiStatus(config: DreamRsiConfig): DreamRsiStatus {
+export function getDreamRsiStatus(config: DreamRsiConfig, runtime?: DreamRsiRuntime): DreamRsiStatus {
   return {
     enabled: config.enabled,
     evolutionEnabled: config.evolution.enabled,
@@ -31,7 +35,10 @@ export function getDreamRsiStatus(config: DreamRsiConfig): DreamRsiStatus {
       validationRatio: config.evaluation.validationRatio,
       holdoutRatio: config.evaluation.holdoutRatio,
       minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples
-    }
+    },
+    // Storage is never probed here: opening it would create a database file,
+    // and this tool is documented as side-effect free.
+    ...(runtime !== undefined ? { readiness: verifyReadiness({ runtime }) } : {})
   };
 }
 
@@ -40,7 +47,7 @@ export function getDreamRsiStatus(config: DreamRsiConfig): DreamRsiStatus {
  * 4.4 as a tool, because a verified Cordis/DSH command registration contract
  * does not exist in this repository's pinned dependencies (see BASELINE.md).
  */
-export function createStatusTool(config: DreamRsiConfig) {
+export function createStatusTool(config: DreamRsiConfig, runtime?: DreamRsiRuntime) {
   return defineTool({
     name: 'dream_status',
     description: 'Read-only Dream-RSI status: which capabilities are enabled and safety-relevant configuration. No side effects.',

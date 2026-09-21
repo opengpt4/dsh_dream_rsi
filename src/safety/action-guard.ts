@@ -271,6 +271,22 @@ export class ActionGuard {
     this.stoppedSessions.delete(sessionId);
   }
 
+  /**
+   * Drop every latch and slot.
+   *
+   * Disposal, not re-arming: the sessions this guard knew about belong to a
+   * runtime that no longer exists, and a fresh runtime builds a fresh guard, so
+   * nothing carries over that should not.
+   */
+  releaseAllSessions(): void {
+    this.stoppedSessions.clear();
+    this.activeSessions.clear();
+    this.dispatchTimes.clear();
+    this.stopping.clear();
+    for (const controller of this.controllers.values()) controller.abort();
+    this.controllers.clear();
+  }
+
   isStopped(sessionId: string): boolean {
     return this.stoppedSessions.has(sessionId);
   }

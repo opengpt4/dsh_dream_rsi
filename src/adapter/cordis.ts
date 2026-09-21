@@ -39,7 +39,7 @@ function mountTools(ctx: Context, config: DreamRsiConfig): void {
       disposers.push(ctx.tools.register(createPerceiveTool(runtime.adapter)));
       disposers.push(ctx.tools.register(createActTool(ctx, runtime.adapter, runtime.guard)));
       disposers.push(ctx.tools.register(createQueryStateTool(runtime.adapter)));
-      disposers.push(ctx.tools.register(createStatusTool(config)));
+      disposers.push(ctx.tools.register(createStatusTool(config, runtime)));
     } catch (error) {
       rollback();
       throw error;

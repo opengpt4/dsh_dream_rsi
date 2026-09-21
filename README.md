@@ -73,7 +73,9 @@ Implemented and tested capabilities include:
   default: reads scoped to the child's own directory, writes and child processes denied
 - lease-based single-writer lock with heartbeat and stale-lock recovery
 - validated configuration with evolution and auto-deployment disabled by default
-- read-only `dream_status` tool for enabled capabilities and safety-relevant config
+- read-only `dream_status` tool for enabled capabilities, safety-relevant config, and readiness checks that
+  never open storage as a side effect
+- disposal releases adapter sessions and guard latches, so an environment is not left holding a pose
 - import and capability allowlist, composed with the AST guard into a candidate gate that the pipeline
   enforces before running anything; a capability-granting built-in cannot be allowlisted
 - evaluator isolation: own process group killed on deadline, cancellation, or output overflow, a
@@ -85,7 +87,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 288 passing tests. OS/container sandboxing and a real
+The current suite contains 299 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not
