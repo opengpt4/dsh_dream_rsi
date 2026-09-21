@@ -77,10 +77,10 @@
 ### 5. Artifact and Snapshot Integrity
 
 - [x] Align `DiscoveryNode` with the detailed design schema (`schemaVersion`, `createdAt`, optional `sessionId`/`episodeStep`/`correlationId`/`criticalPathMs`) and persist all fields in the SQLite store.
-- [ ] Implement content-addressed artifact store with SHA-256, schema version, byte length, retention, and deletion metadata.
-- [ ] Materialize ReplaySnapshot from a consistent SQLite read transaction.
+- [x] Implement content-addressed artifact store with SHA-256, kind, schema version, byte length, retention, and deletion metadata (`src/artifacts/store.ts`); blobs are immutable and metadata is the only mutable state.
+- [x] Materialize ReplaySnapshot from a consistent SQLite read transaction: `DiscoveryStore.readAll()` serves the tree under one deferred transaction, and `EpisodePipelineOptions.snapshotSource: 'store'` snapshots the persisted tree rather than the run in memory.
 - [x] Decided: snapshot identity includes `createdAt` (content hash covers `schemaVersion` + `createdAt` + `splits`; see `src/evolution/snapshot.ts`).
-- [ ] Add artifact checksum verification before evaluation and deployment.
+- [x] Add artifact checksum verification before evaluation (`assertArtifactsVerified` runs before the evaluator and fails the run). Deployment does not exist yet; it must call the same function rather than re-implement the check.
 - [ ] Add signature provider, verification, key rotation, and failure tests. `[!]`
 
 ### 6. Strong Evaluator Isolation

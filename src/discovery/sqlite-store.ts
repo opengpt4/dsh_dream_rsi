@@ -109,6 +109,24 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
     return rows.map(deserializeNode);
   }
 
+  /**
+   * One deferred transaction, so the returned set is a single point in time even
+   * if a writer commits between statements.
+   */
+  readAll(): DiscoveryNode[] {
+    this.database.exec('BEGIN DEFERRED');
+    try {
+      const rows = this.database.prepare(
+        'SELECT * FROM discovery_nodes ORDER BY node_id'
+      ).all() as unknown as SqliteRow[];
+      this.database.exec('COMMIT');
+      return rows.map(deserializeNode);
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   close(): void {
     this.database.close();
   }

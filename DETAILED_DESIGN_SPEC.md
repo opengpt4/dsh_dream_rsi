@@ -377,19 +377,24 @@ The repository must enforce unique `idempotencyKey`, preserve the first accepted
 ### 6.2 Artifact reference
 
 ```ts
-export interface ArtifactRef {
+export interface ArtifactMetadata {
+  /** Lowercase SHA-256 of the stored bytes, and the name the blob is filed under. */
   artifactId: string;
   kind: 'observation' | 'llm-response' | 'sandbox-output' | 'policy' | 'tool' | 'evaluation-report';
+  mediaType: string;
   schemaVersion: number;
-  contentSha256: string;
   byteLength: number;
-  uri: string;
   createdAt: string;
-  retentionUntil?: string;
+  retentionUntil: string | null;
+  deletedAt: string | null;
 }
 ```
 
-Database rows contain references, not large binary payloads. Artifact writes are content-addressed and must verify checksum before a reference becomes visible.
+Database rows contain references, not large binary payloads.
+
+Because storage is content-addressed, `artifactId` **is** the SHA-256 of the bytes: a separate `contentSha256` field would be the same value twice, and a stored `uri` is derivable from the id. `verify(artifactId)` re-hashes the blob on disk rather than trusting the index, and distinguishes `unknown`, `deleted`, `missing_blob`, and `checksum_mismatch`. `assertArtifactsVerified` fails closed before evaluation; deployment must call it rather than re-implement the check.
+
+Retention and deletion are recorded in metadata, never by rewriting or truncating a blob. `pruneExpired` deletes artifacts past `retentionUntil` and only ever runs when called: a retention policy that fires on its own is an audit-trail hazard.
 
 ## 7. Replay Design
 
@@ -421,6 +426,8 @@ Object keys are sorted recursively; arrays preserve order; numbers and strings u
 6. Return an immutable snapshot.
 
 Evaluation stores the snapshot ID and content hash. A snapshot is never edited in place.
+
+The node list comes from `DiscoveryStore.readAll()`, which a database-backed store serves under a single deferred transaction. Reading the tree with more than one statement under read-committed isolation can straddle a concurrent write and yield a tree that never existed.
 
 ### 7.3 Simulator contract
 

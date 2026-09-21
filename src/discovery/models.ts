@@ -33,6 +33,15 @@ export interface DiscoveryStore {
   append(node: DiscoveryNode): DiscoveryNode;
   get(nodeId: string): DiscoveryNode | undefined;
   listByTask(taskId: string): DiscoveryNode[];
+  /**
+   * Every node, ordered by `nodeId`.
+   *
+   * This is the read a snapshot is built from, so an implementation backed by a
+   * database must serve it from one transaction: two statements under read
+   * committed isolation can straddle a concurrent write and yield a tree that
+   * never existed.
+   */
+  readAll(): DiscoveryNode[];
 }
 
 export class InMemoryDiscoveryStore implements DiscoveryStore {
@@ -58,5 +67,9 @@ export class InMemoryDiscoveryStore implements DiscoveryStore {
     return [...this.nodesById.values()]
       .filter((node) => node.taskId === taskId)
       .sort((left, right) => left.nodeId.localeCompare(right.nodeId));
+  }
+
+  readAll(): DiscoveryNode[] {
+    return [...this.nodesById.values()].sort((left, right) => left.nodeId.localeCompare(right.nodeId));
   }
 }

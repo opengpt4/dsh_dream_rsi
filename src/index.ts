@@ -3,6 +3,17 @@ import { apply } from './adapter/cordis.js';
 export { InMemoryDiscoveryStore, DISCOVERY_NODE_SCHEMA_VERSION, type DiscoveryNode, type DiscoveryStore, type JsonObject, type JsonValue } from './discovery/models.js';
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { canonicalJson, hashJson } from './hash.js';
+export {
+  assertArtifactsVerified,
+  ARTIFACT_KINDS,
+  FileArtifactStore,
+  type ArtifactKind,
+  type ArtifactMetadata,
+  type ArtifactStore,
+  type ArtifactVerification,
+  type ArtifactVerificationFailure,
+  type PutArtifactInput
+} from './artifacts/store.js';
 export { createReplayKey, replayKeyInputFromNode, REPLAY_KEY_SCHEMA_VERSION } from './replay/key.js';
 export { ReplaySimulator } from './replay/simulator.js';
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';

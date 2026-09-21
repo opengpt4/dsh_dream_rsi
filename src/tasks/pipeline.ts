@@ -1,3 +1,4 @@
+import { assertArtifactsVerified, type ArtifactStore } from '../artifacts/store.js';
 import type { DiscoveryNode } from '../discovery/models.js';
 import {
   evaluateReplay,
@@ -170,6 +171,17 @@ export interface EpisodePipelineOptions extends RunEpisodeOptions {
   readonly isolated?: boolean;
   /** Overrides the evaluator entirely, e.g. to inject a failing one. */
   readonly evaluate?: (input: EvaluationInput) => Promise<EvaluationResult>;
+  /**
+   * `episode` snapshots the nodes this run just recorded; `store` snapshots the
+   * whole persisted tree, read in one transaction. The default keeps a
+   * single-episode run independent of whatever else the store holds.
+   */
+  readonly snapshotSource?: 'episode' | 'store';
+  /** Verified before evaluation; any artifact that fails stops the run. */
+  readonly artifacts?: {
+    readonly store: ArtifactStore;
+    readonly artifactIds: readonly string[];
+  };
 }
 
 /**
@@ -179,9 +191,17 @@ export interface EpisodePipelineOptions extends RunEpisodeOptions {
 export async function runEpisodePipeline(options: EpisodePipelineOptions): Promise<EpisodePipelineResult> {
   const settings: EpisodePipelineSettings = { ...DEFAULT_EPISODE_PIPELINE_SETTINGS, ...options.settings };
   const outcome = await runEpisode(options);
-  const snapshot = createEvaluationSnapshot(outcome.nodes, options.splitConfig ?? DEFAULT_SPLIT_CONFIG);
-  const { report } = replayNodes(outcome.nodes, settings);
-  const evaluationInput = toEvaluationInput(outcome.nodes, report);
+
+  // Fail closed before the evaluator sees anything: an artifact whose checksum
+  // does not match its name must never be scored or deployed.
+  if (options.artifacts !== undefined) {
+    assertArtifactsVerified(options.artifacts.store, options.artifacts.artifactIds);
+  }
+
+  const nodes = options.snapshotSource === 'store' ? options.store.readAll() : outcome.nodes;
+  const snapshot = createEvaluationSnapshot(nodes, options.splitConfig ?? DEFAULT_SPLIT_CONFIG);
+  const { report } = replayNodes(nodes, settings);
+  const evaluationInput = toEvaluationInput(nodes, report);
   const evaluate = options.evaluate
     ?? (options.isolated === true
       ? createIsolatedEvaluation(settings.evaluatorTimeoutMs, options.evaluatorConfig)
