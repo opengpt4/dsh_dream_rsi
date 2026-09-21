@@ -80,7 +80,8 @@ Implemented and tested capabilities include:
 - immutable evaluation snapshots
 - process-isolated evaluator with timeout, and Node's permission model applied to every isolated child by
   default: reads scoped to the child's own directory, writes and child processes denied
-- lease-based single-writer lock with heartbeat and stale-lock recovery
+- lease-based single-writer lock with heartbeat and stale-lock recovery, where takeover is an atomic rename
+  and a lock with no lease yet counts as live rather than stale
 - validated configuration with evolution and auto-deployment disabled by default, including the holdout
   gate's non-regression ratio and minimum improvement
 - `embodied.allowActions` narrows the declared action set; configuration can tighten a deployment but
@@ -101,7 +102,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 348 passing tests. OS/container sandboxing and a real
+The current suite contains 356 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

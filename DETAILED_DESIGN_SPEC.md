@@ -744,6 +744,10 @@ A failure before step 7 leaves current pointer untouched. A failure after step 7
 
 `SingleWriterLock` uses atomic directory creation, lease metadata, expiry recovery and heartbeat. A crashed owner is recoverable after lease expiry. Recovery must be audited, and production should additionally use a monotonic clock/transactional storage where available to avoid wall-clock anomalies. `SingleWriterLock.recoveredStaleLock` reports a takeover so the caller can emit a `lock.recovered` event.
 
+Two details decide whether recovery is correct. A lock directory exists **before** its lease file does, so "no lease" is a state a live lock passes through; treating it as expiry let a second acquirer take over a lock that was never stale and report it as an audited recovery. A missing lease now means stale only when the directory is older than a whole lease, which is what a writer that died in that window leaves behind.
+
+Takeover renames the stale directory aside rather than removing and recreating it: rename is atomic, so at most one racer can move a given directory and the loser retries instead of deleting the winner's fresh lock. `release` removes the lock only when the lease still names the releasing writer, so a writer whose lease expired does not destroy the lock its successor now holds.
+
 #### Implemented (`src/registry/deployment-writer.ts`)
 
 `DeploymentWriter` is the only component that moves a deployment between states, and every transition holds the deployment writer lease, so two writers cannot interleave a state machine.
