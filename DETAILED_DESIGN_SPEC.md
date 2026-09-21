@@ -327,6 +327,8 @@ A rejected action never reaches the adapter and returns `success: false` with a 
 
 Output contains `success`, `action_id`, the state-machine `state`, the terminal `status`, and either `result` or `error`. `state` and `status` are distinct: `state` is where the action ended in the state machine, `status` is the backend outcome.
 
+Events: `embodied/action-started` first, carrying the session-scoped action id that names the action in every later event. A completed action then emits `embodied/action-completed` with the backend result and `embodied/frame` with the step it advanced. Every other outcome — refusal, failure, cancellation, timeout — emits `embodied/error` carrying the reason, and no frame: a host that advanced its own state on a frame would otherwise do so for an action that never moved the environment. The payload types are checked by the compiler through the Cordis `Events` augmentation in `src/embodied/events.ts`; that they fire is pinned by `test/act-cancellation.test.mjs`.
+
 #### `embodied_query_state`
 
 Input: `session_id`, and `query`, one of `objects`, `pose`, or `gripper`. Any other value is refused **before** the environment is read, because observing is what opens or creates a session in a backend: validating afterwards left environment state behind for a request that could never be answered.
