@@ -3,6 +3,7 @@ import { InMemoryDiscoveryStore, type DiscoveryStore } from './discovery/models.
 import { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 import { MockEmbodiedBackend } from './embodied/backend.js';
 import { MockEnvironmentAdapter } from './embodied/mock-adapter.js';
+import { DEFAULT_HOLDOUT_GATE_CONFIG, type HoldoutGateConfig } from './evolution/holdout-gate.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/split.js';
 import { SingleWriterLock } from './operations/single-writer-lock.js';
 import { InMemoryAuditLog, type AuditSink } from './registry/audit.js';
@@ -21,6 +22,13 @@ export interface EvaluationSettings {
   readonly timeoutMs: number;
   readonly minimumHoldoutSamples: number;
   readonly splitConfig: EvaluationSplitConfig;
+  /**
+   * Thresholds the holdout gate runs with, derived from config.
+   *
+   * Without this the gate's defaults were the only values it ever used, so
+   * `evolution.minimumImprovement` was configurable in name only.
+   */
+  readonly holdoutGate: HoldoutGateConfig;
 }
 
 /**
@@ -118,7 +126,14 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
     evaluationSettings: {
       timeoutMs: config.evaluation.timeoutMs,
       minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples,
-      splitConfig
+      splitConfig,
+      holdoutGate: {
+        ...DEFAULT_HOLDOUT_GATE_CONFIG,
+        minimumPassRatio: config.evolution.minimumPassRatio,
+        minimumImprovement: config.evolution.minimumImprovement,
+        minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples,
+        maxMissRate: config.replay.missRateMax
+      }
     },
     guard,
     audit,

@@ -34,6 +34,8 @@ export interface DreamRsiConfig {
     readonly maxCandidates: number;
     readonly autoDeploy: boolean;
     readonly minimumImprovement: number;
+    /** Fraction of holdout cases whose quality must not regress. */
+    readonly minimumPassRatio: number;
   };
   readonly embodied: {
     readonly enabled: boolean;
@@ -91,7 +93,9 @@ export const DreamRsiConfigSchema = Schema.object({
     maxCandidates: Schema.number().default(8),
     autoDeploy: Schema.boolean().default(false)
       .description('Requires evolution.enabled; enforced after the schema runs.'),
-    minimumImprovement: Schema.number().default(0.01)
+    minimumImprovement: Schema.number().default(0.01),
+    minimumPassRatio: Schema.number().default(0.95)
+      .description('Fraction of holdout cases whose candidate quality must not fall below the incumbent.')
   }),
   embodied: Schema.object({
     enabled: Schema.boolean().default(false),
@@ -141,6 +145,7 @@ export function validateDreamRsiConfig(config: DreamRsiConfig): void {
   if (config.evolution.minimumImprovement < 0 || !Number.isFinite(config.evolution.minimumImprovement)) {
     throw new Error('evolution.minimumImprovement must be non-negative and finite');
   }
+  assertRatio(config.evolution.minimumPassRatio, 'evolution.minimumPassRatio');
   for (const [value, name] of [
     [config.storage.sqlitePath, 'storage.sqlitePath'],
     [config.storage.artifactDir, 'storage.artifactDir'],

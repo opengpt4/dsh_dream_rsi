@@ -77,7 +77,8 @@ Implemented and tested capabilities include:
 - process-isolated evaluator with timeout, and Node's permission model applied to every isolated child by
   default: reads scoped to the child's own directory, writes and child processes denied
 - lease-based single-writer lock with heartbeat and stale-lock recovery
-- validated configuration with evolution and auto-deployment disabled by default
+- validated configuration with evolution and auto-deployment disabled by default, including the holdout
+  gate's non-regression ratio and minimum improvement
 - read-only `dream_status` tool for enabled capabilities, safety-relevant config, and readiness checks that
   never open storage as a side effect
 - disposal releases adapter sessions and guard latches, so an environment is not left holding a pose
@@ -92,7 +93,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 319 passing tests. OS/container sandboxing and a real
+The current suite contains 322 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   DEFAULT_HOLDOUT_GATE_CONFIG,
+  createDreamRsiRuntime,
+  resolveDreamRsiConfig,
   createEvaluationReport,
   createPolicyArtifact,
   evaluateCandidate,
@@ -289,4 +291,70 @@ test('candidate evaluation carries a holdout verdict without promoting', async (
   assert.equal(result.holdoutGate.passed, true);
   assert.equal(result.holdoutGate.candidateEvaluationId, candidateReport.evaluationId);
   assert.equal(result.staticGate.passed, true);
+});
+
+// ------------------------------------------------- config reaching the gate
+
+test('the non-regression ratio comes from config rather than a constant', () => {
+  const runtime = createDreamRsiRuntime(
+    resolveDreamRsiConfig({ evolution: { enabled: true, minimumPassRatio: 0.6, minimumImprovement: 0.25 } })
+  );
+  try {
+    const gate = runtime.evaluationSettings.holdoutGate;
+
+    assert.equal(gate.minimumPassRatio, 0.6);
+    assert.equal(gate.minimumImprovement, 0.25);
+    // The sample floor and miss ceiling come from config too, not from defaults.
+    assert.equal(gate.minimumHoldoutSamples, runtime.config.evaluation.minimumHoldoutSamples);
+    assert.equal(gate.maxMissRate, runtime.config.replay.missRateMax);
+    assert.notDeepEqual(gate, DEFAULT_HOLDOUT_GATE_CONFIG);
+  } finally {
+    runtime.dispose();
+  }
+});
+
+test('a looser configured ratio changes the verdict the gate reaches', () => {
+  const incumbent = holdoutReport(improving('base'));
+  // Five of one family's ten cases regress slightly while the rest improve a
+  // lot, so the mean rises but the pass ratio does not: the only thing that
+  // changes between the two runs is the configured threshold.
+  const regressed = Object.fromEntries(
+    Object.entries(improving('base')).map(([id, quality]) => [
+      id,
+      Number(id.split('-').pop()) < 5 ? quality - 0.1 : quality + 1
+    ])
+  );
+  const candidate = holdoutReport(regressed);
+
+  const defaultRuntime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+  const looseRuntime = createDreamRsiRuntime(
+    resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' }, evolution: { enabled: true, minimumPassRatio: 0.5 } })
+  );
+  try {
+    const strict = evaluateHoldoutGate({
+      incumbent,
+      candidate,
+      config: defaultRuntime.evaluationSettings.holdoutGate,
+      configurationHash: CONFIG_HASH
+    });
+    const loose = evaluateHoldoutGate({
+      incumbent,
+      candidate,
+      config: looseRuntime.evaluationSettings.holdoutGate,
+      configurationHash: CONFIG_HASH
+    });
+
+    // Before the wiring existed both calls used the same constant, so changing
+    // config changed nothing.
+    assert.equal(strict.passed, false);
+    assert.equal(loose.passed, true);
+  } finally {
+    defaultRuntime.dispose();
+    looseRuntime.dispose();
+  }
+});
+
+test('an out-of-range non-regression ratio is refused at configuration time', () => {
+  assert.throws(() => resolveDreamRsiConfig({ evolution: { minimumPassRatio: 1.5 } }), /must be between 0 and 1/);
+  assert.throws(() => resolveDreamRsiConfig({ evolution: { minimumPassRatio: -0.1 } }), /must be between 0 and 1/);
 });

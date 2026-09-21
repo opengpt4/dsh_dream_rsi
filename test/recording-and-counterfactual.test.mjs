@@ -145,6 +145,9 @@ test('an exhausted call throws with the error class recorded', async () => {
 
 test('a recording LLM emits the token and latency metrics the design lists', async () => {
   const metrics = new InMemoryMetrics(() => new Date(AT));
+  // A deterministic clock: asserting a wall-clock latency of exactly zero only
+  // passes when the call does not straddle a millisecond boundary.
+  let clock = 1_000;
   const llm = createRecordingLlm(
     fakeLlm((request) => ({
       text: 'x',
@@ -152,16 +155,18 @@ test('a recording LLM emits the token and latency metrics the design lists', asy
       usage: { inputTokens: 10, outputTokens: 4 },
       finishReason: 'stop'
     })),
-    { metrics, labels: { taskId: 'task-1' } }
+    { metrics, labels: { taskId: 'task-1' }, now: () => (clock += 25) }
   );
 
   await llm.invoke({ model: 'm', prompt: 'p', correlationId: 'c' });
 
   // Per-task token, latency, and cost are exactly what section 8 asks for.
-  assert.equal(metrics.total('llm.inputTokens', { taskId: 'task-1', correlationId: 'c', model: 'm' }), 10);
-  assert.equal(metrics.total('llm.outputTokens', { taskId: 'task-1', correlationId: 'c', model: 'm' }), 4);
-  assert.equal(metrics.total('llm.latencyMs', { taskId: 'task-1', correlationId: 'c', model: 'm' }), 0);
-  assert.equal(metrics.total('llm.failure', { taskId: 'task-1', correlationId: 'c', model: 'm' }), 0);
+  const labels = { taskId: 'task-1', correlationId: 'c', model: 'm' };
+  assert.equal(metrics.total('llm.inputTokens', labels), 10);
+  assert.equal(metrics.total('llm.outputTokens', labels), 4);
+  assert.equal(metrics.total('llm.latencyMs', labels), 25);
+  assert.equal(metrics.total('llm.failure', labels), 0);
+  assert.equal(metrics.total('llm.retry', labels), 0);
 });
 
 test('maxAttempts is validated rather than silently treated as one', () => {

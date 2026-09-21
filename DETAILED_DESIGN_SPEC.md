@@ -689,6 +689,8 @@ The gate result is immutable and records every rejection reason, case-level diff
 | Candidate `guardResults` | a failed AST, dependency, resource, or signature guard |
 | Per-task-family pass ratio | one family regressing while the aggregate holds |
 
+The thresholds come from configuration through `runtime.evaluationSettings.holdoutGate`: `evolution.minimumPassRatio`, `evolution.minimumImprovement`, `evaluation.minimumHoldoutSamples`, and `replay.missRateMax`. They previously came from the gate's own defaults regardless of configuration, so the non-regression ratio the paper calls configurable was not.
+
 The result is deep-frozen and carries the configuration hash, both evaluation ids, the failed case ids, and a per-family verdict with that family's rejection reasons.
 
 `CaseResult` carries per-case `quality` and `score`. The gate needs them to compare two runs case by case, so a report without them is rejected rather than treated as equal.
