@@ -210,6 +210,11 @@ export class ActionGuard {
         code: 'backend_error',
         reason: error instanceof Error ? error.message : String(error)
       };
+      // Clear the stop marker on this path too. A throw is not a report — see
+      // the precedence below — so the marker is never consulted again for this
+      // action, and leaving it set would make the set stop meaning "an action
+      // the guard interrupted".
+      this.stopping.delete(request.actionId);
       return this.snapshot(record);
     } finally {
       clearTimeout(leaseTimer);
@@ -218,7 +223,10 @@ export class ActionGuard {
     this.release(request.sessionId, request.actionId);
 
     // The guard owns the session-level deadline and the operator stop, so either
-    // overrides whatever the backend reported for the aborted call.
+    // overrides the status the backend resolved with. A backend that throws
+    // instead was handled above as `backend_error`: the adapter contract
+    // requires an aborted call to resolve, so a rejection means the adapter is
+    // unusable rather than that the guard's stop or lease was reported.
     const status: ActionStatus = this.stopping.has(request.actionId)
       ? 'emergency_stop'
       : leaseExpired

@@ -390,7 +390,9 @@ export interface ActionCapability {
 
 Rejections are returned rather than thrown, and are **not** cached under the idempotency key: a rate-limited or busy rejection is re-evaluated on the next attempt, while an authorized action never runs twice.
 
-The guard owns the two session-level deadlines, so they override whatever the aborted backend call reports: a stop in flight settles as `EMERGENCY_STOP` and a held lease settles as `TIMEOUT`, regardless of the adapter returning `cancelled`.
+The guard owns the two session-level deadlines, so they override whatever the aborted backend call reports: a stop in flight settles as `EMERGENCY_STOP` and a held lease settles as `TIMEOUT`, regardless of the adapter returning `cancelled`. That precedence reads markers keyed by action id, so a call that ends by throwing clears its marker on the way out. A marker left behind by a failed call relabels the next action on that id — including, after `releaseSession`, an action the backend completed — as an emergency stop that never happened.
+
+An adapter that rejects instead of resolving has broken the contract at `EnvironmentAdapter.execute`, and the action settles as `FAILED` with `backend_error` rather than as a stop or a timeout the backend never reported.
 
 `emergencyStop` latches the session and aborts any action in flight. The latch outlives the episode: `runEpisode` latches the guard when an episode ends in `emergency_stop`, so a later episode reusing the session is refused. `releaseSession` clears it, and re-arming a stopped session is an explicit operator act.
 

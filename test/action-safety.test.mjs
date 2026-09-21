@@ -5,6 +5,7 @@ import {
   ActionGuard,
   ALLOWED_TOOL_PERMISSIONS,
   EMBODIED_ACTION_TYPES,
+  InMemoryAuditLog,
   MOCK_CAPABILITY_PROFILE,
   narrowCapabilityProfile,
   MOCK_ENVIRONMENT_ID,
@@ -73,6 +74,16 @@ function makeGuard(overrides = {}) {
 const untilAborted = (status) => (signal) =>
   new Promise((resolve) => {
     signal.addEventListener('abort', () => resolve(actionResult({ status })), { once: true });
+  });
+
+/**
+ * Rejects when the signal aborts, which the adapter contract forbids: an
+ * aborted call must resolve to a terminal result. This is the adapter-is-
+ * unusable case the guard records rather than trusts.
+ */
+const throwingOnAbort = () => (signal) =>
+  new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('backend rejected the aborted call')), { once: true });
   });
 
 test('the MVP action vocabulary has no representation for raw motor or joint control', () => {
@@ -373,6 +384,65 @@ test('a backend that rejects its promise is recorded as a backend error', async 
     (await guard.execute(guardRequest({ actionId: 'action-2' }), async () => actionResult())).state,
     'COMPLETED'
   );
+});
+
+test('a lease expiry the backend rejects instead of resolving is a backend error', async () => {
+  const guard = makeGuard({ actionLeaseMs: 20 });
+  const record = await guard.execute(guardRequest(), throwingOnAbort());
+
+  // The guard's lease fired, but the backend never resolved with an outcome, so
+  // there is nothing for the guard's precedence to override: the adapter is
+  // unusable and TIMEOUT is not claimed on its behalf.
+  assert.equal(record.state, 'FAILED');
+  assert.equal(record.result, undefined);
+  assert.equal(record.rejection.code, 'backend_error');
+  assert.match(record.rejection.reason, /rejected the aborted call/);
+});
+
+test('a stop during a call the backend rejects still latches, audits, and forbids retry', async () => {
+  const audit = new InMemoryAuditLog();
+  const guard = makeGuard({ audit, actionLeaseMs: 30_000 });
+  const pending = guard.execute(guardRequest(), throwingOnAbort());
+
+  guard.emergencyStop(SESSION_ID, 'operator pressed stop');
+  const record = await pending;
+
+  // The recorded outcome is the backend's failure, not the guard's stop — the
+  // adapter contract makes a rejection mean unusable. The stop is still the
+  // operator's, and that is what has to hold.
+  assert.equal(record.state, 'FAILED');
+  assert.equal(record.result, undefined);
+  assert.equal(guard.isStopped(SESSION_ID), true);
+  assert.deepEqual(audit.types(), ['action.emergency-stop']);
+
+  let ran = false;
+  const refused = await guard.execute(guardRequest({ actionId: 'action-2' }), async () => {
+    ran = true;
+    return actionResult();
+  });
+  assert.equal(refused.rejection.code, 'session_stopped');
+  assert.equal(ran, false);
+});
+
+test('a stop marker left by a failed call does not relabel a later action', async () => {
+  // The stop/lease precedence reads markers keyed by action id. A call the
+  // backend rejected after a stop must not leave its marker behind: re-arming
+  // the session and reusing the id would otherwise report a completed action as
+  // an emergency stop that never happened.
+  const guard = makeGuard();
+  const pending = guard.execute(guardRequest(), throwingOnAbort());
+
+  guard.emergencyStop(SESSION_ID, 'operator pressed stop');
+  await pending;
+
+  guard.releaseSession(SESSION_ID);
+  const reused = await guard.execute(
+    guardRequest({ idempotencyKey: 'action-1-again' }),
+    async () => actionResult()
+  );
+
+  assert.equal(reused.state, 'COMPLETED');
+  assert.equal(reused.result.status, 'completed');
 });
 
 test('an episode dispatched through the guard records one node per authorized action', async () => {
