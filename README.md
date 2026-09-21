@@ -18,6 +18,9 @@ deployment.
 Implemented and tested capabilities include:
 
 - Cordis reversible embodied tool registration behind a dedicated `adapter/cordis.ts` boundary
+- bundle patch and `dsh.bundle.patch` manifest, so a profile can mount the package
+- host-facing `Config` schema, validated by the Cordis loader before `apply` runs
+- runtime binding validated config to the Discovery store, embodied backend, split config, and writer locks
 - session-isolated mock embodied backend and typed events, with real async timeout/cancellation
 - idempotent in-memory and SQLite Discovery stores
 - canonical ReplayKey and deterministic counterfactual replay
@@ -35,6 +38,8 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 38 passing tests. Full profile/patch integration,
+The current suite contains 57 passing tests. An end-to-end mock task,
 OS/container sandboxing, candidate generation, canary deployment, tool
 synthesis, and a real simulator adapter remain planned work.
+
+See [examples/](examples/README.md) for mounting the package into a profile.

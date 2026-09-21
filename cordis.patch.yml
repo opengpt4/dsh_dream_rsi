@@ -1,0 +1,13 @@
+# Bundle patch. The loader reads this file for every package named in a profile's
+# `dsh.profile.bundles`, and `dsh.bundle.patch` in package.json points here.
+#
+# Schema: a top-level array of patch entries; `insert:` takes rows of
+# {id, name, config?, group?, disabled?, inject?}. Later layers — the profile's
+# own cordis.patch.yml and any --patch overlay — address this row by id, with the
+# last write per row winning.
+#
+# Mounting registers the four plugin tools. Evolution and auto-deployment stay
+# off unless this row's config turns them on.
+- insert:
+    - id: dream-rsi
+      name: '@opengpt4/dsh-dream-rsi'

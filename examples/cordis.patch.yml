@@ -1,5 +1,13 @@
-# Local development patch for mounting the package into a DSH profile.
-# Use the published package name after installing this workspace package.
-- insert:
-    - id: dream-rsi
-      name: '@opengpt4/dsh-dream-rsi'
+# Optional user patch layer for a profile, applied after every bundle layer.
+#
+# An entry addresses an existing row by id and replaces that row's whole
+# `config`. Config is validated against the schema the plugin exports as
+# `Config`, so a partial block is safe: absent keys take their schema defaults.
+- id: dream-rsi
+  config:
+    storage:
+      sqlitePath: ':memory:'
+      artifactDir: data/artifacts
+    embodied:
+      enabled: true
+      requireConfirmation: true

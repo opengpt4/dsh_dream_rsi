@@ -1,3 +1,5 @@
+import Schema from '@deepseek-ai/schemastery';
+
 export interface DreamRsiConfig {
   readonly enabled: boolean;
   readonly storage: {
@@ -43,40 +45,65 @@ export type DreamRsiConfigInput = Partial<{
   [Key in keyof DreamRsiConfig]: Partial<DreamRsiConfig[Key]>;
 }>;
 
-export const DEFAULT_DREAM_RSI_CONFIG: DreamRsiConfig = {
-  enabled: true,
-  storage: { sqlitePath: 'data/discovery.db', artifactDir: 'data/artifacts' },
-  runtime: { maxWorkers: 4, taskTimeoutMs: 300_000 },
-  replay: { maxNodes: 10_000, missRateMax: 0.05, keySchemaVersion: 1 },
-  evaluation: {
-    trainRatio: 0.7,
-    validationRatio: 0.15,
-    holdoutRatio: 0.15,
-    minimumHoldoutSamples: 20,
-    timeoutMs: 5_000
-  },
-  operations: {
-    evolutionLock: 'data/locks/evolution.lock',
-    deploymentLock: 'data/locks/deployment.lock',
-    jobLeaseMs: 300_000
-  },
-  evolution: { enabled: false, maxCandidates: 8, autoDeploy: false, minimumImprovement: 0.01 },
-  embodied: { enabled: false, requireConfirmation: true, actionLeaseMs: 30_000, maxActionsPerMinute: 30 }
-};
+/**
+ * Host-facing configuration schema. Cordis validates each fiber's `config`
+ * against the schema a plugin exports as `Config`, so this is the contract a
+ * `cordis.patch.yml` entry under `- insert:` is checked against.
+ *
+ * Shape and defaults only. Cross-field invariants are not expressible as
+ * per-field constraints and live in `validateDreamRsiConfig`, which
+ * `resolveDreamRsiConfig` always runs afterwards.
+ */
+export const DreamRsiConfigSchema = Schema.object({
+  enabled: Schema.boolean().default(true)
+    .description('Master switch. When false the plugin registers nothing and runs no enabled-only validation.'),
+  storage: Schema.object({
+    sqlitePath: Schema.string().default('data/discovery.db')
+      .description('SQLite database holding Discovery nodes. ":memory:" keeps storage in-process.'),
+    artifactDir: Schema.string().default('data/artifacts')
+      .description('Root directory for content-addressed artifacts.')
+  }),
+  runtime: Schema.object({
+    maxWorkers: Schema.number().default(4),
+    taskTimeoutMs: Schema.number().default(300_000)
+  }),
+  replay: Schema.object({
+    maxNodes: Schema.number().default(10_000),
+    missRateMax: Schema.number().default(0.05),
+    keySchemaVersion: Schema.number().default(1)
+  }),
+  evaluation: Schema.object({
+    trainRatio: Schema.number().default(0.7),
+    validationRatio: Schema.number().default(0.15),
+    holdoutRatio: Schema.number().default(0.15),
+    minimumHoldoutSamples: Schema.number().default(20),
+    timeoutMs: Schema.number().default(5_000)
+  }),
+  operations: Schema.object({
+    evolutionLock: Schema.string().default('data/locks/evolution.lock'),
+    deploymentLock: Schema.string().default('data/locks/deployment.lock'),
+    jobLeaseMs: Schema.number().default(300_000)
+  }),
+  evolution: Schema.object({
+    enabled: Schema.boolean().default(false),
+    maxCandidates: Schema.number().default(8),
+    autoDeploy: Schema.boolean().default(false)
+      .description('Requires evolution.enabled; enforced after the schema runs.'),
+    minimumImprovement: Schema.number().default(0.01)
+  }),
+  embodied: Schema.object({
+    enabled: Schema.boolean().default(false),
+    requireConfirmation: Schema.boolean().default(true),
+    actionLeaseMs: Schema.number().default(30_000),
+    maxActionsPerMinute: Schema.number().default(30)
+  })
+});
+
+/** Normalized defaults, derived from the schema so defaults have one definition. */
+export const DEFAULT_DREAM_RSI_CONFIG: DreamRsiConfig = DreamRsiConfigSchema({}) as DreamRsiConfig;
 
 export function resolveDreamRsiConfig(input: DreamRsiConfigInput = {}): DreamRsiConfig {
-  const config: DreamRsiConfig = {
-    ...DEFAULT_DREAM_RSI_CONFIG,
-    ...input,
-    storage: { ...DEFAULT_DREAM_RSI_CONFIG.storage, ...input.storage },
-    runtime: { ...DEFAULT_DREAM_RSI_CONFIG.runtime, ...input.runtime },
-    replay: { ...DEFAULT_DREAM_RSI_CONFIG.replay, ...input.replay },
-    evaluation: { ...DEFAULT_DREAM_RSI_CONFIG.evaluation, ...input.evaluation },
-    operations: { ...DEFAULT_DREAM_RSI_CONFIG.operations, ...input.operations },
-    evolution: { ...DEFAULT_DREAM_RSI_CONFIG.evolution, ...input.evolution },
-    embodied: { ...DEFAULT_DREAM_RSI_CONFIG.embodied, ...input.embodied }
-  };
-
+  const config = DreamRsiConfigSchema(input) as DreamRsiConfig;
   validateDreamRsiConfig(config);
   return config;
 }

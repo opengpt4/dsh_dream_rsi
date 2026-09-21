@@ -20,6 +20,14 @@ export {
   type DreamRsiConfigInput
 } from './config.js';
 
+/**
+ * Schema the Cordis loader reads from `Plugin.Runtime.Config` to validate and
+ * normalize each fiber's `config` before `apply` runs.
+ */
+export { DreamRsiConfigSchema as Config } from './config.js';
+
+export { createDreamRsiRuntime, type DreamRsiRuntime } from './runtime.js';
+
 export const name = 'dream-rsi';
 export const inject: string[] = [];
 

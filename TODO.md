@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-21  
-**目前 baseline**：38 tests passing，`main` 已推送至 GitHub  
+**目前 baseline**：57 tests passing，`main` 已推送至 GitHub  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -39,19 +39,21 @@
 
 ### 1. Cordis Profile/Patch Adapter
 
-- [ ] Confirm target DSH profile manifest and `cordis.patch.yml` schema against the deployed Harness version. `[!]`
+- [x] Confirm target DSH profile manifest and `cordis.patch.yml` schema against the deployed Harness version. Verified against DSH 0.1.5-rc.1 / `cordis-plugin-loader` 1.0.3; see BASELINE.md.
 - [x] Add `src/adapter/cordis.ts` so core modules do not depend directly on Cordis APIs.
-- [ ] Add profile and patch examples for local development.
-- [ ] Add compatibility tests for mount, duplicate mount, partial setup failure, dispose, and reload.
-- [ ] Verify that tool, event, service, command, and worker registrations leave no residue after disposal.
+- [x] Add profile and patch examples for local development (`cordis.patch.yml`, `examples/README.md`).
+- [x] Add compatibility tests for mount, duplicate mount, partial setup failure, dispose, and reload (`test/adapter-compat.test.mjs`).
+- [x] Verify that tool, event, service, command, and worker registrations leave no residue after disposal.
+- [x] Ship the bundle patch (`cordis.patch.yml` plus `dsh.bundle.patch`), without which a profile cannot mount the package at all.
 
 ### 2. Configuration and Runtime Wiring
 
 - [x] Add typed configuration defaults and validation.
-- [ ] Add configuration schema export for the host Harness.
-- [ ] Connect validated config to storage, replay, evaluator, lock, and embodied backend construction.
+- [x] Add configuration schema export for the host Harness (`Config`, Schemastery; the Cordis loader validates each fiber's `config` against it before `apply` runs).
+- [x] Connect validated config to Discovery store, embodied backend, split config, and writer lock construction (`src/runtime.ts`).
+- [ ] Derive replay and evaluator settings (`replay.maxNodes`, `replay.missRateMax`, `evaluation.timeoutMs`, `evaluation.minimumHoldoutSamples`) in the runtime. Deferred until the end-to-end pipeline consumes them.
 - [x] Add `dream status` read-only runtime facade (exposed as the `dream_status` tool, since no verified Cordis/DSH command contract exists yet; see `src/status.ts`).
-- [ ] Reject invalid configuration before any persistent resource or tool registration is created.
+- [x] Reject invalid configuration before any persistent resource or tool registration is created (the schema runs in `apply` before `ctx.effect`; `createDreamRsiRuntime` validates before opening SQLite).
 
 ### 3. End-to-End Mock Task
 

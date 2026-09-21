@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 export class SingleWriterLock {
   private held = false;
@@ -13,6 +14,7 @@ export class SingleWriterLock {
 
   acquire(): void {
     if (this.held) throw new Error(`lock ${this.lockPath} is already held by this instance`);
+    mkdirSync(dirname(this.lockPath), { recursive: true });
     try {
       mkdirSync(this.lockPath);
     } catch (error) {
