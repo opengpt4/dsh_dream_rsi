@@ -59,6 +59,13 @@ export function createQueryStateTool(adapter: EnvironmentAdapter) {
     isConcurrencySafe: () => true,
     async execute(args: QueryArgs, exec: ToolRunContext) {
       if (exec.signal.aborted) throw new Error('state query was cancelled');
+      // Validated before the read, as `embodied_perceive` validates its sensor
+      // list first: observing is what opens or creates the session in a backend,
+      // so rejecting an unanswerable query afterwards left environment state
+      // behind for a request that could never be answered.
+      if (args.query !== 'objects' && args.query !== 'pose' && args.query !== 'gripper') {
+        throw new Error('query must be one of: objects, pose, gripper');
+      }
       // `observe` is the only environment read, so this tool needs nothing the
       // adapter contract does not already provide.
       const state = await adapter.observe({
@@ -66,9 +73,6 @@ export function createQueryStateTool(adapter: EnvironmentAdapter) {
         correlationId: exec.callId,
         includeObjects: true
       });
-      if (args.query !== 'objects' && args.query !== 'pose' && args.query !== 'gripper') {
-        throw new Error('query must be one of: objects, pose, gripper');
-      }
       const value = args.query === 'objects'
         ? { objects: state.objects.map((object) => ({ id: object.id, label: object.label, position: [...object.position] })) }
         : args.query === 'pose'

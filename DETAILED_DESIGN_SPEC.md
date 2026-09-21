@@ -329,7 +329,11 @@ Output contains `success`, `action_id`, the state-machine `state`, the terminal 
 
 #### `embodied_query_state`
 
-Input is a bounded query enum or approved DSL. The tool may return room graph, objects, navigation nodes and last state reference. It must reject arbitrary code, unbounded graph traversal and unauthorized session access.
+Input: `session_id`, and `query`, one of `objects`, `pose`, or `gripper`. Any other value is refused **before** the environment is read, because observing is what opens or creates a session in a backend: validating afterwards left environment state behind for a request that could never be answered.
+
+Implemented: the closed query enum, which is also what rules out arbitrary code and unbounded graph traversal — there is no expression or path input to traverse with. The output carries exactly the requested part of the observation, copied rather than aliased, so a caller editing what it was handed cannot edit the environment's state. A cancelled call reads nothing.
+
+Not implemented: unauthorized session access. `session_id` is named by the caller, as it is for `perceive` and `act`, and nothing in the harness carries a principal that could be checked against a session, so the check has no input to work from. It needs an authorisation model rather than a local guard.
 
 ### 5.6 Action state machine
 
