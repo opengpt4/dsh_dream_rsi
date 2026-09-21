@@ -50,7 +50,7 @@ The real-environment path was chosen and checked on this machine, not assumed:
 |---|---|
 | RoboSuite 1.5.2 and MuJoCo 3.2.3 install and import on arm64 macOS | Python 3.11 venv, CPU only, no display, no system packages; about two minutes |
 | `Lift` and `Stack` run headless | Both load, reset, step with 7-dimension OSC actions, and close |
-| The seed is real and the run is reproducible | The same seed produced an identical observation digest in two separate processes; a different seed produced a different one |
+| Determinism of the initial state | **Not established.** RoboSuite 1.5.2 exposes no seed API — `env.seed` is `None` and `MujocoEnv` has no `seed` method — so a claimed per-seed reproducibility could not be reproduced and is withdrawn. `deterministic_reset = True` turns placement randomisation off; two runs then agreed, but both read a degenerate zero `cube_pos`, so that is not evidence of a reproducible *meaningful* state either. Making replay reproducible is the recording side's job regardless: a Discovery node carries the state it was taken from. TODO item 152 tracks what replaces the seed. |
 | Cameras give large payloads headless | `agentview` RGB 84x84x3 plus 84x84x1 depth with `MUJOCO_GL=glfw`, 49,392 bytes per step, about 1 MB at 512x512 |
 | Observations map onto the plugin's protocol | `robot0_eef_pos`/`_quat` is the pose, `robot0_gripper_qpos` the gripper, `cube_pos`/`cubeB_pos`/`cubeA_pos` the objects, and `object-state` is a 10-vector |
 
