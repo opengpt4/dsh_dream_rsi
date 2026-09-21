@@ -16,6 +16,7 @@ import {
   canTransitionDeployment,
   createEvaluationReport,
   createPolicyArtifact,
+  sealDeployment,
   signEvaluationReport,
   signPolicyArtifact,
   transitionDeployment,
@@ -460,6 +461,38 @@ test('activation is refused when the evidence report was signed by another key',
     assert.throws(
       () => context.writer.startCanary(proposed.deploymentId),
       /failed signature verification: no key not-in-the-ring is in the key ring/
+    );
+    assert.equal(context.registry.currentPolicyArtifactId(), null);
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('a deployment that rests on no evaluation is refused rather than unchecked', () => {
+  // `evaluationId` is nullable because the record predates the field being
+  // required, and a registry file can hold one. The evidence check must refuse
+  // that record rather than skip the check it cannot perform.
+  const context = setup();
+  try {
+    const orphan = sealDeployment({
+      deploymentId: 'deployment-orphan',
+      policyArtifactId: context.artifact.artifactId,
+      state: 'APPROVED',
+      history: ['PROPOSED', 'APPROVED'],
+      evaluationId: null,
+      approval: APPROVAL,
+      canary: null,
+      holdoutGate: null,
+      rollbackTarget: null,
+      lockOwner: context.lock.owner ?? null,
+      createdAt: AT,
+      updatedAt: AT
+    });
+    context.registry.saveDeployment(orphan);
+
+    assert.throws(
+      () => context.writer.startCanary(orphan.deploymentId),
+      /cannot be deployed: the deployment rests on no evaluation/
     );
     assert.equal(context.registry.currentPolicyArtifactId(), null);
   } finally {

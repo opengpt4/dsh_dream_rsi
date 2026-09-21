@@ -181,9 +181,9 @@ profile now or waits for the real adapter.
 
 ## 8. Open items that do not wait on these
 
-- `TODO: Sign snapshots and emit a candidate signature guard` — the scheme is
-  chosen (§1) and applied to policy artifacts and evaluation reports; snapshots
-  and the candidate guard are what remain.
+- `TODO: Sign snapshots — which requires persisting them first, since a signature on a record that exists only in memory has no reader — and emit a candidate `signature` guard`
+  — the scheme is chosen (§1) and applied to policy artifacts and evaluation
+  reports; snapshots and the candidate guard are what remain.
 - `TODO: Immutable signed policy/evaluation/snapshot artifacts` — the release
   blocker whose scheme is decided in §1; only the item above closes it.
 
