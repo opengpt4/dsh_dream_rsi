@@ -558,6 +558,8 @@ export interface EvaluationReport {
 
 `configHash` is `hashDreamRsiConfig(config)`: a score is only comparable with another taken under the same configuration. `signature` is not implemented; signing is tracked as an open blocker.
 
+`sampleCount` is the holdout evidence the report rests on — the holdout node count of the snapshot it was produced from — because that is what the holdout gate's `minimumHoldoutSamples` floor counts, and what the report's own `holdoutSamples` guard records. It is not the evaluated episode's step count: a report carrying both numbers let one run assert a sample count and a guard detail that disagreed, and the gate then rejected a run whose guard said the evidence was sufficient. `caseResults` is a separate axis: a single-episode run reports one case and its metrics, so the two numbers are not expected to match.
+
 Reports are generated outside candidate code. The current repository has a child-process evaluator with timeout; before untrusted candidate code is accepted, add OS/container controls for memory, CPU, filesystem, network and output size.
 
 ### 8.3 Isolation protocol

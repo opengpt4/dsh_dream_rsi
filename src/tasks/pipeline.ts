@@ -397,7 +397,12 @@ function buildReport(
       score: evaluation.score
     },
     caseResults,
-    sampleCount: outcome.nodes.length,
+    // The holdout evidence, not this episode's step count. The holdout gate's
+    // `minimumHoldoutSamples` floor counts holdout samples, and the same number
+    // is already in the `holdoutSamples` guard below: writing the step count
+    // here made one report assert two different sample counts, and made the gate
+    // reject a run whose own guard said the evidence was sufficient.
+    sampleCount: gates.holdoutSampleCount,
     passed: gates.missRateWithinBudget && episode.status === 'completed',
     guardResults
   });

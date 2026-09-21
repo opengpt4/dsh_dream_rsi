@@ -13,6 +13,7 @@ import {
   createDreamRsiRuntime,
   createEvaluationReport,
   createPolicyArtifact,
+  evaluateHoldoutGate,
   hashDreamRsiConfig,
   pipelineSettings,
   planPolicy,
@@ -597,7 +598,16 @@ test('a completed episode is persisted as an evaluation report', async () => {
     assert.equal(result.report.policyArtifactId, artifact.artifactId);
     assert.equal(result.report.snapshotId, result.snapshot.snapshotId);
     assert.equal(result.report.configHash, hashDreamRsiConfig(runtime.config));
-    assert.equal(result.report.sampleCount, 1);
+    // The holdout evidence, which is what the gate's `minimumHoldoutSamples`
+    // floor counts. This one-node episode has no holdout nodes, and the report
+    // says so in both places rather than claiming a sample it does not have.
+    assert.equal(result.report.sampleCount, result.snapshot.splits.holdout.length);
+    assert.equal(result.report.sampleCount, result.gates.holdoutSampleCount);
+    assert.equal(result.report.sampleCount, 0);
+    assert.match(
+      result.report.guardResults.find((guard) => guard.guard === 'holdoutSamples').detail,
+      /^0 holdout nodes$/
+    );
     assert.deepEqual(result.report.caseResults, [
       {
         caseId: 'episode-1',
@@ -616,6 +626,77 @@ test('a completed episode is persisted as an evaluation report', async () => {
     assert.ok(result.report.caseResults[0].latencyMs >= 0);
     // The report is registered, so the promotion gate can find it.
     assert.equal(registry.evaluation(result.report.evaluationId).passed, true);
+  } finally {
+    runtime.dispose();
+  }
+});
+
+test('a run with sufficient holdout evidence is not rejected for its sample count', async () => {
+  // The report's sample count is what the holdout gate's floor counts. Written
+  // as the episode's step count instead, a store-backed evaluation resting on
+  // many holdout nodes was rejected for having too few samples while the
+  // report's own `holdoutSamples` guard said it had enough.
+  const runtime = createDreamRsiRuntime(
+    resolveDreamRsiConfig({
+      storage: { sqlitePath: ':memory:' },
+      evaluation: { minimumHoldoutSamples: 3 }
+    })
+  );
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  try {
+    const artifact = policy({ source: BENIGN_CANDIDATE });
+    registry.registerPolicy(artifact);
+
+    // Prior work from three tasks, so the snapshot holds holdout evidence the
+    // episode itself does not contain.
+    for (const taskId of ['task-a', 'task-b', 'task-c']) {
+      runtime.store.append({
+        nodeId: `seed-${taskId}`,
+        taskId,
+        parentId: null,
+        policyVersion: 'v1',
+        environmentVersion: `${MOCK_ENVIRONMENT_ID}@1`,
+        stateHash: 'seed-state',
+        observationHash: 'seed-observation',
+        actionType: 'move_relative',
+        actionParams: { dx: 1, dy: 0, dz: 0 },
+        result: { actionId: `seed-${taskId}`, status: 'completed' },
+        score: 1,
+        tokenCost: 0,
+        execTimeMs: 1,
+        idempotencyKey: `seed-${taskId}`,
+        schemaVersion: 1,
+        createdAt: AT
+      });
+    }
+
+    const options = pipelineOptions(runtime, registry, artifact, {
+      snapshotSource: 'store',
+      splitConfig: { trainRatio: 0, validationRatio: 0, holdoutRatio: 1, seed: 'holdout-only' }
+    });
+    options.reporting = { ...options.reporting, split: 'holdout' };
+    const result = await runEpisodePipeline(options);
+
+    assert.ok(result.snapshot.splits.holdout.length >= 3);
+    assert.equal(result.gates.holdoutSufficient, true);
+    assert.equal(result.report.sampleCount, result.snapshot.splits.holdout.length);
+    // The episode is one step, so a step count here would sit far below the
+    // floor while the holdout evidence clears it.
+    assert.ok(result.report.sampleCount > result.outcome.nodes.length);
+
+    const candidates = registry.evaluationsFor(artifact.artifactId);
+    // The gate thresholds the runtime derives, including the sample floor the
+    // pipeline guard above was measured against.
+    const gate = evaluateHoldoutGate({
+      incumbent: result.report,
+      candidate: candidates[0],
+      configurationHash: result.report.configHash,
+      config: runtime.evaluationSettings.holdoutGate
+    });
+    assert.ok(
+      !gate.reasons.some((reason) => /sample count/.test(reason)),
+      `the sample floor should be met by the holdout evidence: ${JSON.stringify(gate.reasons)}`
+    );
   } finally {
     runtime.dispose();
   }
