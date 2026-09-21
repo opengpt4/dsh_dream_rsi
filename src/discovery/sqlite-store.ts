@@ -61,6 +61,15 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
     ).get(node.idempotencyKey) as SqliteRow | undefined;
     if (existing !== undefined) return deserializeNode(existing);
 
+    // Checked here rather than left to the primary key: the constraint error
+    // names the column, not the node, and the in-memory store refuses the same
+    // append with a domain error. The two implementations of this port must not
+    // report the same refusal differently.
+    const sameId = this.database.prepare(
+      'SELECT node_id FROM discovery_nodes WHERE node_id = ?'
+    ).get(node.nodeId);
+    if (sameId !== undefined) throw new Error(`node ${node.nodeId} already exists`);
+
     this.database.prepare(`
       INSERT INTO discovery_nodes (
         node_id, task_id, parent_id, policy_version, environment_version,

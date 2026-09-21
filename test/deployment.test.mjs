@@ -585,6 +585,38 @@ test('rolling back an active deployment degrades first and restores the previous
   }
 });
 
+test('activation is refused when the record lost its approval or gate evidence', () => {
+  // Like the null-evaluation case: the record is loadable from a registry file
+  // written before a field was required, so the activation gate must refuse it
+  // rather than activate on evidence it cannot see.
+  const context = setup();
+  try {
+    const bare = sealDeployment({
+      deploymentId: 'deployment-bare',
+      policyArtifactId: context.artifact.artifactId,
+      state: 'CANARY',
+      history: ['PROPOSED', 'APPROVED', 'CANARY'],
+      evaluationId: context.evaluation.evaluationId,
+      approval: null,
+      canary: null,
+      holdoutGate: null,
+      rollbackTarget: null,
+      lockOwner: null,
+      createdAt: AT,
+      updatedAt: AT
+    });
+    context.registry.saveDeployment(bare);
+
+    assert.throws(
+      () => context.writer.completeCanary(bare.deploymentId, HEALTHY, THRESHOLDS),
+      /cannot activate without an approval, an evaluation, and a gate verdict/
+    );
+    assert.equal(context.registry.currentPolicyArtifactId(), null);
+  } finally {
+    context.cleanup();
+  }
+});
+
 test('a rollback from a state that cannot reach one is refused without a trace', () => {
   // PROPOSED never became anything: rolling it back would record a rollback of
   // a policy that was never deployed. ROLLED_BACK is already there, and rolling

@@ -439,7 +439,7 @@ export interface DiscoveryNode {
 }
 ```
 
-The repository must enforce unique `idempotencyKey`, preserve the first accepted node for retries, and provide indexes for `taskId`, `parentId`, `policyVersion`, `environmentVersion` and `createdAt`.
+The repository must enforce unique `idempotencyKey`, preserve the first accepted node for retries, and provide indexes for `taskId`, `parentId`, `policyVersion`, `environmentVersion` and `createdAt`. `nodeId` is unique as well, and the two identities mean different things: a repeated `idempotencyKey` is a retry that returns the stored node, while a repeated `nodeId` under a different key is a collision that is refused and leaves the first record in place. Both implementations report that refusal with the same domain error naming the node — the SQLite store's primary-key error names a column instead, which no caller can match on and which the in-memory store never produced.
 
 ### 6.2 Artifact reference
 

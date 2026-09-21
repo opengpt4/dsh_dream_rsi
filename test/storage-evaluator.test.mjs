@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { SQLiteDiscoveryStore } from '../dist/discovery/sqlite-store.js';
+import { InMemoryDiscoveryStore, SQLiteDiscoveryStore } from '../dist/index.js';
 import { DEFAULT_EVALUATOR_CONFIG, evaluateReplay } from '../dist/evolution/evaluator.js';
 
 const node = {
@@ -104,4 +104,24 @@ test('the stored schema version is read back rather than defaulted', () => {
   assert.equal(store.readAll().find((entry) => entry.nodeId === 'from-other-schema').schemaVersion, 2);
   assert.deepEqual(store.get('from-other-schema'), fromOtherSchema);
   store.close();
+});
+
+test('both stores refuse a repeated node id the same way, and keep the first record', () => {
+  // The port has two implementations. A node id is unique and an idempotency
+  // key is the retry identity: a second append with the same key returns the
+  // stored node, while the same *id* under a different key is a collision. The
+  // SQLite store used to report that as a primary-key error naming the column,
+  // which no caller can match on and which the in-memory store never produced.
+  for (const [label, store] of [['in-memory', new InMemoryDiscoveryStore()], ['sqlite', new SQLiteDiscoveryStore(':memory:')]]) {
+    store.append(node);
+    assert.throws(
+      () => store.append({ ...node, idempotencyKey: 'a-different-key', score: 0.1 }),
+      new RegExp(`node ${node.nodeId} already exists`),
+      `${label} must name the node it refused`
+    );
+    // Refused, not replaced: the first node is what the store holds.
+    assert.equal(store.get(node.nodeId).score, node.score, `${label} must keep the stored node`);
+    assert.equal(store.readAll().length, 1, `${label} must not have stored a second node`);
+    if (store.close) store.close();
+  }
 });

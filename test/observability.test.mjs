@@ -433,6 +433,15 @@ test('a family that never recorded a miss flag reports no miss rate', () => {
   assert.deepEqual(family.missRate, { sampleCount: 0, mean: 0, min: 0, max: 0, lower: null, upper: null });
 });
 
+test('the t table refuses a degrees-of-freedom it has no value for', () => {
+  // The table is indexed by degrees of freedom, so a fractional or non-positive
+  // value has no entry. Returning the nearest one would put a wrong number into
+  // every interval without saying so.
+  for (const bad of [0, -1, 2.5, Number.NaN]) {
+    assert.throws(() => tCritical95(bad), /degreesOfFreedom must be a positive integer/);
+  }
+});
+
 test('a non-finite sample is refused rather than widening every interval silently', () => {
   assert.throws(() => aggregate([1, Number.NaN]), /non-finite/);
   assert.throws(() => aggregate([Number.POSITIVE_INFINITY]), /non-finite/);
