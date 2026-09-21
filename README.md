@@ -28,6 +28,8 @@ Implemented and tested capabilities include:
   cancelled attempts, with task, episode, session, policy, correlation, and action IDs on every node
 - episode pipeline: snapshot -> replay -> evaluator, applying the runtime's derived replay and
   evaluation ceilings
+- action safety contract: capability profile, `REQUESTED -> AUTHORIZED -> EXECUTING -> terminal` state machine,
+  per-session mutex, rate limit, idempotency, lease, confirmation, and an emergency-stop latch that forbids retry
 - idempotent in-memory and SQLite Discovery stores
 - canonical ReplayKey and deterministic counterfactual replay
 - Q/C/P/M evaluation, task-level data splits, and monotonic gating
@@ -44,7 +46,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 77 passing tests. OS/container sandboxing, candidate
+The current suite contains 95 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

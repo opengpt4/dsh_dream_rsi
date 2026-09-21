@@ -5,6 +5,8 @@ import { MockEmbodiedBackend } from './embodied/backend.js';
 import { MockEnvironmentAdapter } from './embodied/mock-adapter.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/split.js';
 import { SingleWriterLock } from './operations/single-writer-lock.js';
+import { ActionGuard, type ConfirmationRequest } from './safety/action-guard.js';
+import { MOCK_CAPABILITY_PROFILE } from './safety/capability.js';
 
 /** Replay ceilings derived from config, consumed by the episode pipeline. */
 export interface ReplaySettings {
@@ -34,10 +36,22 @@ export interface DreamRsiRuntime {
   readonly splitConfig: EvaluationSplitConfig;
   readonly replaySettings: ReplaySettings;
   readonly evaluationSettings: EvaluationSettings;
+  /** Enforces the action safety contract for every action this runtime dispatches. */
+  readonly guard: ActionGuard;
   readonly evolutionLock: SingleWriterLock;
   readonly deploymentLock: SingleWriterLock;
   /** Releases every resource this runtime owns. Safe to call more than once. */
   dispose(): void;
+}
+
+/**
+ * Host-provided approvals.
+ *
+ * `confirm` is absent by default, which denies every action whose capability
+ * requires confirmation. Approval is opt-in, never implied.
+ */
+export interface DreamRsiHooks {
+  readonly confirm?: (request: ConfirmationRequest) => boolean;
 }
 
 /**
@@ -50,7 +64,7 @@ export interface DreamRsiRuntime {
  * file and its parent directory, and mounting the plugin must not write to the
  * host filesystem before anything reads a Discovery node.
  */
-export function createDreamRsiRuntime(config: DreamRsiConfig): DreamRsiRuntime {
+export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHooks = {}): DreamRsiRuntime {
   validateDreamRsiConfig(config);
 
   let disposed = false;
@@ -92,6 +106,13 @@ export function createDreamRsiRuntime(config: DreamRsiConfig): DreamRsiRuntime {
       minimumHoldoutSamples: config.evaluation.minimumHoldoutSamples,
       splitConfig
     },
+    guard: new ActionGuard({
+      profile: MOCK_CAPABILITY_PROFILE,
+      actionLeaseMs: config.embodied.actionLeaseMs,
+      maxActionsPerMinute: config.embodied.maxActionsPerMinute,
+      requireConfirmation: config.embodied.requireConfirmation,
+      ...(hooks.confirm !== undefined ? { confirm: hooks.confirm } : {})
+    }),
     evolutionLock: new SingleWriterLock(config.operations.evolutionLock, config.operations.jobLeaseMs),
     deploymentLock: new SingleWriterLock(config.operations.deploymentLock, config.operations.jobLeaseMs),
     dispose() {

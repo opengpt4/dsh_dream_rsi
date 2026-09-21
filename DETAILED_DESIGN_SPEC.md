@@ -303,6 +303,46 @@ stateDiagram-v2
 
 After `EMERGENCY_STOP`, automatic retry is forbidden. All terminal transitions are idempotent and carry the same `actionId`.
 
+Implemented in `src/safety/action-state.ts` as an explicit transition table; a transition absent from the table throws rather than silently succeeding.
+
+#### Capability profile
+
+`src/safety/capability.ts`. Every embodied backend declares one, and a capability absent from it is denied rather than defaulted. `checkCapability` rejects, in order: an undeclared action, an undeclared coordinate frame, a parameter the action does not accept, a numeric parameter beyond `maxNumericMagnitude`, and a deadline beyond `maxDurationMs`.
+
+```ts
+export interface CapabilityProfile {
+  profileId: string;
+  sensors: string[];
+  coordinateFrames: string[];
+  actions: Partial<Record<EmbodiedActionType, ActionCapability>>;
+}
+
+export interface ActionCapability {
+  actionType: EmbodiedActionType;
+  risk: 'safe' | 'guarded' | 'high';
+  requiresConfirmation: boolean;
+  limits: { allowedParameters: string[]; maxNumericMagnitude: number; maxDurationMs: number };
+}
+```
+
+#### Action guard
+
+`src/safety/action-guard.ts` owns one session's safety state and is the only path to a backend when `RunEpisodeOptions.guard` is set. `execute` runs, in order:
+
+1. **Stop latch.** Checked *before* the idempotency lookup: after an operator stop, a previously recorded result must not be replayed as a successful retry.
+2. **Idempotency.** A key that was already authorized resolves to its recorded outcome without reaching the backend.
+3. **Session mutex.** A second action on a busy session is refused, not queued.
+4. **Capability profile.** Any rejection ends the action at `REQUESTED -> FAILED`.
+5. **Confirmation.** Required when both the capability and `embodied.requireConfirmation` say so. With no host approval hook the action is denied, so approval is opt-in and never implied.
+6. **Rate limit.** A sliding `RATE_WINDOW_MS` window per session.
+7. **Dispatch** on `AUTHORIZED -> EXECUTING`, holding a lease for `embodied.actionLeaseMs`.
+
+Rejections are returned rather than thrown, and are **not** cached under the idempotency key: a rate-limited or busy rejection is re-evaluated on the next attempt, while an authorized action never runs twice.
+
+The guard owns the two session-level deadlines, so they override whatever the aborted backend call reports: a stop in flight settles as `EMERGENCY_STOP` and a held lease settles as `TIMEOUT`, regardless of the adapter returning `cancelled`.
+
+`emergencyStop` latches the session and aborts any action in flight. The latch outlives the episode: `runEpisode` latches the guard when an episode ends in `emergency_stop`, so a later episode reusing the session is refused. `releaseSession` clears it, and re-arming a stopped session is an explicit operator act.
+
 ## 6. Discovery Data Model
 
 ### 6.1 Discovery node

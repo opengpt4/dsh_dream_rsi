@@ -67,11 +67,11 @@
 
 ### 4. Action Safety Contract
 
-- [ ] Implement capability profiles for sensors, actions, coordinate frames, limits, and risk levels.
-- [ ] Implement action state machine: `REQUESTED -> AUTHORIZED -> EXECUTING -> terminal`.
-- [ ] Add action lease, session mutex, idempotency, rate limit, timeout, cancellation, and emergency stop.
-- [ ] Prohibit automatic retry after emergency stop.
-- [ ] Add authorization and high-risk confirmation tests.
+- [x] Implement capability profiles for sensors, actions, coordinate frames, limits, and risk levels (`src/safety/capability.ts`); an undeclared action, frame, parameter, or limit is denied, never defaulted.
+- [x] Implement action state machine `REQUESTED -> AUTHORIZED -> EXECUTING -> terminal` (`src/safety/action-state.ts`); the spec diagram is the transition table and terminal states absorb.
+- [x] Add action lease, session mutex, idempotency, rate limit, timeout, cancellation, and emergency stop (`src/safety/action-guard.ts`), dispatched by the episode runner through `RunEpisodeOptions.guard`.
+- [x] Prohibit automatic retry after emergency stop: the latch is checked before the idempotency lookup, so a previously recorded result cannot be replayed as a retry.
+- [x] Add authorization and high-risk confirmation tests (`test/action-safety.test.mjs`, 17 tests). Confirmation is denied by default when no host approval hook is configured.
 
 ### 5. Artifact and Snapshot Integrity
 
@@ -182,7 +182,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [ ] AST, dependency, resource, and network guards.
 - [ ] Holdout gate with sufficient samples and per-task-family report.
 - [ ] Approval, canary, atomic deployment, and rollback.
-- [ ] Action state machine with emergency-stop and no retry after stop.
+- [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).
 - [ ] Audit, retention, deletion, and secret-redaction controls.
 - [ ] Multi-task benchmark evidence; no performance claim based only on replay fixtures.
 

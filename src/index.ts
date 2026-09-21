@@ -27,7 +27,35 @@ export {
  */
 export { DreamRsiConfigSchema as Config } from './config.js';
 
-export { createDreamRsiRuntime, type DreamRsiRuntime } from './runtime.js';
+export {
+  createDreamRsiRuntime,
+  type DreamRsiHooks,
+  type DreamRsiRuntime,
+  type EvaluationSettings,
+  type ReplaySettings
+} from './runtime.js';
+
+export {
+  checkCapability,
+  MOCK_CAPABILITY_PROFILE,
+  type ActionCapability,
+  type ActionLimits,
+  type CapabilityCheck,
+  type CapabilityProfile,
+  type CapabilityQuery,
+  type CapabilityRejection,
+  type RejectionCode,
+  type RiskLevel
+} from './safety/capability.js';
+export { canTransition, terminalStateFor, transition, type ActionState } from './safety/action-state.js';
+export {
+  ActionGuard,
+  RATE_WINDOW_MS,
+  type ActionGuardOptions,
+  type ActionRecord,
+  type ConfirmationRequest,
+  type GuardedActionRequest
+} from './safety/action-guard.js';
 
 export {
   EMBODIED_ACTION_TYPES,

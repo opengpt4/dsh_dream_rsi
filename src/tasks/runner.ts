@@ -13,6 +13,7 @@ import type {
   EnvironmentAdapter,
   Observation
 } from '../embodied/protocol.js';
+import type { ActionGuard } from '../safety/action-guard.js';
 import { validateTask, type Episode, type EpisodeStatus, type Task } from './models.js';
 
 export interface PolicyAction {
@@ -21,6 +22,8 @@ export interface PolicyAction {
   readonly timeoutMs?: number;
   /** Model tokens this decision cost. A scripted mock policy spends none. */
   readonly tokenCost?: number;
+  /** Presented to the guard for actions whose capability requires confirmation. */
+  readonly confirmationToken?: string;
 }
 
 export interface PolicyDecisionContext {
@@ -64,6 +67,12 @@ export interface RunEpisodeOptions {
    */
   readonly emergencyStop?: AbortSignal;
   readonly defaultActionTimeoutMs?: number;
+  /**
+   * When present, every action is authorized, leased, rate-limited, and
+   * idempotency-checked before the backend sees it. Absent means the adapter is
+   * called directly, which is how the recorded fixtures exercise the raw path.
+   */
+  readonly guard?: ActionGuard;
 }
 
 export interface EpisodeOutcome {
@@ -101,7 +110,12 @@ export async function runEpisode(options: RunEpisodeOptions): Promise<EpisodeOut
   const cancelled = (): boolean => options.signal?.aborted === true;
 
   const conclude = async (next: EpisodeStatus, why?: string): Promise<EpisodeOutcome> => {
-    if (next === 'emergency_stop') await adapter.emergencyStop(sessionId);
+    if (next === 'emergency_stop') {
+      await adapter.emergencyStop(sessionId);
+      // Latch the guard too, so the stop outlives this episode: a later episode
+      // reusing the session must be refused rather than silently proceeding.
+      options.guard?.emergencyStop(sessionId, why ?? 'episode ended in emergency stop');
+    }
     const episode: Episode = {
       episodeId,
       taskId: task.taskId,
@@ -156,7 +170,7 @@ export async function runEpisode(options: RunEpisodeOptions): Promise<EpisodeOut
       timeoutMs,
       requestedAt: new Date().toISOString()
     };
-    const result = await adapter.execute(request, options.signal);
+    const result = await dispatch(request, observation, options, decision.confirmationToken);
     criticalPathMs += result.execTimeMs;
 
     const node: DiscoveryNode = {
@@ -190,6 +204,57 @@ export async function runEpisode(options: RunEpisodeOptions): Promise<EpisodeOut
       return conclude(result.status, result.error ?? result.message);
     }
   }
+}
+
+/**
+ * Put one action through the guard when one is configured.
+ *
+ * A rejection is a recorded outcome, not an exception: the node still needs a
+ * terminal result, so one is synthesized from the observation the decision was
+ * made from.
+ */
+async function dispatch(
+  request: ActionRequest,
+  observation: Observation,
+  options: RunEpisodeOptions,
+  confirmationToken: string | undefined
+): Promise<ActionResult> {
+  if (options.guard === undefined) return options.adapter.execute(request, options.signal);
+
+  const record = await options.guard.execute(
+    {
+      actionId: request.actionId,
+      // One logical action is one step of one episode, so a retry of that step
+      // resolves to the result already recorded for it.
+      idempotencyKey: request.actionId,
+      sessionId: request.sessionId,
+      taskId: request.taskId,
+      episodeId: request.episodeId,
+      correlationId: request.correlationId,
+      actionType: request.actionType,
+      parameters: request.parameters,
+      frameId: observation.frameId,
+      timeoutMs: request.timeoutMs,
+      requestedAt: request.requestedAt,
+      ...(confirmationToken !== undefined ? { confirmationToken } : {})
+    },
+    (signal) => options.adapter.execute(request, signal),
+    options.signal
+  );
+  if (record.result !== undefined) return record.result;
+
+  const reason = record.rejection?.reason ?? 'action was not authorized';
+  return {
+    actionId: request.actionId,
+    status: 'failed',
+    step: observation.step,
+    pose: { ...observation.pose },
+    gripper: observation.gripper,
+    message: reason,
+    execTimeMs: 0,
+    completedAt: new Date().toISOString(),
+    error: record.rejection === undefined ? reason : `${record.rejection.code}: ${reason}`
+  };
 }
 
 function toJsonValue(result: ActionResult): JsonValue {
