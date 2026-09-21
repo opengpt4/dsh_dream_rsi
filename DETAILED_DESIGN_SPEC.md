@@ -576,7 +576,7 @@ Parent process sends one JSON request to a worker over stdin. Worker returns one
 
 #### Node permission model
 
-`src/operations/isolated-child.ts` spawns every isolated child under Node's permission model by default: `--experimental-permission` with a read grant scoped to the child's own directory, and no write or `child_process` grant. A confined child that attempts either receives `ERR_ACCESS_DENIED`, which bounds filesystem writes and process count before the process-group kill is even relevant.
+`src/operations/isolated-child.ts` spawns every isolated child under Node's permission model by default: `--experimental-permission` with a read grant scoped to the child's own directory, and no write, `child_process`, or worker-thread grant. A confined child that attempts any of them receives `ERR_ACCESS_DENIED`, which bounds filesystem writes and process count before the process-group kill is even relevant. Worker threads are denied by the same default and are a separate grant from `child_process`: a second isolate is a second heap, so admitting one would multiply the child's memory ceiling, and a probe test pins that widening one does not widen the other.
 
 Two details are load-bearing. The entry point and every granted path are resolved with `realpathSync` first, because `tmpdir()` is a symlink on macOS and a grant written as `/var/...` never matches the `/private/var/...` path the child computes when it resolves itself. And an explicit grant is resolved the same way as the derived one, or the caller's grant silently fails.
 
@@ -849,7 +849,7 @@ The evaluator runs in a child process that leads its own process group (`detache
 
 An observation whose `schemaVersion` is not the expected one fails the episode before a Discovery node is built. Recording it would put the mismatch into the replay key, producing a silently different key instead of an error — the one thing a version field exists to prevent.
 
-Every child is spawned under Node's permission model (`--experimental-permission`) with a read grant scoped to its own directory and no write or `child_process` grant, which bounds filesystem writes and process count, and with a V8 heap ceiling, which bounds memory. CPU time and network remain unbounded: the permission model does not restrict `net.connect` (confirmed by a probe), and Node exposes no CPU-time ceiling. Both need OS-level confinement, and Node documents the permission model as not a security boundary against hostile native code.
+Every child is spawned under Node's permission model (`--experimental-permission`) with a read grant scoped to its own directory and no write, `child_process`, or worker-thread grant, which bounds filesystem writes and process count, and with a V8 heap ceiling, which bounds memory — the ceiling is a whole child's worth only because a worker thread, and therefore a second isolate, is refused. CPU time and network remain unbounded: the permission model does not restrict `net.connect` (confirmed by a probe), and Node exposes no CPU-time ceiling. Both need OS-level confinement, and Node documents the permission model as not a security boundary against hostile native code.
 
 ## 13. Observability and Audit
 

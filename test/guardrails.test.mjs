@@ -277,6 +277,37 @@ test('a confined child cannot spawn a process', async () => {
   assert.equal(result.quality, 1, 'the spawn should have been denied');
 });
 
+test('a confined child cannot spawn a worker thread either', async () => {
+  const result = await evaluateReplayIsolated(probe('worker-probe'), undefined, options());
+
+  // A second isolate is a second heap, so the heap ceiling is a whole child's
+  // worth only while this is denied. The permission model refuses `Worker` for
+  // the same reason it refuses `fork`.
+  assert.equal(result.quality, 1, 'the worker should have been denied');
+});
+
+test('granting child_process does not also grant worker threads', async () => {
+  const result = await evaluateReplayIsolated(
+    probe('worker-probe'),
+    undefined,
+    options({ confinement: { allowRead: [join(tmpdir(), '*')], allowChildProcess: true } })
+  );
+
+  // The two grants are separate, so widening one containment does not silently
+  // widen the other.
+  assert.equal(result.quality, 1, 'a child_process grant must not admit a worker');
+});
+
+test('an unconfined child can spawn a worker, so the probes above mean something', async () => {
+  const result = await evaluateReplayIsolated(
+    probe('worker-probe'),
+    undefined,
+    options({ confinement: false })
+  );
+
+  assert.equal(result.quality, 0, 'without confinement the worker should start');
+});
+
 test('a host that cannot use the permission flag can disable confinement explicitly', async () => {
   const target = join(tmpdir(), `dream-rsi-unconfined-${process.pid}.txt`);
   try {

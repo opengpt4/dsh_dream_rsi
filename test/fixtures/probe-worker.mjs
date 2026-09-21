@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { Worker } from 'node:worker_threads';
 
 /**
  * Test double for `evaluator-worker.js`.
@@ -48,6 +49,23 @@ lines.once('line', (line) => {
       // depending on where the check lands.
       const outcome = spawnSync(process.execPath, ['-e', '0']);
       denied = outcome.error?.code === 'ERR_ACCESS_DENIED' ? 1 : 0;
+    } catch (error) {
+      denied = error.code === 'ERR_ACCESS_DENIED' ? 1 : 0;
+    }
+    process.stdout.write(JSON.stringify({ result: { quality: denied, cost: 0, parallelEfficiency: 0, missRate: 0, score: 0 } }) + '\n');
+    return;
+  }
+
+  if (mode === 'worker-probe') {
+    // A second isolate is a second heap, so the memory ceiling is only a whole
+    // child's worth if the permission model refuses one. Encode the answer in
+    // `quality`: 1 means the worker was denied.
+    let denied = 0;
+    try {
+      const worker = new Worker('setInterval(() => {}, 1000)', { eval: true });
+      worker.on('error', () => {});
+      // Never leave it running: the wrapper waits for this process to exit.
+      setTimeout(() => void worker.terminate(), 50);
     } catch (error) {
       denied = error.code === 'ERR_ACCESS_DENIED' ? 1 : 0;
     }

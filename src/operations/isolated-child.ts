@@ -27,16 +27,22 @@ export const DEFAULT_MAX_OLD_SPACE_SIZE_MB = 512;
  * Runtime confinement for the child, via Node's permission model.
  *
  * On by default: the child may read its own directory and nothing else, and may
- * not write or spawn. This is defense in depth, not the OS/container sandbox —
- * Node documents the permission model as not a security boundary against
- * hostile native code, and it does not restrict network access or CPU time.
+ * not write, spawn, or start a worker thread. This is defense in depth, not the
+ * OS/container sandbox — Node documents the permission model as not a security
+ * boundary against hostile native code, and it does not restrict network access
+ * or CPU time.
  */
 export interface ChildConfinement {
   /** Directories the child may read. Defaults to the entry point's directory. */
   readonly allowRead?: readonly string[];
   /** Never granted by default. */
   readonly allowWrite?: readonly string[];
-  /** Grants `child_process`. Off by default, which is what bounds process count. */
+  /**
+   * Grants `child_process`. Off by default, which is what bounds process count.
+   * Worker threads stay denied: a second isolate is a second heap, so admitting
+   * one would multiply the child's memory ceiling, and the two grants are
+   * deliberately not the same switch.
+   */
   readonly allowChildProcess?: boolean;
 }
 
