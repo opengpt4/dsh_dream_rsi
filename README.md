@@ -37,7 +37,8 @@ Implemented and tested capabilities include:
   per-session mutex, rate limit, idempotency, lease, confirmation, and an emergency-stop latch that forbids retry
 - every action dispatch, from `embodied_act` and from an episode, passes through that contract
 - idempotent in-memory and SQLite Discovery stores, with a transactional whole-tree read for snapshots
-- immutable policy registry: content-addressed `PolicyArtifact`, `EvaluationReport`, and `Deployment` records,
+- immutable policy registry with one file per record, so two registries sharing a directory cannot drop each
+  other's records: content-addressed `PolicyArtifact`, `EvaluationReport`, and `Deployment` records,
   a current-policy pointer that moves only behind an approval, a passing evaluation, and a passing canary,
   and a file store that re-verifies every record on load
 - evaluation reports persisted per run, with rejection reasons summarised by task family
@@ -99,7 +100,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 345 passing tests. OS/container sandboxing and a real
+The current suite contains 346 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

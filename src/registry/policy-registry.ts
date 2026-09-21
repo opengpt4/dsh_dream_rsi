@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { hashJson } from '../hash.js';
 import { transitionDeployment } from './deployment-state.js';
@@ -275,35 +275,85 @@ export class InMemoryPolicyRegistryStore implements PolicyRegistryStore {
  * rejected at construction rather than silently trusted.
  */
 export class FilePolicyRegistryStore implements PolicyRegistryStore {
-  constructor(private readonly filePath: string) {}
+  private readonly policiesDir: string;
+  private readonly evaluationsDir: string;
+  private readonly deploymentsDir: string;
+  private readonly pointerPath: string;
+
+  /**
+   * One file per record, under a directory.
+   *
+   * A single snapshot file cannot be written by two registries: each writes its
+   * whole in-memory map, so the later write drops the other's records. Policies
+   * and evaluations are content-addressed, so per-record files can never
+   * conflict; deployments are one file each, and the deployment writer lease
+   * remains the ordering discipline for them. The pointer is a single value, so
+   * last write wins by construction — which is what the lease is there to order.
+   *
+   * `PolicyRegistry` keeps an in-memory view from its last load or save, so a
+   * live registry does not see another's records until it reloads. The files
+   * are the shared state; the map is a cache.
+   */
+  constructor(rootDir: string) {
+    this.policiesDir = join(rootDir, 'policies');
+    this.evaluationsDir = join(rootDir, 'evaluations');
+    this.deploymentsDir = join(rootDir, 'deployments');
+    this.pointerPath = join(rootDir, 'current.json');
+    for (const directory of [this.policiesDir, this.evaluationsDir, this.deploymentsDir]) {
+      mkdirSync(directory, { recursive: true });
+    }
+  }
 
   load(): RegistrySnapshot {
-    if (!existsSync(this.filePath)) return EMPTY_REGISTRY_SNAPSHOT;
-    const snapshot = JSON.parse(readFileSync(this.filePath, 'utf8')) as RegistrySnapshot;
+    const policies = readRecords<PolicyArtifact>(this.policiesDir);
+    const evaluations = readRecords<EvaluationReport>(this.evaluationsDir);
+    const deployments = readRecords<Deployment>(this.deploymentsDir);
+    const currentPolicyArtifactId = existsSync(this.pointerPath)
+      ? (JSON.parse(readFileSync(this.pointerPath, 'utf8')) as { current: string | null }).current
+      : null;
 
-    for (const policy of snapshot.policies) {
+    for (const policy of policies) {
       if (!verifyPolicyArtifact(policy)) {
-        throw new Error(`registry file is corrupt: policy ${policy.artifactId} does not match its content`);
+        throw new Error(`registry is corrupt: policy ${policy.artifactId} does not match its content`);
       }
     }
-    for (const report of snapshot.evaluations) {
+    for (const report of evaluations) {
       if (!verifyEvaluationReport(report)) {
-        throw new Error(`registry file is corrupt: evaluation ${report.evaluationId} does not match its content`);
+        throw new Error(`registry is corrupt: evaluation ${report.evaluationId} does not match its content`);
       }
     }
-    if (snapshot.currentPolicyArtifactId !== null) {
-      const known = snapshot.policies.some((policy) => policy.artifactId === snapshot.currentPolicyArtifactId);
+    if (currentPolicyArtifactId !== null) {
+      const known = policies.some((policy) => policy.artifactId === currentPolicyArtifactId);
       if (!known) {
-        throw new Error(`registry file is corrupt: current policy ${snapshot.currentPolicyArtifactId} is not registered`);
+        throw new Error(`registry is corrupt: current policy ${currentPolicyArtifactId} is not registered`);
       }
     }
-    return snapshot;
+    return { policies, evaluations, deployments, currentPolicyArtifactId };
   }
 
   save(snapshot: RegistrySnapshot): void {
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    const temporaryPath = `${this.filePath}.${process.pid}.tmp`;
-    writeFileSync(temporaryPath, `${JSON.stringify(snapshot, null, 2)}\n`);
-    renameSync(temporaryPath, this.filePath);
+    for (const policy of snapshot.policies) writeRecord(this.policiesDir, policy.artifactId, policy);
+    for (const report of snapshot.evaluations) writeRecord(this.evaluationsDir, report.evaluationId, report);
+    for (const deployment of snapshot.deployments) writeRecord(this.deploymentsDir, deployment.deploymentId, deployment);
+    writeAtomic(this.pointerPath, { current: snapshot.currentPolicyArtifactId });
   }
+}
+
+function readRecords<T>(directory: string): T[] {
+  return readdirSync(directory)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => JSON.parse(readFileSync(join(directory, name), 'utf8')) as T);
+}
+
+/** Write then rename, so a reader never observes a partial record. */
+function writeRecord(directory: string, id: string, record: unknown): void {
+  // The id is a content hash, so two writers can only write the same file for
+  // the same record.
+  writeAtomic(join(directory, `${id}.json`), record);
+}
+
+function writeAtomic(path: string, value: unknown): void {
+  const temporaryPath = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`);
+  renameSync(temporaryPath, path);
 }

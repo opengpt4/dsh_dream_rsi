@@ -607,7 +607,7 @@ Candidates are immutable artifacts. The Evolution Agent may output source, diff,
 3. `canary.passed`;
 4. the evaluation exists, covers this artifact, and passed.
 
-Persistence goes through a `PolicyRegistryStore` port. `FilePolicyRegistryStore` writes one file atomically and re-verifies every record on load, so a tampered or truncated registry is refused at construction rather than silently trusted. Approval is always explicit, so nothing in this path deploys automatically.
+Persistence goes through a `PolicyRegistryStore` port. The file store keeps one record per file: a single snapshot file cannot be written by two registries, because each writes its whole in-memory map and the later write drops the other's records. Policies and evaluations are content-addressed so per-record files cannot conflict, deployments are one file each, and the pointer is a single value where last write wins — which is what the writer lease is there to order. A live registry's map is a cache of its last load or save, not shared state; the files are. `FilePolicyRegistryStore` writes one file atomically and re-verifies every record on load, so a tampered or truncated registry is refused at construction rather than silently trusted. Approval is always explicit, so nothing in this path deploys automatically.
 
 ### 9.2 Candidate generation
 

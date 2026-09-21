@@ -337,14 +337,13 @@ test('a second promotion points its rollback target at the version it replaced',
 test('the registry round-trips through a file, pointer included', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
   try {
-    const filePath = join(dir, 'registry.json');
-    const first = new PolicyRegistry(new FilePolicyRegistryStore(filePath));
+    const first = new PolicyRegistry(new FilePolicyRegistryStore(dir));
     const artifact = policy();
     first.registerPolicy(artifact);
     first.registerEvaluation(report(artifact.artifactId));
     first.promotePolicy(artifact.artifactId, promotion(first.evaluationsFor(artifact.artifactId)[0].evaluationId));
 
-    const reopened = new PolicyRegistry(new FilePolicyRegistryStore(filePath));
+    const reopened = new PolicyRegistry(new FilePolicyRegistryStore(dir));
     assert.equal(reopened.policyCount(), 1);
     assert.equal(reopened.evaluationCount(), 1);
     assert.equal(reopened.currentPolicyArtifactId(), artifact.artifactId);
@@ -354,36 +353,60 @@ test('the registry round-trips through a file, pointer included', () => {
   }
 });
 
-test('a tampered registry file is refused rather than trusted', () => {
+test('a tampered registry record is refused rather than trusted', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
   try {
-    const filePath = join(dir, 'registry.json');
-    const registry = new PolicyRegistry(new FilePolicyRegistryStore(filePath));
+    const registry = new PolicyRegistry(new FilePolicyRegistryStore(dir));
     const artifact = policy();
     registry.registerPolicy(artifact);
 
-    const written = JSON.parse(readFileSync(filePath, 'utf8'));
-    written.policies[0].allowedCapabilities = ['everything'];
-    writeFileSync(filePath, JSON.stringify(written));
+    const recordPath = join(dir, 'policies', `${artifact.artifactId}.json`);
+    const written = JSON.parse(readFileSync(recordPath, 'utf8'));
+    written.allowedCapabilities = ['everything'];
+    writeFileSync(recordPath, JSON.stringify(written));
 
-    assert.throws(() => new PolicyRegistry(new FilePolicyRegistryStore(filePath)), /does not match its content/);
+    assert.throws(() => new PolicyRegistry(new FilePolicyRegistryStore(dir)), /does not match its content/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('a registry file pointing at an unregistered current policy is refused', () => {
+test('a pointer at an unregistered current policy is refused', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
   try {
-    const filePath = join(dir, 'registry.json');
-    const registry = new PolicyRegistry(new FilePolicyRegistryStore(filePath));
+    const registry = new PolicyRegistry(new FilePolicyRegistryStore(dir));
     registry.registerPolicy(policy());
 
-    const written = JSON.parse(readFileSync(filePath, 'utf8'));
-    written.currentPolicyArtifactId = 'f'.repeat(64);
-    writeFileSync(filePath, JSON.stringify(written));
+    writeFileSync(join(dir, 'current.json'), JSON.stringify({ current: 'f'.repeat(64) }));
 
-    assert.throws(() => new PolicyRegistry(new FilePolicyRegistryStore(filePath)), /is not registered/);
+    assert.throws(() => new PolicyRegistry(new FilePolicyRegistryStore(dir)), /is not registered/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('two registries sharing a directory do not drop each other\'s records', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-registry-'));
+  try {
+    // Both load before either writes, which is the clobber case: a single
+    // snapshot file would leave only the second writer's records.
+    const first = new PolicyRegistry(new FilePolicyRegistryStore(dir));
+    const second = new PolicyRegistry(new FilePolicyRegistryStore(dir));
+
+    // Distinct content, so the two artifacts have distinct ids. The helper
+    // takes an overrides object, not a version string.
+    const a = policy({ version: 'v1' });
+    const b = policy({ version: 'v2', parentVersion: 'v1' });
+    first.registerPolicy(a);
+    second.registerPolicy(b);
+
+    // Nothing is lost: a reader loading afterwards sees both. A live registry
+    // holds an in-memory view from its last load or save, so neither writer
+    // sees the other's record until it reloads -- the trade for a cached map,
+    // and the reason the writer leases exist to keep two writers from racing.
+    assert.equal(first.policyCount(), 1);
+    assert.equal(second.policyCount(), 1);
+    assert.equal(new PolicyRegistry(new FilePolicyRegistryStore(dir)).policyCount(), 2);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
