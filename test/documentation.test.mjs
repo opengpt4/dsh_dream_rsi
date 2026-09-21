@@ -82,10 +82,80 @@ test('the design spec does not deny a capability the code provides', () => {
   assert.ok(
     !/createdAt.*part of (the )?(content hash|snapshot identity)/i.test(spec),
     'the spec still says the snapshot id covers creation time'
-  );  assert.ok(
+  );
+  assert.ok(
     !/CPU, memory, filesystem, and network limits require OS-level confinement and are not yet implemented/.test(spec),
     'the spec still says no filesystem limit exists'
   );
+});
+
+test('the decision brief accounts for every open item exactly once', () => {
+  // `DECISIONS.md` referred to items by their line number in `TODO.md`, so
+  // inserting one line above them silently repointed every reference at a
+  // different item — which is what happened. References are now
+  // `TODO: <leading text>`, and the brief must account for the whole open set:
+  // every `[!]` item behind a numbered section, every other open item either
+  // behind a section or named as not waiting on one.
+  const items = readFileSync(`${ROOT}TODO.md`, 'utf8')
+    .split('\n')
+    .flatMap((line) => {
+      const match = /^- \[([ x])\] (.*)$/.exec(line);
+      if (match === null) return [];
+      return [{ text: match[2].replace(/`/g, ''), open: match[1] === ' ', bang: /\[!\]/.test(match[2]) }];
+    });
+  const open = items.filter((item) => item.open);
+  assert.ok(open.length > 0, 'no open items were parsed, so this check is not measuring anything');
+
+  const brief = readFileSync(`${ROOT}DECISIONS.md`, 'utf8');
+  const sections = brief
+    .split(/^## /m)
+    .slice(1)
+    .map((body) => ({ heading: body.split('\n')[0].trim(), body }));
+  const inTree = sections.filter(({ heading }) => /do not wait on these/i.test(heading));
+  assert.equal(inTree.length, 1, 'the brief needs exactly one section for open items that wait on no decision');
+  const inTreeHeadings = new Set(inTree.map(({ heading }) => heading));
+
+  const referencesIn = (body) => [...body.matchAll(/`TODO: ([^`]+)`/g)].map(([, reference]) => reference.trim());
+  // Leading text, not an exact quote: the item is free to grow after the anchor.
+  const resolve = (reference) => open.filter(({ text }) => text.startsWith(reference));
+  const gating = sections.filter(({ heading }) => /^\d+\./.test(heading) && !inTreeHeadings.has(heading));
+
+  const claims = new Set();
+  for (const section of sections) {
+    for (const reference of referencesIn(section.body)) {
+      const matches = resolve(reference);
+      assert.equal(matches.length, 1, `"${reference}" resolves to ${matches.length} open items`);
+      const [item] = matches;
+      assert.ok(
+        !item.bang || !inTreeHeadings.has(section.heading),
+        `"${reference}" is a [!] item but waits in the in-tree section`
+      );
+      claims.add(item);
+    }
+  }
+
+  const gatingClaims = new Set(
+    gating.flatMap((section) => referencesIn(section.body).flatMap((reference) => resolve(reference)))
+  );
+  const inTreeClaims = new Set(inTree.flatMap((section) => referencesIn(section.body).flatMap((r) => resolve(r))));
+
+  const unclaimed = open.filter((item) => !claims.has(item)).map((item) => item.text.slice(0, 60));
+  assert.deepEqual(unclaimed, [], `open items no section of DECISIONS.md names:\n  ${unclaimed.join('\n  ')}`);
+  const gated = open.filter((item) => item.bang);
+  const ungated = gated.filter((item) => !gatingClaims.has(item));
+  assert.deepEqual(
+    ungated.map((item) => item.text.slice(0, 60)),
+    [],
+    'a [!] item is not behind any numbered section'
+  );
+
+  const bangClaim = /(\d+) items in `TODO.md` are marked/.exec(brief);
+  const splitClaim = /Of the (\d+) open items, (\d+) wait on one of these seven; the remaining (\d+)/.exec(brief);
+  assert.ok(bangClaim !== null && splitClaim !== null, 'the brief must state how many items it accounts for');
+  assert.equal(Number(bangClaim[1]), gated.length, 'the brief miscounts the [!] items');
+  assert.equal(Number(splitClaim[1]), open.length, 'the brief miscounts the open items');
+  assert.equal(Number(splitClaim[2]), gatingClaims.size, 'the brief miscounts the items waiting on a decision');
+  assert.equal(Number(splitClaim[3]), inTreeClaims.size, 'the brief miscounts the items that wait on no decision');
 });
 
 test('the design spec quotes the interval widening the t table produces', () => {

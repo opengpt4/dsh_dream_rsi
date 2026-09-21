@@ -1,17 +1,24 @@
 # Decisions needed
 
-Seven items in `TODO.md` are marked `[!]`: they cannot be settled from inside
-this repository because they choose a provider, a runtime, a benchmark, or a
-person. Everything reachable without them has been done, and the remaining
-seventeen open items sit behind these seven.
+7 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
+repository because they choose a provider, a runtime, a benchmark, or a person.
+Of the 17 open items, 16 wait on one of these seven; the remaining 1 —
+completing the `dream status` report — is in-tree work (§8).
 
 Each section states what already exists, the decision, the options with the
 tradeoff that matters here, and the smallest answer that lets work start.
 Nothing in this document is a recommendation unless it says so.
 
+Every item is referenced by its leading text in a backticked `TODO:` span,
+which `test/documentation.test.mjs` resolves against `TODO.md`. A reference that
+names no open item, or an open item that no section names, fails the suite.
+
 ---
 
-## 1. Signing scheme (item 84, release blocker 189)
+## 1. Signing scheme
+
+**Claims** `TODO: Select and implement a signing scheme` and release blocker
+`TODO: Immutable signed policy/evaluation/snapshot artifacts`.
 
 **Already built.** `SignatureVerifier` is a seam: `verify(artifact): boolean`,
 injected into `DeploymentWriter`. The deployment path refuses an unsigned
@@ -39,7 +46,13 @@ only the interface`, or `keyless`.
 
 ---
 
-## 2. Container or OS-level sandbox (item 92, release blocker 188)
+## 2. Container or OS-level sandbox
+
+**Claims** `TODO: Select and implement container or OS-level sandbox`, release
+blocker `TODO: Strong OS/container isolation for untrusted candidate code`, and
+the remaining CPU and network limits of
+`TODO: Add CPU, memory, process-count, wall-time, filesystem, and network limits`
+and `TODO: AST, dependency, resource, and network guards`.
 
 **Already built.** Every isolated child runs under Node's permission model: a
 read grant scoped to its own directory, no write, no `child_process`, no worker
@@ -66,7 +79,13 @@ seam, so the decision is which dependency the host must have.
 
 ---
 
-## 3. First simulator and task family (item 149)
+## 3. First simulator and task family
+
+**Claims** `TODO: Select first simulator and task family`, and with it
+`TODO: Add deterministic seed and large-payload artifact capture`,
+`TODO: Compare fixed baseline, hand-designed policy, evolved policy, and holdout performance`,
+`TODO: Holdout gate with sufficient samples and per-task-family report`, and
+`TODO: Multi-task benchmark evidence`.
 
 **Already built.** The `EnvironmentAdapter` boundary is enforced: the SDK is
 reached only through `embodied/mock-adapter.ts`, the protocol depends on nothing
@@ -78,19 +97,23 @@ but the core data model, and `test/architecture.test.mjs` fails if that changes.
 a bridge (every manipulation benchmark of note — Meta-World, ManiSkill,
 RoboSuite, PyBullet — is Python, so the adapter would proxy across processes),
 whether the host will install it, and whether it can supply the two topological
-families item 159 needs and the randomness/payloads item 152 needs.
+families that `TODO: Define at least two task families with distinct search-space topology`
+needs and the randomness and payloads the seed item needs.
 
 **Criteria that matter here, in order:** (1) two task families with distinct
 search-space topology; (2) a deterministic seed and large sensor payloads;
 (3) installable in this environment; (4) a coordinate frame and scoring function
-stable enough to freeze for item 150.
+stable enough to freeze for
+`TODO: Freeze observation schema, coordinate system, action capability profile, and scoring function`.
 
 **Smallest answer needed:** a name. If the choice is delegated to me, say so and
 I will pick against those four criteria and document the reasoning.
 
 ---
 
-## 4. Freeze the observation schema, frame, capability profile, and scoring (item 150)
+## 4. Freeze the observation schema, frame, capability profile, and scoring
+
+**Claims** `TODO: Freeze observation schema, coordinate system, action capability profile, and scoring function`.
 
 **Already built.** All four exist and are versioned or injectable:
 `OBSERVATION_SCHEMA_VERSION` with `assertObservationSchema` on every recorded
@@ -104,7 +127,7 @@ version bump rather than an edit. That is small, and it is the thing that makes
 every later score comparable.
 
 **The decision** is whether the current values are the ones to freeze — which is
-really a question about item 3, since a real simulator will want a frame and
+really a question about §3, since a real simulator will want a frame and
 sensors the mock does not have.
 
 **Smallest answer needed:** "freeze the current values as v1" (then a simulator
@@ -112,7 +135,10 @@ adapter conforms to them), or "freeze after the simulator is chosen".
 
 ---
 
-## 5. Two task families with distinct search-space topology (item 159)
+## 5. Two task families with distinct search-space topology
+
+**Claims** `TODO: Define at least two task families with distinct search-space topology`
+and `TODO: Test cross-task transfer and quantify transfer degradation`.
 
 **Already built.** Tasks carry `taskId`, `goal`, `environmentId`, `budget`, and
 metadata; `CaseResult` carries `taskFamily`; the split assigns by `taskId` and is
@@ -125,19 +151,23 @@ search is a path, against an ordering family, where it is a permutation with
 irreversible steps. Both must be real tasks in the chosen simulator.
 
 **Smallest answer needed:** the two families' shapes, or delegate and I will
-propose them once item 3 is answered.
+propose them once §3 is answered.
 
 ---
 
-## 6. Real `EnvironmentAdapter` (item 151)
+## 6. Real `EnvironmentAdapter`
 
-**Blocked on item 3.** No decision of its own; it is the implementation of that
-answer against the boundary in §3. The adapter must satisfy the schema
-freeze in §4 and produce the randomness and payloads item 152 needs.
+**Claims** `TODO: Implement one real EnvironmentAdapter`.
+
+**Blocked on §3.** No decision of its own; it is the implementation of that
+answer against the boundary in §3. The adapter must satisfy the schema freeze in
+§4 and produce the randomness and payloads the seed item in §3 needs.
 
 ---
 
-## 7. Human safety owner (item 179)
+## 7. Human safety owner
+
+**Claims** `TODO: Review high-risk embodied actions with a human safety owner`.
 
 **Already built.** Every action's `risk` and `requiresConfirmation` are declared
 in the capability profile, and confirmation is denied unless the host supplies a
@@ -153,16 +183,23 @@ profile now or waits for the real adapter.
 
 ---
 
+## 8. Open items that do not wait on these
+
+- `TODO: Extend the dream status facade to the rest of the FUNCTIONAL_SPEC.md §4.4 report`
+  — in-tree; the sections above do not gate it.
+
+---
+
 ## What each answer unblocks
 
 | Answer | Unblocks |
 |---|---|
-| Simulator (§3) | items 149, 151, 152, 160, 163, 191, 195 — the largest single block, and the only route to real holdout evidence |
-| Schema freeze (§4) | item 150, and the comparability of every score after it |
-| Signing (§1) | item 84 and release blocker 189 |
-| Sandbox (§2) | item 92, item 91's remaining CPU and network limits, and release blocker 188 |
-| Task families (§5) | items 159, 160, 163 |
-| Safety owner (§7) | item 179 |
+| Simulator (§3) | the simulator, adapter, seed, holdout-evidence, and benchmark items — the largest single block, and the only route to real holdout evidence |
+| Schema freeze (§4) | the freeze item, and the comparability of every score after it |
+| Signing (§1) | the signing item and the signed-artifacts release blocker |
+| Sandbox (§2) | the sandbox item, the remaining CPU and network limits, and the OS/container release blocker |
+| Task families (§5) | the two-family and cross-task-transfer items |
+| Safety owner (§7) | the human-review item |
 
 Until these are answered, the work available is hardening what exists. That has
 found real defects — a fabricated emergency stop, a trusted tampered deployment
