@@ -822,6 +822,10 @@ Two independent checks run over the same source before a candidate is evaluated 
 | `runAstGuard` | `eval`, `Function`, `exec*`/`spawn*`, dynamic `import()`, non-literal `require()`, forbidden module specifiers, `process.env`/`binding`/`kill`/`mainModule` |
 | `checkImports` | a relative import resolving outside the candidate root; a package absent from the allowlist; a built-in absent from the allowlist; any built-in that grants a capability |
 
+A forbidden name is resolved before it is matched: through redundant parentheses, through a comma expression's last operand, and through a known global object by property or by string key. `eval`, `(eval)`, `(0, eval)`, `globalThis.eval` and `globalThis["eval"]` are therefore one rule, as are `require` and `globalThis.require`; the same resolution applies to the object of a forbidden member access, so `globalThis.process.env` and `process["env"]` are matched too. Both guards share that resolution, so neither can admit a form the other names.
+
+What the guard cannot see is an alias or a computed name: `const f = eval`, `const k = "eval"; globalThis[k]`, and code inside a string that never appears as syntax. A pattern list is a prefilter, not a sandbox, which is why candidates that pass still run isolated.
+
 Built-ins are classified by the capability they grant — filesystem, network, process, secrets, code-generation, concurrency. **A capability-granting built-in cannot be allowlisted at all**, because approving it by name would make the profile meaningless. The unlisted remainder falls to the package allowlist and is denied, so a new Node release cannot silently widen what a candidate may reach.
 
 Both guards are pure functions of the source string: no state, no mutation, and the same input always yields the same verdict.

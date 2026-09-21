@@ -2,6 +2,8 @@ import { isAbsolute, relative, resolve } from 'node:path';
 
 import ts from 'typescript';
 
+import { resolveExpressionName } from './ast-guard.js';
+
 /**
  * Static import and capability allowlist for candidate policy/tool source.
  *
@@ -157,8 +159,10 @@ export function checkImports(source: string, options: ImportAllowlistOptions = {
       inspect(node, argument !== undefined && ts.isStringLiteralLike(argument) ? argument.text : '<computed>', 'dynamic');
     } else if (
       ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'require'
+      // Resolved rather than matched on the bare identifier: `globalThis.require`
+      // names the same function, and a module load that reaches the allowlist in
+      // no other way must not skip it.
+      resolveExpressionName(node.expression) === 'require'
     ) {
       const [argument] = node.arguments;
       const specifier = argument !== undefined && ts.isStringLiteralLike(argument) ? argument.text : undefined;

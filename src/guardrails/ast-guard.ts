@@ -53,12 +53,55 @@ const FORBIDDEN_MEMBER_ACCESS: ReadonlyArray<readonly [string, string]> = [
   ['process', 'mainModule']
 ];
 
+/** Objects a global may be reached through. `globalThis.eval` is `eval`. */
+const GLOBAL_OBJECTS = new Set(['globalThis', 'global', 'window', 'self']);
+
+/**
+ * The name an expression refers to, resolved through the wrappings that leave
+ * it the same value: redundant parentheses, a comma expression's last operand
+ * (the canonical `(0, eval)` indirect form), and a known global object's
+ * property, including `globalThis["eval"]`.
+ *
+ * Returns `undefined` when the expression is not a name this guard tracks.
+ */
+export function resolveExpressionName(expression: ts.Expression | undefined): string | undefined {
+  if (expression === undefined) return undefined;
+  if (ts.isIdentifier(expression)) return expression.text;
+  if (ts.isParenthesizedExpression(expression)) return resolveExpressionName(expression.expression);
+  if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+    return resolveExpressionName(expression.right);
+  }
+  if (
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    GLOBAL_OBJECTS.has(expression.expression.text)
+  ) {
+    return expression.name.text;
+  }
+  if (
+    ts.isElementAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    GLOBAL_OBJECTS.has(expression.expression.text) &&
+    expression.argumentExpression !== undefined &&
+    ts.isStringLiteralLike(expression.argumentExpression)
+  ) {
+    return expression.argumentExpression.text;
+  }
+  return undefined;
+}
+
 /**
  * Minimal AST-level guard for candidate policy/tool source. This is a
  * defense-in-depth building block, not a full sandbox: it rejects a known
  * set of dangerous syntax patterns so obviously unsafe candidates never
  * reach an isolated runner. It must be paired with process/container
  * isolation before untrusted candidate code executes (see BASELINE.md).
+ *
+ * A forbidden name is resolved through parentheses, a comma expression, and
+ * known global objects, so `eval`, `(eval)`, `(0, eval)`, `globalThis.eval` and
+ * `globalThis["eval"]` are one rule. What it still cannot see is an alias
+ * (`const f = eval`) or code in a string that never appears as syntax — a
+ * pattern list is not a sandbox, which is why the isolation above is required.
  */
 export function runAstGuard(source: string, fileName = 'candidate.ts'): AstGuardResult {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -79,25 +122,39 @@ export function runAstGuard(source: string, fileName = 'candidate.ts'): AstGuard
     if (ts.isCallExpression(node)) {
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
         report(node, 'dynamic-import', 'dynamic import() is not allowed');
-      } else if (ts.isIdentifier(node.expression) && FORBIDDEN_CALLEE_NAMES.has(node.expression.text)) {
-        report(node, 'forbidden-call', `call to "${node.expression.text}" is not allowed`);
-      } else if (ts.isIdentifier(node.expression) && node.expression.text === 'require') {
-        const [arg] = node.arguments;
-        const moduleName = arg && ts.isStringLiteralLike(arg) ? arg.text : undefined;
-        if (moduleName === undefined) {
-          report(node, 'dynamic-require', 'require() with a non-literal argument is not allowed');
-        } else {
-          checkModuleSpecifier(node, moduleName);
+      } else {
+        const callee = resolveExpressionName(node.expression);
+        if (callee !== undefined && FORBIDDEN_CALLEE_NAMES.has(callee)) {
+          report(node, 'forbidden-call', `call to "${callee}" is not allowed`);
+        } else if (callee === 'require') {
+          const [arg] = node.arguments;
+          const moduleName = arg && ts.isStringLiteralLike(arg) ? arg.text : undefined;
+          if (moduleName === undefined) {
+            report(node, 'dynamic-require', 'require() with a non-literal argument is not allowed');
+          } else {
+            checkModuleSpecifier(node, moduleName);
+          }
         }
       }
-    } else if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && FORBIDDEN_CALLEE_NAMES.has(node.expression.text)) {
-      report(node, 'forbidden-call', `new ${node.expression.text}(...) is not allowed`);
+    } else if (ts.isNewExpression(node)) {
+      const callee = resolveExpressionName(node.expression);
+      if (callee !== undefined && FORBIDDEN_CALLEE_NAMES.has(callee)) {
+        report(node, 'forbidden-call', `new ${callee}(...) is not allowed`);
+      }
     } else if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
       checkModuleSpecifier(node, node.moduleSpecifier.text);
-    } else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
-      const objectName = node.expression.text;
-      const propertyName = node.name.text;
-      if (FORBIDDEN_MEMBER_ACCESS.some(([object, property]) => object === objectName && property === propertyName)) {
+    } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      const objectName = resolveExpressionName(node.expression);
+      const propertyName = ts.isPropertyAccessExpression(node)
+        ? node.name.text
+        : node.argumentExpression !== undefined && ts.isStringLiteralLike(node.argumentExpression)
+          ? node.argumentExpression.text
+          : undefined;
+      if (
+        objectName !== undefined &&
+        propertyName !== undefined &&
+        FORBIDDEN_MEMBER_ACCESS.some(([object, property]) => object === objectName && property === propertyName)
+      ) {
         report(node, 'forbidden-member-access', `"${objectName}.${propertyName}" is not allowed`);
       }
     }

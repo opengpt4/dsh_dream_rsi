@@ -82,6 +82,78 @@ export const MALICIOUS_CANDIDATES = [
       export const spawn = () => new Worker('./payload.js');
     `,
     expectedRules: ['capability-concurrency']
+  },
+  {
+    name: 'parenthesised eval',
+    purpose: 'The call the guard names, wrapped so the callee is no longer an identifier.',
+    source: `
+      export function decide(payload) { return (eval)(payload); }
+    `,
+    expectedRules: ['forbidden-call']
+  },
+  {
+    name: 'indirect eval',
+    purpose: 'The canonical indirect form, which evaluates in global scope rather than locally.',
+    source: `
+      export function decide(payload) { return (0, eval)(payload); }
+    `,
+    expectedRules: ['forbidden-call']
+  },
+  {
+    name: 'eval read off the global object',
+    purpose: 'Reach the same function by property rather than as a bare identifier.',
+    source: `
+      export function decide(payload) { return globalThis.eval(payload); }
+    `,
+    expectedRules: ['forbidden-call']
+  },
+  {
+    name: 'eval read off the global object by key',
+    purpose: 'Element access, which defeats a check written only for dotted access.',
+    source: `
+      export function decide(payload) { return globalThis['eval'](payload); }
+    `,
+    expectedRules: ['forbidden-call']
+  },
+  {
+    name: 'Function constructor off the global object',
+    purpose: 'Code generation without naming Function as a callee identifier.',
+    source: `
+      export function decide(payload) { return globalThis.Function('return ' + payload)(); }
+    `,
+    expectedRules: ['forbidden-call']
+  },
+  {
+    name: 'require off the global object',
+    purpose: 'A module load reaching neither the import scanner nor a bare require call.',
+    source: `
+      export const child = globalThis.require('child_process');
+    `,
+    expectedRules: ['forbidden-module', 'capability-process']
+  },
+  {
+    name: 'third-party package off the global object',
+    purpose: 'The package allowlist is bypassed if the loader is not resolved.',
+    source: `
+      export const lodash = globalThis.require('lodash');
+    `,
+    expectedRules: ['package-not-allowed']
+  },
+  {
+    name: 'environment read through the global object',
+    purpose: 'The same secret read, with the process object reached through globalThis.',
+    source: `
+      export const stolen = globalThis.process.env.DEEPSEEK_API_KEY;
+    `,
+    expectedRules: ['forbidden-member-access']
+  },
+  {
+    name: 'environment read by element access',
+    purpose: 'The secret read without a dotted property access to match on.',
+    source: `
+      export const stolen = process['env'].DEEPSEEK_API_KEY;
+    `,
+    expectedRules: ['forbidden-member-access']
   }
 ];
 

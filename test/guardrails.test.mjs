@@ -114,6 +114,31 @@ test('a benign candidate passes both guards with no capability use', () => {
   assert.deepEqual(result.capabilities, []);
 });
 
+test('resolving a forbidden name through syntax does not reject ordinary code', () => {
+  // Resolving parentheses, comma expressions, and known global objects widens
+  // what the guard matches. These are the shapes it must still accept: the same
+  // property names on objects that are not globals, and permitted global calls.
+  const benign = [
+    'const helper = { eval: () => 1 }; export const run = () => helper.eval();',
+    'const other = { process: { env: {} } }; export const x = other.process.env;',
+    'const config = { env: "prod" }; export const x = config.env;',
+    'const o = { f: () => 1 }; export const run = () => o["f"]();',
+    'export const timer = () => globalThis.setTimeout(() => 1, 0);',
+    'export const copy = () => globalThis.structuredClone({ a: 1 });',
+    'export const out = () => process.stdout.write("x");',
+    'const x = (1, 2); export const y = x;'
+  ];
+
+  for (const source of benign) {
+    const result = scanCandidate({ source, candidateRoot: CANDIDATE_ROOT });
+    assert.equal(
+      result.passed,
+      true,
+      `${source} was rejected by ${[...result.ast.violations, ...result.imports.violations].map((v) => v.rule).join(', ')}`
+    );
+  }
+});
+
 test('a guard rejection reports every rule that fired, not just the first', () => {
   const source = `
     import { readFileSync } from 'node:fs';
