@@ -25,11 +25,19 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
         score REAL NOT NULL,
         token_cost REAL NOT NULL,
         exec_time_ms REAL NOT NULL,
-        idempotency_key TEXT NOT NULL UNIQUE
+        critical_path_ms REAL,
+        session_id TEXT,
+        episode_step INTEGER,
+        correlation_id TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        schema_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_discovery_task ON discovery_nodes(task_id, node_id);
       CREATE INDEX IF NOT EXISTS idx_discovery_parent ON discovery_nodes(parent_id);
       CREATE INDEX IF NOT EXISTS idx_discovery_policy ON discovery_nodes(policy_version);
+      CREATE INDEX IF NOT EXISTS idx_discovery_environment ON discovery_nodes(environment_version);
+      CREATE INDEX IF NOT EXISTS idx_discovery_created_at ON discovery_nodes(created_at);
     `);
   }
 
@@ -43,8 +51,10 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
       INSERT INTO discovery_nodes (
         node_id, task_id, parent_id, policy_version, environment_version,
         state_hash, observation_hash, action_type, action_params_json,
-        result_json, score, token_cost, exec_time_ms, idempotency_key
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        result_json, score, token_cost, exec_time_ms, critical_path_ms,
+        session_id, episode_step, correlation_id, idempotency_key,
+        schema_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       node.nodeId,
       node.taskId,
@@ -59,7 +69,13 @@ export class SQLiteDiscoveryStore implements DiscoveryStore {
       node.score,
       node.tokenCost,
       node.execTimeMs,
-      node.idempotencyKey
+      node.criticalPathMs ?? null,
+      node.sessionId ?? null,
+      node.episodeStep ?? null,
+      node.correlationId ?? null,
+      node.idempotencyKey,
+      node.schemaVersion,
+      node.createdAt
     );
     return node;
   }
@@ -97,7 +113,13 @@ interface SqliteRow {
   score: number;
   token_cost: number;
   exec_time_ms: number;
+  critical_path_ms: number | null;
+  session_id: string | null;
+  episode_step: number | null;
+  correlation_id: string | null;
   idempotency_key: string;
+  schema_version: number;
+  created_at: string;
 }
 
 function deserializeNode(row: SqliteRow): DiscoveryNode {
@@ -115,6 +137,12 @@ function deserializeNode(row: SqliteRow): DiscoveryNode {
     score: row.score,
     tokenCost: row.token_cost,
     execTimeMs: row.exec_time_ms,
-    idempotencyKey: row.idempotency_key
+    ...(row.critical_path_ms !== null ? { criticalPathMs: row.critical_path_ms } : {}),
+    ...(row.session_id !== null ? { sessionId: row.session_id } : {}),
+    ...(row.episode_step !== null ? { episodeStep: row.episode_step } : {}),
+    ...(row.correlation_id !== null ? { correlationId: row.correlation_id } : {}),
+    idempotencyKey: row.idempotency_key,
+    schemaVersion: row.schema_version,
+    createdAt: row.created_at
   };
 }

@@ -15,7 +15,13 @@ export interface DiscoveryNode {
   readonly score: number;
   readonly tokenCost: number;
   readonly execTimeMs: number;
+  readonly criticalPathMs?: number;
+  readonly sessionId?: string;
+  readonly episodeStep?: number;
+  readonly correlationId?: string;
   readonly idempotencyKey: string;
+  readonly schemaVersion: number;
+  readonly createdAt: string;
 }
 
 export interface DiscoveryStore {

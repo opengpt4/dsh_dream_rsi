@@ -22,7 +22,9 @@ const node = {
   score: 0.8,
   tokenCost: 1,
   execTimeMs: 1,
-  idempotencyKey: 'snapshot-action-1'
+  idempotencyKey: 'snapshot-action-1',
+  schemaVersion: 1,
+  createdAt: '2026-01-01T00:00:00.000Z'
 };
 
 test('evaluation snapshot is immutable and content-addressed', () => {

@@ -19,7 +19,9 @@ const baseNode = {
   score: 0.8,
   tokenCost: 10,
   execTimeMs: 12,
-  idempotencyKey: 'action-1'
+  idempotencyKey: 'action-1',
+  schemaVersion: 1,
+  createdAt: '2026-01-01T00:00:00.000Z'
 };
 
 test('canonical replay keys are stable across object key order', () => {

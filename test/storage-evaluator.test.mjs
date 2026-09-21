@@ -18,7 +18,9 @@ const node = {
   score: 0.8,
   tokenCost: 10,
   execTimeMs: 12,
-  idempotencyKey: 'sqlite-action-1'
+  idempotencyKey: 'sqlite-action-1',
+  schemaVersion: 1,
+  createdAt: '2026-01-01T00:00:00.000Z'
 };
 
 test('SQLite repository persists and deduplicates discovery nodes', () => {
@@ -29,6 +31,24 @@ test('SQLite repository persists and deduplicates discovery nodes', () => {
   assert.equal(retry.nodeId, node.nodeId);
   assert.deepEqual(store.get(node.nodeId), node);
   assert.deepEqual(store.listByTask(node.taskId), [node]);
+  store.close();
+});
+
+test('SQLite repository round-trips optional episode/session fields', () => {
+  const store = new SQLiteDiscoveryStore(':memory:');
+  const enriched = {
+    ...node,
+    nodeId: 'node-sqlite-2',
+    idempotencyKey: 'sqlite-action-2',
+    criticalPathMs: 8,
+    sessionId: 'session-1',
+    episodeStep: 3,
+    correlationId: 'correlation-1'
+  };
+
+  store.append(enriched);
+
+  assert.deepEqual(store.get(enriched.nodeId), enriched);
   store.close();
 });
 

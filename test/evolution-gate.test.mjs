@@ -18,7 +18,9 @@ const node = (taskId, nodeId) => ({
   score: 0.8,
   tokenCost: 1,
   execTimeMs: 1,
-  idempotencyKey: nodeId
+  idempotencyKey: nodeId,
+  schemaVersion: 1,
+  createdAt: '2026-01-01T00:00:00.000Z'
 });
 
 test('evaluation split is deterministic and keeps a task in one partition', () => {
