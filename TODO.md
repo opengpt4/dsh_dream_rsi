@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
-**更新日期**：2026-09-18  
-**目前 baseline**：24 tests passing，`main` 已推送至 GitHub  
+**更新日期**：2026-09-21  
+**目前 baseline**：38 tests passing，`main` 已推送至 GitHub  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -17,6 +17,7 @@
 - [x] `ctx.effect()` reversible tool registration/disposal
 - [x] Mock embodied backend 與 per-session state isolation
 - [x] `embodied_perceive`、`embodied_act`、`embodied_query_state`
+- [x] `embodied_act` 逾時與取消對非同步 backend 真正生效（backend 可注入延遲並回應 `AbortSignal`，逾時/取消都不會讓 state 被 mutate）
 - [x] Typed embodied action events
 - [x] In-memory 與 SQLite Discovery Store
 - [x] Discovery idempotency key 與 duplicate retry protection
@@ -29,6 +30,9 @@
 - [x] Process-isolated evaluator with timeout
 - [x] Single-writer lock、lease、heartbeat、stale-lock recovery
 - [x] Validated configuration與安全預設
+- [x] `src/adapter/cordis.ts` 邊界：`index.ts` 不再直接持有 Cordis 註冊邏輯
+- [x] `dream_status` 唯讀工具（config 的安全相關投影，無副作用）
+- [x] 最小可用 AST guard（`src/guardrails/ast-guard.ts`，以 TypeScript compiler AST 為基礎，非完整沙盒）
 - [x] Functional spec、project plan、detailed design spec、technical paper
 
 ## P0: Next Implementation Milestone
@@ -36,7 +40,7 @@
 ### 1. Cordis Profile/Patch Adapter
 
 - [ ] Confirm target DSH profile manifest and `cordis.patch.yml` schema against the deployed Harness version. `[!]`
-- [ ] Add `src/adapter/cordis.ts` so core modules do not depend directly on Cordis APIs.
+- [x] Add `src/adapter/cordis.ts` so core modules do not depend directly on Cordis APIs.
 - [ ] Add profile and patch examples for local development.
 - [ ] Add compatibility tests for mount, duplicate mount, partial setup failure, dispose, and reload.
 - [ ] Verify that tool, event, service, command, and worker registrations leave no residue after disposal.
@@ -46,7 +50,7 @@
 - [x] Add typed configuration defaults and validation.
 - [ ] Add configuration schema export for the host Harness.
 - [ ] Connect validated config to storage, replay, evaluator, lock, and embodied backend construction.
-- [ ] Add `dream status` read-only runtime facade.
+- [x] Add `dream status` read-only runtime facade (exposed as the `dream_status` tool, since no verified Cordis/DSH command contract exists yet; see `src/status.ts`).
 - [ ] Reject invalid configuration before any persistent resource or tool registration is created.
 
 ### 3. End-to-End Mock Task
@@ -69,9 +73,10 @@
 
 ### 5. Artifact and Snapshot Integrity
 
+- [x] Align `DiscoveryNode` with the detailed design schema (`schemaVersion`, `createdAt`, optional `sessionId`/`episodeStep`/`correlationId`/`criticalPathMs`) and persist all fields in the SQLite store.
 - [ ] Implement content-addressed artifact store with SHA-256, schema version, byte length, retention, and deletion metadata.
 - [ ] Materialize ReplaySnapshot from a consistent SQLite read transaction.
-- [ ] Decide whether snapshot identity includes `createdAt` or uses content-only hashing. `[!]`
+- [x] Decided: snapshot identity includes `createdAt` (content hash covers `schemaVersion` + `createdAt` + `splits`; see `src/evolution/snapshot.ts`).
 - [ ] Add artifact checksum verification before evaluation and deployment.
 - [ ] Add signature provider, verification, key rotation, and failure tests. `[!]`
 
@@ -86,7 +91,7 @@
 
 ### 7. Guardrails
 
-- [ ] Implement AST guard for forbidden calls and dynamic imports.
+- [x] Implement AST guard for forbidden calls and dynamic imports (`src/guardrails/ast-guard.ts`, rule-based on the TypeScript compiler AST; not a full sandbox).
 - [ ] Implement dependency/import allowlist.
 - [ ] Implement resource and network capability guard.
 - [ ] Add prompt-injection and malicious tool-output fixtures.

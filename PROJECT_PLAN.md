@@ -73,12 +73,14 @@ MVP 完成必須同時滿足：
 | Immutable evaluation snapshot | Done | `src/evolution/snapshot.ts` |
 | Process-isolated evaluator with timeout | Done | `src/evolution/isolated-evaluator.ts` |
 | Lease/heartbeat single writer lock | Done | `src/operations/single-writer-lock.ts` |
-| Reversible Cordis tool registration | Done | `src/index.ts`, lifecycle test |
+| Reversible Cordis tool registration via `adapter/cordis.ts` | Done | `src/adapter/cordis.ts`, lifecycle test |
 | Configuration defaults and validation | Done | `src/config.ts`, config tests |
+| Read-only `dream_status` tool | Done | `src/status.ts`, status test |
+| Minimal AST guard (blocklist on TypeScript AST) | Done | `src/guardrails/ast-guard.ts`, ast-guard test |
 | Real profile/patch adapter | Not started | Depends on selected DSH profile contract |
-| Candidate generation, AST guard, deployment registry | Not started | Next implementation track |
+| Candidate generation, dependency allowlist, deployment registry | Not started | Next implementation track |
 
-Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 24 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox.
+Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 38 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
 
 ## 4. Delivery Strategy
 

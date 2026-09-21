@@ -476,7 +476,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 24 passing tests. These tests validate implementation invariants such as configuration safety defaults, session isolation, action behavior, replay determinism, storage idempotency, evaluator formulas, split determinism, gate rejection, snapshot immutability, process evaluation, lock recovery, and lifecycle disposal.
+The current suite contains 38 passing tests. These tests validate implementation invariants such as configuration safety defaults, session isolation, action behavior, replay determinism, storage idempotency, evaluator formulas, split determinism, gate rejection, snapshot immutability, process evaluation, lock recovery, and lifecycle disposal.
 
 These results should be interpreted correctly. They establish a working software baseline; they do not establish that the system improves an external benchmark, generalizes across task families, or is safe for physical hardware.
 

@@ -9,7 +9,7 @@
 tool lifecycle、mock embodied tools/events、Discovery/SQLite storage、Replay、
 Q/C/P/M evaluator、task-level split、Monotonic Gate、immutable snapshot、
 process-isolated evaluator、lease lock 與 validated configuration。`npm test`
-目前通過 24 個測試。Profile/patch adapter、完整 OS/container sandbox、
+目前通過 38 個測試。Profile/patch adapter、完整 OS/container sandbox、
 candidate generation、canary deployment、tool synthesis 與 real simulator
 adapter 仍屬後續實作範圍。
 
