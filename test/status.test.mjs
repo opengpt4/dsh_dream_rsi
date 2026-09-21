@@ -225,9 +225,12 @@ test('the status reports what the registry holds without creating it', () => {
       assert.equal(probe.latestEvaluation.passed, true);
       assert.equal(probe.latestEvaluation.signed, false);
 
-      // The current-policy readiness check now has a registry to ask.
+      // The current-policy readiness check now has a registry to ask, and names
+      // the version the pointer holds rather than only reporting a state.
       const status = getDreamRsiStatus(instance.config, instance);
-      assert.deepEqual(status.readiness.checks.find((check) => check.name === 'currentPolicy').state, 'ready');
+      const check = status.readiness.checks.find((entry) => entry.name === 'currentPolicy');
+      assert.equal(check.state, 'ready');
+      assert.match(check.detail, /^v2 \([0-9a-f]{12}\)$/);
     } finally {
       instance.dispose();
     }
@@ -302,4 +305,96 @@ test('the status reports the limits the evaluator enforces', async () => {
   // No runtime means no registry to read, so the tool omits it rather than
   // reporting an empty one.
   assert.equal('registry' in result, false);
+});
+
+test('the registry view a status call holds cannot write', () => {
+  // The view is a real `PolicyRegistry` over a read-only store, so a caller that
+  // keeps it and tries to register cannot mutate the host's registry. The store
+  // refuses to save; nothing in the read path creates the directory either.
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-status-readonly-'));
+  const registryDir = join(dir, 'registry');
+  try {
+    const instance = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:', registryDir } }));
+    try {
+      const view = instance.readPolicyRegistry();
+      assert.throws(() => view.registerPolicy(artifact()), /is read-only/);
+      assert.throws(() => view.restoreCurrentPolicy('any-id'), /read-only|cannot restore/);
+      assert.equal(existsSync(registryDir), false, 'a refused write must not create the directory');
+    } finally {
+      instance.dispose();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the latest evaluation is deterministic when two reports share a timestamp', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-status-tie-'));
+  const registryDir = join(dir, 'registry');
+  try {
+    const written = new PolicyRegistry(new FilePolicyRegistryStore(registryDir));
+    const first = artifact();
+    written.registerPolicy(first);
+    const at = '2026-01-01T00:00:00.000Z';
+    written.registerEvaluation(reportFor(first.artifactId, { createdAt: at, sampleCount: 1 }));
+    written.registerEvaluation(reportFor(first.artifactId, { createdAt: at, sampleCount: 2 }));
+    // The tie-break is the greater id, computed here rather than assumed, so a
+    // flip in the comparison fails instead of passing as "still stable".
+    const expected = [...written.listEvaluations()]
+      .map((entry) => entry.evaluationId)
+      .sort()
+      .at(-1);
+
+    const instance = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:', registryDir } }));
+    try {
+      const latest = getDreamRsiStatus(instance.config, instance).registry.latestEvaluation;
+      assert.equal(latest.evaluationId, expected);
+      const again = getDreamRsiStatus(instance.config, instance).registry.latestEvaluation;
+      assert.deepEqual(latest, again);
+    } finally {
+      instance.dispose();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the tool flattens an unreadable registry to nulls rather than omitting it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-status-flat-'));
+  const registryDir = join(dir, 'registry');
+  try {
+    mkdirSync(join(registryDir, 'policies'), { recursive: true });
+    writeFileSync(join(registryDir, 'policies', 'broken.json'), JSON.stringify({ artifactId: 'broken' }));
+
+    const instance = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:', registryDir } }));
+    try {
+      const tool = createStatusTool(instance.config, instance);
+      return tool.execute({}, { callId: 'call-1', signal: new AbortController().signal }).then((result) => {
+        // Every key is present, so a reader can tell "not read" from "absent key"
+        // and a schema with one shape covers both states.
+        assert.equal(result.registry.state, 'unreadable');
+        assert.match(result.registry.detail, /could not be verified/);
+        assert.deepEqual(
+          Object.entries(result.registry).filter(([key]) => key !== 'state' && key !== 'detail'),
+          [
+            ['policy_count', null],
+            ['evaluation_count', null],
+            ['deployment_count', null],
+            ['current_policy_artifact_id', null],
+            ['current_policy_version', null],
+            ['current_policy_signed', null],
+            ['latest_evaluation_id', null],
+            ['latest_evaluation_passed', null],
+            ['latest_evaluation_sample_count', null],
+            ['latest_evaluation_created_at', null],
+            ['latest_evaluation_signed', null]
+          ]
+        );
+      });
+    } finally {
+      instance.dispose();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

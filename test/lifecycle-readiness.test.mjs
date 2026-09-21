@@ -227,7 +227,9 @@ test('readiness checks the current policy pointer when a registry is given', () 
 
     const deployed = verifyReadiness({ runtime: instance, registry });
     assert.equal(deployed.checks.find((check) => check.name === 'currentPolicy').state, 'ready');
-    assert.match(deployed.checks.find((check) => check.name === 'currentPolicy').detail, /v1/);
+    // Anchored: a loose /v1/ also matches a doubled `vv1`, which is what the
+    // literal prefix produced.
+    assert.match(deployed.checks.find((check) => check.name === 'currentPolicy').detail, /^v1 \([0-9a-f]{12}\)$/);
   } finally {
     instance.dispose();
   }

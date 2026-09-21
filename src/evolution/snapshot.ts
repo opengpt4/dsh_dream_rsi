@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { DiscoveryNode, JsonValue } from '../discovery/models.js';
+import type { DiscoveryNode } from '../discovery/models.js';
 import { splitDiscoveryNodes, type EvaluationSplit, type EvaluationSplitConfig } from './split.js';
 
 export interface EvaluationSnapshot {
@@ -43,8 +43,4 @@ function deepFreeze<T>(value: T): T {
     for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
   }
   return value;
-}
-
-export function snapshotJsonValue(snapshot: EvaluationSnapshot): JsonValue {
-  return JSON.parse(JSON.stringify(snapshot)) as JsonValue;
 }

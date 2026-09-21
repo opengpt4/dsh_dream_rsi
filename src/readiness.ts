@@ -131,5 +131,6 @@ function currentPolicyCheck(registry: PolicyRegistry): ReadinessCheck {
       detail: `the current pointer names unregistered artifact ${current}`
     };
   }
-  return { name: 'currentPolicy', state: 'ready', detail: `v${artifact.version} (${artifact.artifactId.slice(0, 12)})` };
+  // The version already carries its `v` prefix, so it is not added here.
+  return { name: 'currentPolicy', state: 'ready', detail: `${artifact.version} (${artifact.artifactId.slice(0, 12)})` };
 }
