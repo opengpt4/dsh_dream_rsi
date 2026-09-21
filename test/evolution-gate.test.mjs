@@ -57,6 +57,31 @@ test('monotonic gate rejects quality regression and accepts a better candidate',
   assert.equal(accepted.passRatio, 1);
 });
 
+test('monotonic gate passes an improvement exactly at the threshold', () => {
+  // The check is that an improvement *below* the threshold is rejected, so one
+  // equal to it passes. The scores are integers on purpose: a threshold of 0.1
+  // against a computed 0.10000000000000009 sits a hair above the boundary and
+  // would pass under either comparison, which is how this case first slipped
+  // through a mutation sweep.
+  const current = [{ caseId: 'case-1', quality: 0.8, score: 1 }];
+  const atThreshold = evaluateMonotonicGate(current, [{ caseId: 'case-1', quality: 0.8, score: 2 }], {
+    minimumPassRatio: 1,
+    minimumImprovement: 1
+  });
+
+  assert.equal(atThreshold.scoreImprovement, 1);
+  assert.equal(atThreshold.passed, true);
+  assert.deepEqual(atThreshold.reasons, []);
+
+  // One step below the same threshold is still refused.
+  const below = evaluateMonotonicGate(current, [{ caseId: 'case-1', quality: 0.8, score: 1.9 }], {
+    minimumPassRatio: 1,
+    minimumImprovement: 1
+  });
+  assert.equal(below.passed, false);
+  assert.match(below.reasons.join(' '), /improvement/);
+});
+
 test('monotonic gate rejects incomplete candidate case sets', () => {
   const result = evaluateMonotonicGate(
     [{ caseId: 'case-1', quality: 0.8, score: 0.7 }],

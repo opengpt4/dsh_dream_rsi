@@ -83,6 +83,31 @@ test('metadata records the media type, byte length, schema version, and retentio
   });
 });
 
+test('verify catches a metadata byte length that disagrees with the blob', () => {
+  // Metadata is the only mutable state in the store, so it is the part that can
+  // be edited independently of the bytes. A length that disagrees with the blob
+  // is a record that no longer describes what it points at.
+  withTempDir((dir) => {
+    const store = new FileArtifactStore(dir);
+    const { artifactId } = store.put({
+      bytes: Buffer.from('seven!!'),
+      kind: 'observation',
+      mediaType: 'text/plain',
+      schemaVersion: 1
+    });
+    assert.equal(store.verify(artifactId).ok, true);
+
+    const metadataPath = join(dir, 'metadata', `${artifactId}.json`);
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+    writeFileSync(metadataPath, JSON.stringify({ ...metadata, byteLength: 999 }));
+
+    const verdict = store.verify(artifactId);
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.reason, 'checksum_mismatch');
+    assert.match(verdict.detail, /metadata says 999/);
+  });
+});
+
 test('put rejects empty bytes and a non-positive schema version', () => {
   withTempDir((dir) => {
     const store = new FileArtifactStore(dir);

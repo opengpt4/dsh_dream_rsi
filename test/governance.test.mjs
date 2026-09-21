@@ -384,6 +384,15 @@ test('a writer cannot shorten retention by passing its own', () => {
   }
 });
 
+test('a retention exactly at the minimum is allowed', () => {
+  // The rule is that a *shorter* retention is refused, so the boundary value
+  // itself is legal. A sweep mutation moved the comparison to `<=` and nothing
+  // noticed, which would have made the documented minimum unusable.
+  const policy = { defaultRetentionMs: null, minimumRetentionMs: 1_000, byKind: { observation: 1_000 } };
+  assert.equal(retentionFor(policy, 'observation'), 1_000);
+  assert.throws(() => retentionFor({ ...policy, byKind: { observation: 999 } }, 'observation'), /at least 1000ms/);
+});
+
 test('expired artifacts are listed without being deleted', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-retention-'));
   try {

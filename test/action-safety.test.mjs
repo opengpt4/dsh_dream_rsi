@@ -86,6 +86,54 @@ const throwingOnAbort = () => (signal) =>
     signal.addEventListener('abort', () => reject(new Error('backend rejected the aborted call')), { once: true });
   });
 
+test('the wall-clock budget clamps each action deadline', async () => {
+  // `wallClockMs` is enforced between steps and clamps each action deadline, so
+  // the budget bounds a step that would otherwise run past it. A sweep mutation
+  // doubled the deadline and nothing noticed, because no test asks for an action
+  // timeout longer than the episode budget.
+  const requests = [];
+  const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+  try {
+    const adapter = {
+      ...runtime.adapter,
+      observe: (request) => runtime.adapter.observe(request),
+      execute: async (request, signal) => {
+        requests.push(request);
+        return runtime.adapter.execute(request, signal);
+      }
+    };
+
+    await runEpisode({
+      task: {
+        taskId: 'task-1',
+        goal: 'never reached',
+        environmentId: MOCK_ENVIRONMENT_ID,
+        policyVersion: 'v1',
+        budget: { maxSteps: 3, wallClockMs: 5_000 },
+        metadata: {}
+      },
+      episodeId: 'episode-1',
+      sessionId: SESSION_ID,
+      adapter,
+      store: runtime.store,
+      policy: () => ({
+        actionType: 'move_relative',
+        parameters: { dx: 1, dy: 0, dz: 0 },
+        // Longer than the whole episode budget.
+        timeoutMs: 60_000
+      })
+    });
+  } finally {
+    runtime.dispose();
+  }
+
+  assert.ok(requests.length > 0, 'the episode should have dispatched an action');
+  for (const request of requests) {
+    assert.ok(request.timeoutMs > 0, 'a deadline must be positive');
+    assert.ok(request.timeoutMs <= 5_000, `deadline ${request.timeoutMs} exceeds the 5000ms budget`);
+  }
+});
+
 test('the MVP action vocabulary has no representation for raw motor or joint control', () => {
   // The allowlist is closed: only high-level primitives exist, so there is no
   // value a candidate could name to reach joint velocity or a motor channel.

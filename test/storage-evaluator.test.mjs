@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { SQLiteDiscoveryStore } from '../dist/discovery/sqlite-store.js';
-import { evaluateReplay } from '../dist/evolution/evaluator.js';
+import { DEFAULT_EVALUATOR_CONFIG, evaluateReplay } from '../dist/evolution/evaluator.js';
 
 const node = {
   nodeId: 'node-sqlite-1',
@@ -74,4 +74,19 @@ test('evaluator returns deterministic normalized Q/C/P/M metrics', () => {
   assert.equal(result.parallelEfficiency, 2);
   assert.equal(result.missRate, 0.25);
   assert.equal(Number(result.score.toFixed(6)), -1.5336);
+});
+
+test('a zero denominator is floored rather than dividing by zero', () => {
+  // `positive` exists so a zero reference or an instantaneous episode keeps a
+  // ratio defined instead of producing Infinity. A sweep mutation made the floor
+  // 0 instead of 1 and no test noticed, because the pipeline never passes a zero
+  // critical path — but the evaluator is exported and a caller can.
+  const result = evaluateReplay(
+    { visitedNodes: [node], boundaryMissCount: 0, totalAttempts: 1, criticalPathMs: 0 },
+    { ...DEFAULT_EVALUATOR_CONFIG, qualityReference: 0, costBudget: 0, idealParallelEfficiency: 0 }
+  );
+
+  for (const [name, value] of Object.entries(result)) {
+    assert.ok(Number.isFinite(value), `${name} is ${value}`);
+  }
 });
