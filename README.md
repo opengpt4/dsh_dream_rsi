@@ -57,6 +57,7 @@ Implemented and tested capabilities include:
   limited to high-level action primitives, AST/dependency/capability gates plus process-isolated test
   execution, and a dynamic registry where disabled tools are unselectable
 - deployment state machine under a writer lease: propose, approve, canary, activate, degrade, roll back,
+  with stable versions ordered by activation so retention cannot discard the newest,
   with a checksum and baseline check before activation, canary thresholds, rollback to the previous stable
   version, and an append-only audit trail
 - evaluate-only candidate generation over the Harness LLM facade: mutation classes restricted to
@@ -100,7 +101,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 346 passing tests. OS/container sandboxing and a real
+The current suite contains 348 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

@@ -736,6 +736,8 @@ Only the deployment writer can transition state. The state record includes polic
 8. Emit `dream-rsi/policy-deployed`.
 9. Release lock and retain previous stable versions.
 
+Stable versions are ordered by **activation**, not by last update, and ties fall back to insertion order. A deployment degraded after it went live has a recent `updatedAt` and an old `activatedAt`; ordering by the former puts it first and makes retention discard the versions actually worth keeping. The previous ordering also returned the oldest first when two deployments shared a millisecond, which is why the earlier test used an incrementing clock rather than exposing it.
+
 A failure before step 7 leaves current pointer untouched. A failure after step 7 triggers health monitoring and rollback to the previous verified stable artifact.
 
 ### 11.3 Writer lease

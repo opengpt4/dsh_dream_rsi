@@ -173,6 +173,14 @@ export interface Deployment {
   readonly lockOwner: string | null;
   /** Why the deployment left the happy path, when it did. */
   readonly reason?: string;
+  /**
+   * When this deployment became ACTIVE.
+   *
+   * Kept apart from `updatedAt`, which moves on every later transition: a
+   * deployment that was degraded has a recent `updatedAt` and an old
+   * activation, and ordering stable versions by the former puts it first.
+   */
+  readonly activatedAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -189,6 +197,7 @@ export function advanceDeployment(
     ...changes,
     state: to,
     history: [...deployment.history, to],
+    ...(to === 'ACTIVE' ? { activatedAt: updatedAt } : {}),
     updatedAt
   };
 }

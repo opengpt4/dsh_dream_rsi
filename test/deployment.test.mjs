@@ -456,3 +456,79 @@ test('recovering an expired lease is audited', () => {
     context.cleanup();
   }
 });
+
+// ---------------------------------------------------- stable version ordering
+
+/** Promote one policy through the full state machine, returning its deployment. */
+function activate(writer, registry, artifact) {
+  registry.registerPolicy(artifact);
+  const evaluation = report(artifact.artifactId);
+  registry.registerEvaluation(evaluation);
+  const proposed = writer.propose({
+    policyArtifactId: artifact.artifactId,
+    evaluationId: evaluation.evaluationId,
+    holdoutGate: { passed: true, candidateEvaluationId: evaluation.evaluationId }
+  });
+  writer.decide(proposed.deploymentId, APPROVAL);
+  writer.startCanary(proposed.deploymentId);
+  return writer.completeCanary(proposed.deploymentId, HEALTHY, THRESHOLDS);
+}
+
+test('stable versions list the most recently activated first even on a tied clock', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-stable-'));
+  const audit = new InMemoryAuditLog();
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  // Every transition lands on the same millisecond, which is what a fast
+  // automated sequence produces and what the previous ordering got backwards.
+  const writer = new DeploymentWriter({
+    registry,
+    lock: new SingleWriterLock(join(dir, 'deployment.lock'), 30_000),
+    audit,
+    principal: { principalId: 'operator-1', roles: ['admin'] },
+    signatureVerifier: { verify: () => true },
+    now: () => new Date(AT)
+  });
+
+  try {
+    const versions = ['v1', 'v2', 'v3'];
+    for (const version of versions) activate(writer, registry, policy(version));
+
+    const latestFirst = registry.stableVersions(3).map((id) => registry.policy(id).version);
+    assert.deepEqual(latestFirst, ['v3', 'v2', 'v1']);
+
+    // Retention keeps the newest, which is what "at least three stable versions"
+    // is protecting: an inverted order would discard them.
+    assert.deepEqual(registry.stableVersions(2).map((id) => registry.policy(id).version), ['v3', 'v2']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a deployment degraded after activation does not jump the queue', () => {
+  let clock = Date.parse(AT);
+  const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-stable-'));
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const writer = new DeploymentWriter({
+    registry,
+    lock: new SingleWriterLock(join(dir, 'deployment.lock'), 30_000),
+    audit: new InMemoryAuditLog(),
+    principal: { principalId: 'operator-1', roles: ['admin'] },
+    signatureVerifier: { verify: () => true },
+    now: () => new Date((clock += 1_000))
+  });
+
+  try {
+    const first = policy('v1');
+    const firstDeployment = activate(writer, registry, first);
+    const second = policy('v2');
+    activate(writer, registry, second);
+
+    // Degrading v1 updates its record long after v2 activated. Ordering by
+    // `updatedAt` would put v1 first; ordering by activation does not.
+    writer.markDegraded(firstDeployment.deploymentId, 'latency spike');
+
+    assert.deepEqual(registry.stableVersions(3).map((id) => registry.policy(id).version), ['v2', 'v1']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

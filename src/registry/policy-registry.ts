@@ -201,6 +201,7 @@ export class PolicyRegistry {
           holdoutGate: promotion.holdoutGate,
           rollbackTarget: previous,
           lockOwner: null,
+          activatedAt: promotion.approval.decidedAt,
           createdAt: promotion.approval.decidedAt,
           updatedAt: promotion.approval.decidedAt
         }
@@ -232,9 +233,16 @@ export class PolicyRegistry {
    */
   stableVersions(limit = 3): readonly string[] {
     if (!Number.isInteger(limit) || limit <= 0) throw new Error('limit must be a positive integer');
+
+    // Reverse before sorting: a stable sort keeps equal timestamps in the order
+    // it found them, so starting newest-insertion-first keeps the newest first
+    // when two deployments share a millisecond. Sorting the raw insertion order
+    // returned the oldest first, which is the opposite of what this promises.
     const ordered = [...this.deployments.values()]
       .filter((deployment) => deployment.history.includes('ACTIVE'))
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      .reverse()
+      .sort((left, right) => activationOf(right).localeCompare(activationOf(left)));
+
     return [...new Set(ordered.map((deployment) => deployment.policyArtifactId))].slice(0, limit);
   }
 
@@ -343,6 +351,11 @@ function readRecords<T>(directory: string): T[] {
   return readdirSync(directory)
     .filter((name) => name.endsWith('.json'))
     .map((name) => JSON.parse(readFileSync(join(directory, name), 'utf8')) as T);
+}
+
+/** Activation time, falling back for a record written before the field existed. */
+function activationOf(deployment: Deployment): string {
+  return deployment.activatedAt ?? deployment.updatedAt;
 }
 
 /** Write then rename, so a reader never observes a partial record. */
