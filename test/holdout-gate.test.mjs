@@ -211,7 +211,7 @@ test('rejection reasons are summarised per family', () => {
 
   assert.equal(packing.passed, false);
   assert.deepEqual(packing.rejectionSummary, [
-    { taskFamily: 'packing', caseCount: 10, passedCount: 0, reasons: { collision: 10 } }
+    { taskFamily: 'packing', caseCount: 10, passedCount: 0, reasons: [{ reason: 'collision', count: 10 }] }
   ]);
 });
 

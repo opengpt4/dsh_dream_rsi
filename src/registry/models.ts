@@ -378,12 +378,25 @@ export function summarizeCanary(
   return { passed: failures.length === 0, observation, thresholds, failures, observedAt };
 }
 
+/** One failure reason and the number of cases that reported it. */
+export interface RejectionReason {
+  readonly reason: string;
+  readonly count: number;
+}
+
 export interface FamilyRejectionSummary {
   readonly taskFamily: string;
   readonly caseCount: number;
   readonly passedCount: number;
-  /** Failure reason to occurrences, most frequent first. */
-  readonly reasons: Readonly<Record<string, number>>;
+  /**
+   * Failure reasons, most frequent first, ties broken by reason.
+   *
+   * An array rather than a record keyed by reason: a JavaScript object orders
+   * integer-like keys ascending regardless of insertion, so a reason such as
+   * `404` would sort ahead of a more frequent non-numeric one and the order
+   * would depend on the data rather than on the count.
+   */
+  readonly reasons: readonly RejectionReason[];
 }
 
 /**
@@ -413,11 +426,9 @@ export function summarizeCaseResults(caseResults: readonly CaseResult[]): readon
       taskFamily,
       caseCount: entry.caseCount,
       passedCount: entry.passedCount,
-      reasons: Object.fromEntries(
-        [...entry.reasons.entries()].sort(([leftReason, leftCount], [rightReason, rightCount]) =>
-          rightCount - leftCount || leftReason.localeCompare(rightReason)
-        )
-      )
+      reasons: [...entry.reasons.entries()]
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason))
     }));
 }
 

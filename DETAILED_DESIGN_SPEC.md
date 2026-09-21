@@ -859,6 +859,8 @@ The episode pipeline records `task.outcome` with the terminal status as a label,
 
 **Report** (`src/observability/report.ts`). `buildObservabilityReport` produces a JSON-serializable snapshot: Q/C/P/M/S per evaluation with a per-family breakdown, case and pass counts, deployment history including the path taken, the current policy pointer, and metric summaries. An aggregate score hides which family regressed, which is the part that can be acted on.
 
+Per-family rejection reasons are an ordered array of `{ reason, count }`, most frequent first with ties broken by reason. Not a record keyed by reason: a JavaScript object orders integer-like keys ascending regardless of insertion, so a reason such as `404` displaces a more frequent non-numeric one and the order depends on the reason text rather than on the count.
+
 Each family carries quality, cost, latency, and miss rate as aggregates with sample counts and a 95% confidence interval (`src/observability/statistics.ts`). Small samples use a Student-t critical value rather than 1.96: at four samples the interval is roughly 1.4x wider, which is the difference between "no regression" and "cannot tell yet". A single sample reports `lower` and `upper` as `null` rather than a zero-width interval, because one observation cannot support a precision claim. A non-finite sample is refused.
 
 **Action vocabulary.** `checkCapability` denies any action absent from `EMBODIED_ACTION_TYPES`, so a forged capability profile cannot widen the allowlist. Raw motor and joint control have no representation in the type, and the check closes the same gap at runtime.

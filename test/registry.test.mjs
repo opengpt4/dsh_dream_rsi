@@ -191,10 +191,35 @@ test('case results are summarised by task family with reasons by frequency', () 
     taskFamily: 'packing',
     caseCount: 4,
     passedCount: 1,
-    reasons: { timeout: 2, 'worker crash': 1 }
+    reasons: [
+      { reason: 'timeout', count: 2 },
+      { reason: 'worker crash', count: 1 }
+    ]
   });
   // A failure with no recorded reason is still counted, under an explicit label.
-  assert.deepEqual(summary[0].reasons, { '(unspecified)': 1 });
+  assert.deepEqual(summary[0].reasons, [{ reason: '(unspecified)', count: 1 }]);
+});
+
+test('reason frequency order does not depend on the reason text', () => {
+  // Keyed by reason, a plain object would order integer-like keys ascending and
+  // put a single '404' ahead of three 'timeout's.
+  const summary = summarizeCaseResults([
+    { caseId: 'a', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: 'timeout' },
+    { caseId: 'b', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: 'timeout' },
+    { caseId: 'c', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: 'timeout' },
+    { caseId: 'd', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: '404' },
+    { caseId: 'e', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: '404' },
+    { caseId: 'f', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: 'alpha' },
+    { caseId: 'g', taskFamily: 'packing', split: 'train', outcome: 'failed', reason: 'beta' }
+  ]);
+
+  assert.deepEqual(summary[0].reasons, [
+    { reason: 'timeout', count: 3 },
+    { reason: '404', count: 2 },
+    // Equal counts fall back to the reason, so the order is total.
+    { reason: 'alpha', count: 1 },
+    { reason: 'beta', count: 1 }
+  ]);
 });
 
 // ----------------------------------------------------------------- registry

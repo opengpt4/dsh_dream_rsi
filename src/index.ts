@@ -123,7 +123,8 @@ export {
   type GuardResult,
   type HoldoutGateVerdict,
   type PolicyArtifact,
-  type PolicyManifest
+  type PolicyManifest,
+  type RejectionReason
 } from './registry/models.js';
 export {
   canTransitionDeployment,
