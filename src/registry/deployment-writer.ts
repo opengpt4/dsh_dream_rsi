@@ -27,9 +27,17 @@ import type { PolicyRegistry } from './policy-registry.js';
  * which re-checks the evidence.
  */
 
+/**
+ * Outcome of a signature check.
+ *
+ * A refusal carries its reason: "expired key" and "tampered artifact" call for
+ * different operator action, and the audit trail is where that gets read.
+ */
+export type SignatureVerdict = { readonly valid: true } | { readonly valid: false; readonly reason: string };
+
 /** Verifies a policy artifact's signature. Absent means nothing may be activated. */
 export interface SignatureVerifier {
-  verify(artifact: PolicyArtifact): boolean;
+  verify(artifact: PolicyArtifact): SignatureVerdict;
 }
 
 export interface DeploymentWriterOptions {
@@ -359,8 +367,9 @@ export class DeploymentWriter {
     if (verifier === undefined) {
       throw new Error(`policy artifact ${artifactId} cannot be deployed: no signature verifier is configured`);
     }
-    if (!verifier.verify(artifact)) {
-      throw new Error(`policy artifact ${artifactId} failed signature verification`);
+    const verdict = verifier.verify(artifact);
+    if (!verdict.valid) {
+      throw new Error(`policy artifact ${artifactId} failed signature verification: ${verdict.reason}`);
     }
   }
 

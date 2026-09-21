@@ -229,7 +229,7 @@ test('the report lists deployment history including the path taken', () => {
     lock: new SingleWriterLock('/tmp/dream-rsi-obs.lock', 30_000),
     audit: new InMemoryAuditLog(),
     principal: { principalId: 'operator-1', roles: ['admin'] },
-    signatureVerifier: { verify: () => true }
+    signatureVerifier: { verify: () => ({ valid: true }) }
   });
   const proposed = writer.propose({
     policyArtifactId: artifact.artifactId,

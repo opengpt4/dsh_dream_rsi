@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import test from 'node:test';
 
 import {
   DeploymentWriter,
+  Ed25519SignatureVerifier,
   FileAuditLog,
   InMemoryAuditLog,
   InMemoryPolicyRegistryStore,
@@ -14,6 +16,7 @@ import {
   canTransitionDeployment,
   createEvaluationReport,
   createPolicyArtifact,
+  signPolicyArtifact,
   transitionDeployment,
   verifyAuditEvent,
   verifyDeployment
@@ -67,11 +70,12 @@ function report(artifactId, overrides = {}) {
 }
 
 /** A registry holding one passing artifact, ready to be proposed. */
-function setup({ signatureVerifier = { verify: () => true }, registry = undefined } = {}) {
+function setup({ signatureVerifier = { verify: () => ({ valid: true }) }, registry = undefined, signWith = undefined } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-deploy-'));
   const audit = new InMemoryAuditLog();
   const owner = registry ?? new PolicyRegistry(new InMemoryPolicyRegistryStore());
-  const artifact = policy('v1');
+  const unsigned = policy('v1');
+  const artifact = signWith === undefined ? unsigned : signPolicyArtifact(unsigned, signWith);
   owner.registerPolicy(artifact);
   const evaluation = report(artifact.artifactId);
   owner.registerEvaluation(evaluation);
@@ -189,7 +193,7 @@ test('a second writer instance can activate what the first proposed', () => {
       lock,
       audit: new InMemoryAuditLog(),
       principal: { principalId: 'operator-1', roles: ['admin'] },
-      signatureVerifier: { verify: () => true }
+      signatureVerifier: { verify: () => ({ valid: true }) }
     });
     const proposer = makeWriter(proposerLock);
     const proposed = proposer.propose({
@@ -310,13 +314,78 @@ test('deployment refuses to proceed without a signature verifier', () => {
 });
 
 test('deployment refuses an artifact whose signature does not verify', () => {
-  const context = setup({ signatureVerifier: { verify: () => false } });
+  const context = setup({ signatureVerifier: { verify: () => ({ valid: false, reason: 'the key is not trusted' }) } });
   try {
     const proposed = context.propose();
     context.writer.decide(proposed.deploymentId, APPROVAL);
 
     assert.throws(() => context.writer.startCanary(proposed.deploymentId), /failed signature verification/);
     assert.equal(context.registry.currentPolicyArtifactId(), null);
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('the deployment refusal carries the signature reason', () => {
+  // "Expired key" and "tampered artifact" call for different operator action,
+  // and the error is where that gets read.
+  const context = setup({
+    signatureVerifier: { verify: () => ({ valid: false, reason: 'key rotate-2026 expired at 2026-06-30' }) }
+  });
+  try {
+    const proposed = context.propose();
+    context.writer.decide(proposed.deploymentId, APPROVAL);
+
+    assert.throws(
+      () => context.writer.startCanary(proposed.deploymentId),
+      /failed signature verification: key rotate-2026 expired at 2026-06-30/
+    );
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('an unsigned artifact is refused by the Ed25519 verifier', () => {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+  void privateKey;
+  const context = setup({
+    signatureVerifier: new Ed25519SignatureVerifier({ keys: [{ keyId: 'rotate-2026', publicKeyPem }] })
+  });
+  try {
+    const proposed = context.propose();
+    context.writer.decide(proposed.deploymentId, APPROVAL);
+
+    assert.throws(() => context.writer.startCanary(proposed.deploymentId), /failed signature verification: it is unsigned/);
+    assert.equal(context.registry.currentPolicyArtifactId(), null);
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('a signed artifact activates through the Ed25519 verifier', () => {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const context = setup({
+    signWith: {
+      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      keyId: 'rotate-2026'
+    },
+    signatureVerifier: new Ed25519SignatureVerifier({
+      keys: [{ keyId: 'rotate-2026', publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString() }]
+    })
+  });
+  try {
+    const proposed = context.propose();
+    context.writer.decide(proposed.deploymentId, APPROVAL);
+    context.writer.startCanary(proposed.deploymentId);
+    const active = context.writer.completeCanary(proposed.deploymentId, HEALTHY, THRESHOLDS);
+
+    assert.equal(active.state, 'ACTIVE');
+    assert.equal(verifyDeployment(active), true);
+    assert.equal(context.registry.currentPolicyArtifactId(), context.artifact.artifactId);
+    // The signature is not part of the id, so the pointer names the same
+    // artifact the registry held before signing.
+    assert.equal(context.artifact.signature.keyId, 'rotate-2026');
   } finally {
     context.cleanup();
   }
@@ -598,7 +667,7 @@ test('stable versions list the most recently activated first even on a tied cloc
     lock: new SingleWriterLock(join(dir, 'deployment.lock'), 30_000),
     audit,
     principal: { principalId: 'operator-1', roles: ['admin'] },
-    signatureVerifier: { verify: () => true },
+    signatureVerifier: { verify: () => ({ valid: true }) },
     now: () => new Date(AT)
   });
 
@@ -626,7 +695,7 @@ test('a deployment degraded after activation does not jump the queue', () => {
     lock: new SingleWriterLock(join(dir, 'deployment.lock'), 30_000),
     audit: new InMemoryAuditLog(),
     principal: { principalId: 'operator-1', roles: ['admin'] },
-    signatureVerifier: { verify: () => true },
+    signatureVerifier: { verify: () => ({ valid: true }) },
     now: () => new Date((clock += 1_000))
   });
 

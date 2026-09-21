@@ -108,11 +108,13 @@ export {
   verifyPolicyArtifactSource,
   DEPLOYMENT_SCHEMA_VERSION,
   POLICY_ARTIFACT_SCHEMA_VERSION,
+  SIGNATURE_ALGORITHM,
   summarizeCanary,
   summarizeCaseResults,
   verifyEvaluationReport,
   verifyPolicyArtifact,
   type Approval,
+  type ArtifactSignature,
   type CanaryObservation,
   type CanaryResult,
   type CanaryThresholds,
@@ -152,8 +154,17 @@ export {
   type DeploymentWriterOptions,
   type ProposeDeploymentInput,
   type RollbackInput,
-  type SignatureVerifier
+  type SignatureVerifier,
+  type SignatureVerdict
 } from './registry/deployment-writer.js';
+export {
+  Ed25519SignatureVerifier,
+  loadKeyRing,
+  signPolicyArtifact,
+  type KeyRing,
+  type KeyRingEntry,
+  type SignPolicyArtifactInput
+} from './registry/signing.js';
 export {
   EMPTY_REGISTRY_SNAPSHOT,
   FilePolicyRegistryStore,

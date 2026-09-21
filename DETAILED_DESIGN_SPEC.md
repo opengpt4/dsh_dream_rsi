@@ -569,7 +569,7 @@ export interface EvaluationReport {
 }
 ```
 
-`configHash` is `hashDreamRsiConfig(config)`: a score is only comparable with another taken under the same configuration. `signature` is not implemented; signing is tracked as an open blocker.
+`configHash` is `hashDreamRsiConfig(config)`: a score is only comparable with another taken under the same configuration. The report's own `signature` field is not implemented: policy artifacts are signed (§9.1.2), and reports and snapshots are not.
 
 The report id covers the body field by field, `split` included: the split is what makes a report holdout evidence at all, so a body that ignored it would let a train report be relabelled holdout and still verify. `sampleCount` is the holdout evidence the report rests on — the holdout node count of the snapshot it was produced from — because that is what the holdout gate's `minimumHoldoutSamples` floor counts, and what the report's own `holdoutSamples` guard records. It is not the evaluated episode's step count: a report carrying both numbers let one run assert a sample count and a guard detail that disagreed, and the gate then rejected a run whose guard said the evidence was sufficient. `caseResults` is a separate axis: a single-episode run reports one case and its metrics, so the two numbers are not expected to match.
 
@@ -608,6 +608,8 @@ export interface PolicyArtifact {
   allowedCapabilities: readonly string[];
   createdBy: 'human' | 'evolution-agent';
   createdAt: string;
+  /** Detached Ed25519 signature over `artifactId`. Absent means unsigned. */
+  signature?: ArtifactSignature;
 }
 ```
 
@@ -629,6 +631,16 @@ An id is computed, never accepted: each record constructor derives it from a bod
 4. the evaluation exists, covers this artifact, and passed.
 
 Persistence goes through a `PolicyRegistryStore` port. The file store keeps one record per file: a single snapshot file cannot be written by two registries, because each writes its whole in-memory map and the later write drops the other's records. Policies and evaluations are content-addressed so per-record files cannot conflict, deployments are one file each, and the pointer is a single value where last write wins — which is what the writer lease is there to order. A deployment cannot be content-addressed by id: it is mutable as it moves through the state machine, and its id names the file it lives in. It carries a `recordHash` over its body instead, restamped by every transition, and `sealDeployment` is the only way to build or advance one. The body names every persisted field one by one, and a field left out of it is a field the hash does not protect, so a test edits each in turn and requires the hash to catch it. A live registry's map is a cache of its last load or save, not shared state; the files are. `FilePolicyRegistryStore` writes one file atomically and re-verifies every record on load — the content hash for a policy or evaluation, the `recordHash` for a deployment — and refuses a deployment naming a policy or evaluation the registry does not hold, so a tampered or truncated registry is refused at construction rather than silently trusted. `saveDeployment` applies the same hash check at the write boundary. Approval is always explicit, so nothing in this path deploys automatically.
+
+### 9.1.2 Artifact signing
+
+`src/registry/signing.ts`. A detached Ed25519 signature over the record id, with the public keys in a key ring. The signed value is the id — the hash of the record's own body — so a signature covers every identity field and no field that is deliberately not identity: `createdAt`, `sourceRef`, and the signature itself. A verifier recomputes the body hash before checking the signature, so a swapped body cannot ride a signature made for the id it now claims, and `signPolicyArtifact` refuses to sign a body that does not hash to its id rather than publishing a signature that says a tampered artifact is what it claims to be.
+
+The key ring is the rotation mechanism, not a key file. A signature names its `keyId`, and each entry carries optional `notBefore`/`notAfter` bounds, so a new key can be added while signatures from the old one still verify, and retiring a key is a bound that closes rather than a deletion that would strand the audit trail behind it. `loadKeyRing` reads a JSON document of SPKI PEM entries and refuses a malformed one, because a ring that silently lost its keys would refuse every deployment and the operator would be reading a configuration error as a signing failure.
+
+Verification refuses with a reason: an unsigned artifact, a body that does not match its id, a key that is absent, outside its window, unparseable, or not Ed25519, and a signature not made for that id. That reason reaches the operator through the deployment refusal, because "expired key" and "tampered artifact" call for different action.
+
+Enforcement is the deployment gate: `DeploymentWriter` refuses to leave `APPROVED` when no verifier is configured, so an unsigned artifact cannot reach production because nobody wired the check. Evaluation reports and snapshots carry no signature yet; the same scheme applies to their ids.
 
 ### 9.2 Candidate generation
 
@@ -735,7 +747,7 @@ The result is deep-frozen and carries the configuration hash, both evaluation id
 
 **Promotion requires the verdict.** `PolicyRegistry.promotePolicy` demands a passing `holdoutGate` whose `candidateEvaluationId` equals the evaluation being deployed, so a verdict taken over some other evaluation cannot justify a promotion.
 
-Not implemented: the confidence requirement, and signature failure (signing is an open blocker).
+Not implemented: the confidence requirement, and a `signature` guard in candidate `guardResults` — candidate artifacts are not signed, only policy artifacts are (§9.1.2).
 
 ## 11. Deployment, Canary and Rollback
 
@@ -1027,12 +1039,17 @@ Acceptance target: deterministic tests must differ by less than `1e-6` for repea
 
 ## 17. Open Decisions
 
-1. Exact DSH profile manifest and `cordis.patch.yml` schema for the deployment target.
-2. DeepSeek Harness LLM facade and session identity contract.
-3. First simulator/task family and observation coordinate system.
-4. Signature provider and key rotation policy.
-5. Production sandbox technology: container, worker VM or platform sandbox.
-6. Artifact retention, encryption and personal-data deletion requirements.
-7. Whether production auto-deploy is ever allowed without human approval.
+Resolved:
+
+1. Exact DSH profile manifest and `cordis.patch.yml` schema for the deployment target — verified against DSH 0.1.5-rc.1 and `@deepseek-ai/cordis-plugin-loader@1.0.3` (§4.1).
+2. Signature provider and key rotation policy — Ed25519 over the record id, SPKI PEM key ring with validity windows (§9.1.2).
+
+Still open:
+
+1. The host's side of the LLM facade: the in-tree contract is fixed (src/evolution/harness.ts), but which provider and session identity the host supplies is not.
+2. First simulator/task family and observation coordinate system.
+3. Production sandbox technology: container, worker VM or platform sandbox.
+4. Encryption of artifacts at rest, plus the personal-data deletion requirements. Retention by artifact kind, redaction at the trust boundary, and operator-triggered deletion are implemented (§13); encryption is not.
+5. Whether production auto-deploy is ever allowed without human approval.
 
 Until these decisions are resolved, defaults remain: simulator backend, evaluate-only, auto-deploy disabled, high-risk confirmation required, no secrets in evaluator, and process/container isolation required for generated code.

@@ -23,7 +23,8 @@ const CAPABILITIES = [
   { name: 'tool synthesis', planned: /tool synthesis/i, evidence: 'src/tools/synthesized-tool.ts' },
   { name: 'ablation study', planned: /ablation/i, evidence: 'src/evolution/ablation.ts' },
   { name: 'access control', planned: /access control/i, evidence: 'src/governance/access-control.ts' },
-  { name: 'secret redaction', planned: /redaction/i, evidence: 'src/governance/redaction.ts' }
+  { name: 'secret redaction', planned: /redaction/i, evidence: 'src/governance/redaction.ts' },
+  { name: 'artifact signing', planned: /signing/i, evidence: 'src/registry/signing.ts' }
 ];
 
 /**
@@ -55,6 +56,27 @@ test('no implemented capability is still documented as planned work', () => {
         `${document} still calls "${capability.name}" planned work, but ${capability.evidence} exists`
       );
     }
+  }
+});
+
+test('no capability status table calls an implemented capability planned', () => {
+  // The sentence-scoped check above misses tables, which is where the drift
+  // actually was: the user guide's capability table still listed profile/patch
+  // integration, candidate generation, tool synthesis, canary deployment, and
+  // the guard pipeline as "Planned" long after each shipped, and a reader
+  // planning adoption reads that table rather than the prose.
+  const table = readFileSync(`${ROOT}USER_GUIDE_AND_FEATURES.md`, 'utf8')
+    .split('\n')
+    .filter((line) => /^\|\s*[^|]+\|\s*(Planned|Not implemented|Not available)\s*\|/i.test(line))
+    .join('\n');
+
+  assert.ok(table.length > 0, 'no planned rows were found, so this check is not measuring anything');
+  for (const capability of CAPABILITIES) {
+    if (!existsSync(`${ROOT}${capability.evidence}`)) continue;
+    assert.ok(
+      !capability.planned.test(table),
+      `the capability table still calls "${capability.name}" planned, but ${capability.evidence} exists`
+    );
   }
 });
 
@@ -150,7 +172,7 @@ test('the decision brief accounts for every open item exactly once', () => {
   );
 
   const bangClaim = /(\d+) items in `TODO.md` are marked/.exec(brief);
-  const splitClaim = /Of the (\d+) open items, (\d+) wait on one of these seven; the remaining (\d+)/.exec(brief);
+  const splitClaim = /Of the (\d+) open items, (\d+) wait on one of these \w+; the remaining (\d+)/.exec(brief);
   assert.ok(bangClaim !== null && splitClaim !== null, 'the brief must state how many items it accounts for');
   assert.equal(Number(bangClaim[1]), gated.length, 'the brief miscounts the [!] items');
   assert.equal(Number(splitClaim[1]), open.length, 'the brief miscounts the open items');

@@ -1,9 +1,10 @@
 # Decisions needed
 
-7 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
+6 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
 repository because they choose a provider, a runtime, a benchmark, or a person.
-Of the 17 open items, 16 wait on one of these seven; the remaining 1 —
-completing the `dream status` report — is in-tree work (§8).
+Of the 17 open items, 14 wait on one of these six; the remaining 3 are in-tree
+work (§8). Sections whose decision has been made are kept as the record of what
+was chosen.
 
 Each section states what already exists, the decision, the options with the
 tradeoff that matters here, and the smallest answer that lets work start.
@@ -15,34 +16,25 @@ names no open item, or an open item that no section names, fails the suite.
 
 ---
 
-## 1. Signing scheme
+## 1. Signing scheme — decided
 
-**Claims** `TODO: Select and implement a signing scheme` and release blocker
-`TODO: Immutable signed policy/evaluation/snapshot artifacts`.
+**Decided:** Ed25519 detached signatures over the record id, with public keys in
+an SPKI PEM key ring carrying per-key validity windows. Implemented in
+`src/registry/signing.ts`; the scheme is described in `DETAILED_DESIGN_SPEC`
+§9.1.2.
 
-**Already built.** `SignatureVerifier` is a seam: `verify(artifact): boolean`,
-injected into `DeploymentWriter`. The deployment path refuses an unsigned
-artifact when no verifier is wired, refuses a verifier that returns false, and
-refuses one that throws — all three mutation-checked. A `sourceSha256` binds the
-policy source, and `sourceRef` locations are verified separately.
+**What the decision settled.** `SignatureVerifier.verify` returns a verdict with
+its reason instead of a boolean, so "expired key" and "tampered artifact" reach
+the operator through the deployment refusal rather than as one flat rejection.
+Rotation is a `notBefore`/`notAfter` bound per ring entry: a new key signs while
+signatures from the old one still verify, and retiring a key closes a bound
+instead of deleting the key behind the audit trail. `signPolicyArtifact` refuses
+a body that does not hash to its id, and the verifier recomputes that hash before
+checking the signature, so a swapped body cannot ride a signature made for the
+id it now claims.
 
-**Missing.** A scheme, a key ring, and rotation. `signedArtifact` is claimed in
-`DETAILED_DESIGN_SPEC` 8.2 and is not implemented.
-
-**Options.**
-
-| Option | What the repository would do | Cost |
-|---|---|---|
-| Ed25519 detached signature over the artifact body, public keys in a PEM key ring | Implement the verifier in-tree with `node:crypto`, plus rotation and failure tests | No new dependency; the only option whose rotation is testable here |
-| KMS/HSM-backed verifier (AWS, GCP, Vault) | Ship only the interface; the host supplies the verifier | Nothing to test locally beyond the failures already covered |
-| Keyless (sigstore/cosign, OIDC identity) | Ship only the interface | Needs network at verification time, which the evaluator child is denied |
-
-**The tradeoff.** Rotation is the part that needs a decision, not signing.
-A key ring with a validity window is testable in this repository; a KMS is not.
-The first option is the only one that closes the blocker with in-tree evidence.
-
-**Smallest answer needed:** `Ed25519 with a PEM key ring`, or `KMS — implement
-only the interface`, or `keyless`.
+**What remains, and why it is not a decision.** Applying the same scheme to
+evaluation reports and snapshots needs no answer from anyone; it is in §8.
 
 ---
 
@@ -186,7 +178,12 @@ profile now or waits for the real adapter.
 ## 8. Open items that do not wait on these
 
 - `TODO: Extend the dream status facade to the rest of the FUNCTIONAL_SPEC.md §4.4 report`
-  — in-tree; the sections above do not gate it.
+  — current policy, latest evaluation, and resource usage, none of which waits on
+  a decision.
+- `TODO: Extend signing to evaluation reports and snapshots` — the scheme is
+  chosen (§1); applying it to two more record ids is the remaining work.
+- `TODO: Immutable signed policy/evaluation/snapshot artifacts` — the release
+  blocker whose scheme is decided in §1; only the item above closes it.
 
 ---
 
@@ -196,7 +193,7 @@ profile now or waits for the real adapter.
 |---|---|
 | Simulator (§3) | the simulator, adapter, seed, holdout-evidence, and benchmark items — the largest single block, and the only route to real holdout evidence |
 | Schema freeze (§4) | the freeze item, and the comparability of every score after it |
-| Signing (§1) | the signing item and the signed-artifacts release blocker |
+| Signing (§1) — answered | kept as the record; the remaining report and snapshot signing is in §8 |
 | Sandbox (§2) | the sandbox item, the remaining CPU and network limits, and the OS/container release blocker |
 | Task families (§5) | the two-family and cross-task-transfer items |
 | Safety owner (§7) | the human-review item |

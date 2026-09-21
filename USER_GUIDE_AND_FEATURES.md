@@ -42,11 +42,12 @@ The central usage principle is simple: use real execution to collect evidence, u
 | Immutable evaluation snapshot | Available | Call `createEvaluationSnapshot()` |
 | Process-isolated evaluator | Available | Call `evaluateReplayIsolated()` |
 | Lease-based single writer | Available | Use `SingleWriterLock` |
-| Profile/patch integration | Planned | Requires target DSH profile contract |
-| Candidate policy generation | Planned | Must follow guard pipeline |
-| AST/resource/network guard | Planned | Required before untrusted candidates |
-| Canary deployment and rollback | Planned | Required before production activation |
-| Tool synthesis | Planned | Requires Dynamic Tool Registry |
+| Policy artifact signing | Available for policy artifacts | `signPolicyArtifact()` and `Ed25519SignatureVerifier` over a ring from `loadKeyRing()` |
+| Profile/patch integration | Available | Bundle patch shipped (`cordis.patch.yml`, `dsh.bundle.patch`) |
+| Candidate policy generation | Available, evaluate-only | Generate through the guard pipeline; no path to the pointer |
+| AST/resource/network guard | Static guards available; OS-level CPU and network limits pending | Required before untrusted candidates |
+| Canary deployment and rollback | Available; activation requires a signature verifier | `DeploymentWriter` state machine |
+| Tool synthesis | Available, process isolation only | Synthesize, gate, and register via the Dynamic Tool Registry |
 | Real simulator adapter | Planned | Mock backend only at present |
 
 ## 3. Installation and Verification
@@ -59,7 +60,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 440 passing tests. The suite validates implementation invariants; it does not prove cross-task benchmark improvement or physical robot safety.
+The current suite contains 460 passing tests. The suite validates implementation invariants; it does not prove cross-task benchmark improvement or physical robot safety.
 
 ## 4. Loading the Plugin
 
@@ -270,7 +271,7 @@ Run approved candidates in shadow mode, then expose them to a small canary workl
 
 ### Stage 5: Controlled production
 
-Enable deployment only after sandboxing, artifact signing, approval, rollback, audit, retention, and failure-recovery requirements are demonstrated.
+Policy artifact signing, approval, rollback, audit, and retention are in place. Sandboxing and failure recovery are demonstrated to the extent the mock environment allows; a real pilot still needs the simulator and OS-level confinement.
 
 ## 10. Known Limitations
 

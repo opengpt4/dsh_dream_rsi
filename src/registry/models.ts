@@ -18,6 +18,26 @@ export const DEPLOYMENT_SCHEMA_VERSION = 1;
 
 export type CreatedBy = 'human' | 'evolution-agent';
 
+export const SIGNATURE_ALGORITHM = 'ed25519';
+
+/**
+ * Detached signature over a record's id.
+ *
+ * Not part of the id it covers: the id says what the record is, and a signature
+ * is a claim about it by a key. Keeping it out means signing an artifact does
+ * not change what the artifact is, so a signed artifact and an unsigned one
+ * with the same body share an id and a signature can be added to a record that
+ * a registry already holds.
+ */
+export interface ArtifactSignature {
+  readonly algorithm: typeof SIGNATURE_ALGORITHM;
+  /** Names the key-ring entry that made the signature. */
+  readonly keyId: string;
+  /** Base64 detached signature over the record id. */
+  readonly value: string;
+  readonly signedAt: string;
+}
+
 export interface PolicyManifest {
   readonly entrypoint: string;
   readonly dependencies: readonly string[];
@@ -43,6 +63,13 @@ export interface PolicyArtifact {
   readonly allowedCapabilities: readonly string[];
   readonly createdBy: CreatedBy;
   readonly createdAt: string;
+  /**
+   * Detached signature over {@link PolicyArtifact.artifactId}.
+   *
+   * Absent means unsigned, which the deployment gate treats as a refusal rather
+   * than an omission: an artifact nobody signed must not reach production.
+   */
+  readonly signature?: ArtifactSignature;
 }
 
 export type CaseOutcome = 'passed' | 'failed' | 'error';
