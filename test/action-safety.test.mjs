@@ -199,6 +199,109 @@ test('a stopped or cancelled episode reads nothing from the environment', async 
   }
 });
 
+test('an episode that exhausts its wall-clock budget ends as a timeout', async () => {
+  // The budget is checked between steps and again after the decision. Round 53
+  // pinned the deadline *clamp* on an action, but nothing drove an episode past
+  // the budget, so reporting the expiry as a failure instead of a timeout
+  // survived a sweep. The observation is the slow part here, which is what makes
+  // the post-decision check the one that fires, deterministically.
+  const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+  try {
+    const real = runtime.adapter;
+    const adapter = {
+      capability: () => real.capability(),
+      observe: async (request) => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return real.observe(request);
+      },
+      availableActions: () => real.availableActions(),
+      execute: (request, signal) => real.execute(request, signal),
+      emergencyStop: (sessionId) => real.emergencyStop(sessionId),
+      reset: (sessionId) => real.reset(sessionId),
+      releaseAllSessions: () => real.releaseAllSessions()
+    };
+
+    const outcome = await runEpisode({
+      task: {
+        taskId: 'task-1',
+        goal: 'never reached',
+        environmentId: MOCK_ENVIRONMENT_ID,
+        policyVersion: 'v1',
+        budget: { maxSteps: 50, wallClockMs: 10 },
+        metadata: {}
+      },
+      episodeId: 'episode-1',
+      sessionId: SESSION_ID,
+      adapter,
+      store: runtime.store,
+      policy: () => ({ actionType: 'move_relative', parameters: { dx: 1, dy: 0, dz: 0 } })
+    });
+
+    assert.equal(outcome.episode.status, 'timeout');
+    assert.equal(outcome.cause, 'wall-clock budget exhausted');
+    // Nothing ran: the budget was gone before the first action was dispatched.
+    assert.equal(outcome.nodes.length, 0);
+  } finally {
+    runtime.dispose();
+  }
+});
+
+test('a backend that overruns its deadline cannot escape the episode budget', async () => {
+  // `execute` is meant to resolve within its deadline. One that ignores the
+  // abort signal and returns late must still be stopped by the episode budget:
+  // the loop-top check is what catches it, and it is the only check that can,
+  // because the action already returned by the time the budget is gone.
+  const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+  try {
+    const real = runtime.adapter;
+    const adapter = {
+      capability: () => real.capability(),
+      observe: (request) => real.observe(request),
+      availableActions: () => real.availableActions(),
+      execute: async (request) => {
+        // Deliberately ignores the signal and the deadline it was given.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return {
+          actionId: request.actionId,
+          status: 'completed',
+          step: 1,
+          pose: { x: 1, y: 0, z: 0, yaw: 0 },
+          gripper: 'open',
+          message: 'overran its deadline',
+          execTimeMs: 50,
+          completedAt: new Date().toISOString()
+        };
+      },
+      emergencyStop: (sessionId) => real.emergencyStop(sessionId),
+      reset: (sessionId) => real.reset(sessionId),
+      releaseAllSessions: () => real.releaseAllSessions()
+    };
+
+    const outcome = await runEpisode({
+      task: {
+        taskId: 'task-1',
+        goal: 'never reached',
+        environmentId: MOCK_ENVIRONMENT_ID,
+        policyVersion: 'v1',
+        budget: { maxSteps: 50, wallClockMs: 10 },
+        metadata: {}
+      },
+      episodeId: 'episode-1',
+      sessionId: SESSION_ID,
+      adapter,
+      store: runtime.store,
+      policy: () => ({ actionType: 'move_relative', parameters: { dx: 1, dy: 0, dz: 0 } })
+    });
+
+    assert.equal(outcome.episode.status, 'timeout');
+    assert.equal(outcome.cause, 'wall-clock budget exhausted');
+    // One overrunning step, not fifty.
+    assert.equal(outcome.nodes.length, 1);
+  } finally {
+    runtime.dispose();
+  }
+});
+
 test('the MVP action vocabulary has no representation for raw motor or joint control', () => {
   // The allowlist is closed: only high-level primitives exist, so there is no
   // value a candidate could name to reach joint velocity or a motor channel.
@@ -436,6 +539,29 @@ test('confirmation is not demanded when the host does not require it', async () 
   );
 
   assert.equal(record.state, 'COMPLETED');
+});
+
+test('an operator stop outranks an expired lease on the same action', async () => {
+  // Both fire: the lease aborts the call, and an operator stops the session while
+  // the backend is still winding down. The stop is the reason a retry is
+  // forbidden, so it is the status that has to survive; a sweep that swapped the
+  // precedence and recorded TIMEOUT instead passed every other test.
+  const guard = makeGuard({ actionLeaseMs: 10 });
+  const pending = guard.execute(guardRequest(), (signal) =>
+    new Promise((resolve) => {
+      // Resolve well after the stop lands, so both conditions hold at the check.
+      signal.addEventListener('abort', () => setTimeout(() => resolve(actionResult({ status: 'timeout' })), 80), { once: true });
+    })
+  );
+
+  setTimeout(() => guard.emergencyStop(SESSION_ID, 'operator pressed stop'), 40);
+  const record = await pending;
+
+  assert.equal(record.state, 'EMERGENCY_STOP');
+  assert.equal(record.result.status, 'emergency_stop');
+  // The message is what an operator reads; it must not say "cancelled".
+  assert.match(record.result.message, /emergency stop/);
+  assert.match(record.result.error, /was stopped/);
 });
 
 test('an emergency stop ends the action in flight and latches the session', async () => {

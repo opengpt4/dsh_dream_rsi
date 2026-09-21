@@ -399,7 +399,7 @@ export interface ActionCapability {
 
 Rejections are returned rather than thrown, and are **not** cached under the idempotency key: a rate-limited or busy rejection is re-evaluated on the next attempt, while an authorized action never runs twice.
 
-The guard owns the two session-level deadlines, so they override whatever the aborted backend call reports: a stop in flight settles as `EMERGENCY_STOP` and a held lease settles as `TIMEOUT`, regardless of the adapter returning `cancelled`. That precedence reads markers keyed by action id, so a call that ends by throwing clears its marker on the way out. A marker left behind by a failed call relabels the next action on that id — including, after `releaseSession`, an action the backend completed — as an emergency stop that never happened.
+The guard owns the two session-level deadlines, so they override whatever the aborted backend call reports: a stop in flight settles as `EMERGENCY_STOP` and a held lease settles as `TIMEOUT`, regardless of the adapter returning `cancelled`. When both apply to one action — the lease has expired and an operator has stopped the session while the backend was still winding down — the stop is the status recorded, because it is the one that forbids a retry, and its message names the stop rather than a cancellation. That precedence reads markers keyed by action id, so a call that ends by throwing clears its marker on the way out. A marker left behind by a failed call relabels the next action on that id — including, after `releaseSession`, an action the backend completed — as an emergency stop that never happened.
 
 An adapter that rejects instead of resolving has broken the contract at `EnvironmentAdapter.execute`, and the action settles as `FAILED` with `backend_error` rather than as a stop or a timeout the backend never reported.
 
@@ -666,7 +666,7 @@ Natural-language summaries may be retained for diagnostics but cannot become aut
 
 **Permissions.** `ToolPermission` is `` `action:${EmbodiedActionType}` ``. Joint velocity, raw motor commands, and unwrapped hardware channels have no representation, so a tool cannot request them. A subpath does not evade a capability check: `fs/promises` inherits `fs`.
 
-**Gates** (`tool-gate.ts`). Static: AST, dependency allowlist, resource/network capability. The tool's *test source* is scanned by the same rules. Dynamic: the tests run in a child process that leads its own group, with a deadline, bounded output, and a `PATH`-only environment. A tool whose tests cannot run has not passed them.
+**Gates** (`tool-gate.ts`). Static: AST, dependency allowlist, resource/network capability. The tool's *test source* is scanned by the same rules. Dynamic: the tests run in a child process that leads its own group, with a deadline, bounded output, and a `PATH`-only environment. A tool whose tests cannot run has not passed them, and the verdict has to be affirmative: the last line of the test process's stdout must be an object whose `passed` is `true`, so a line that is valid JSON but omits the field, or carries a non-boolean, is a failure rather than a pass.
 
 Static runs first and the tests run only if it passed. A tool the static guards reject is never handed to a runner: the runner executes the test file, so running a rejected one would execute the very code the guards refused and then read that file's own output back as the dynamic verdict. The dynamic guard is recorded as failed with the reason it was not run, rather than omitted.
 

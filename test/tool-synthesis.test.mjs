@@ -328,6 +328,21 @@ test('a tool whose tests fail is not enabled by a passing static scan', async ()
   assert.match(tests.detail, /exited with code/);
 });
 
+test('a verdict that omits the pass field is not a pass', async () => {
+  // The contract with the child is an affirmative verdict: a last stdout line of
+  // `{"passed": true}`. A test process that prints some other JSON — an older
+  // harness, or a bug that writes the wrong shape — has not said the tests
+  // passed, and reading "not false" as passing would accept it.
+  const tool = customTool({ tests: 'console.log(JSON.stringify({ ok: true }));\n' });
+
+  const result = await runToolGates(tool, { runner: new ProcessToolTestRunner({ timeoutMs: 20_000 }) });
+
+  assert.equal(result.passed, false);
+  const tests = result.guardResults.find((guard) => guard.guard === 'isolatedTests');
+  assert.equal(tests.passed, false);
+  assert.match(tests.detail, /reported passed=undefined/);
+});
+
 test('tests that never run do not count as passing', async () => {
   const tool = customTool();
   const result = await runToolGates(tool, {
