@@ -687,7 +687,7 @@ Any failure rejects the candidate and leaves current policy unchanged.
 
 ## 10. Monotonic Gate
 
-Candidate and current policy must evaluate the identical case ID set. Required checks:
+Candidate and current policy must evaluate the identical case ID set, and a case ID that appears in both must carry the same task family. The per-family verdict is derived from those labels, so leaving them to the candidate let it relabel the cases of a regressing family into one that passes, merging them into a family that met the ratio; the aggregate held, and the per-family check had nothing left to fail on. Required checks:
 
 - configured minimum pass ratio, default 95%, where candidate score is not below current score;
 - candidate score >= current score + `minimumImprovement`;

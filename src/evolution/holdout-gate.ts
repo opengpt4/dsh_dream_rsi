@@ -87,6 +87,7 @@ export function evaluateHoldoutGate(input: HoldoutGateInput): HoldoutGateResult 
 
   const incumbentCases = readCases(incumbent, 'incumbent', reasons);
   const candidateCases = readCases(candidate, 'candidate', reasons);
+  assertSameFamilies(incumbent, candidate, reasons);
 
   const monotonic = evaluateMonotonicGate(incumbentCases, candidateCases, {
     minimumPassRatio: config.minimumPassRatio,
@@ -191,6 +192,37 @@ function readCases(
     quality: result.quality ?? 0,
     score: result.score ?? 0
   }));
+}
+
+/**
+ * The verdict is per task family, so a case must be in the same family in both
+ * reports.
+ *
+ * Comparing case ids alone left the family label to the candidate: relabelling
+ * the cases of a regressing family into one that passes merged them into a
+ * family that met the ratio, and the per-family check had nothing left to fail
+ * on. Case ids match, so the mismatch is in what the two reports say the case
+ * is.
+ */
+function assertSameFamilies(
+  incumbent: EvaluationReport,
+  candidate: EvaluationReport,
+  reasons: string[]
+): void {
+  const incumbentFamily = new Map(
+    incumbent.caseResults.map((result) => [result.caseId, result.taskFamily])
+  );
+  const relabelled = candidate.caseResults.filter((result) => {
+    const family = incumbentFamily.get(result.caseId);
+    return family !== undefined && family !== result.taskFamily;
+  });
+  if (relabelled.length > 0) {
+    const first = relabelled[0]!;
+    reasons.push(
+      `${relabelled.length} case(s) are in a different task family in each report, starting with ${first.caseId} ` +
+        `(${incumbentFamily.get(first.caseId)} vs ${first.taskFamily})`
+    );
+  }
 }
 
 function validateConfig(config: HoldoutGateConfig): void {

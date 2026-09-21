@@ -215,6 +215,44 @@ test('rejection reasons are summarised per family', () => {
   ]);
 });
 
+test('a candidate cannot relabel a regressing family out of the per-family check', () => {
+  // Four packing cases regress on every metric while sixteen navigation cases
+  // improve enough that the overall ratio clears the threshold. The per-family
+  // verdict is the only thing that catches the regression, so the family a case
+  // belongs to cannot be the candidate's to choose.
+  const cases = (family, quality, score, relabel) =>
+    Array.from({ length: family === 'packing' ? 4 : 16 }, (_, index) => ({
+      caseId: `${family}:base-${index}`,
+      taskFamily: relabel && family === 'packing' ? 'navigation' : family,
+      split: 'holdout',
+      outcome: quality < 1 ? 'failed' : 'passed',
+      quality,
+      score
+    }));
+  const report = (caseResults) => createEvaluationReport({
+    evaluatorVersion: '0.1.0', sourceHash: 'a'.repeat(64), snapshotId: 'b'.repeat(64),
+    policyArtifactId: 'd'.repeat(64), split: 'holdout', configHash: CONFIG_HASH,
+    metrics: { quality: 1, cost: 0.1, parallelEfficiency: 1, missRate: 0, score: 1 },
+    caseResults, sampleCount: caseResults.length, passed: true, guardResults: [],
+    createdAt: '2026-01-01T00:00:00.000Z'
+  });
+  const incumbent = report([...cases('packing', 1, 1, false), ...cases('navigation', 1, 1, false)]);
+  const candidate = (relabel) => report([
+    ...cases('packing', 0.5, 0.9, relabel),
+    ...cases('navigation', 2, 2, relabel)
+  ]);
+
+  const honest = gate(incumbent, candidate(false), { config: { minimumPassRatio: 0.5 } });
+  assert.equal(honest.passed, false);
+  assert.match(honest.reasons.join(' '), /task family packing pass ratio 0 is below 0.5/);
+
+  // The same numbers, with the packing cases called navigation. Without a
+  // cross-check the merged family met the ratio and nothing failed.
+  const relabelled = gate(incumbent, candidate(true), { config: { minimumPassRatio: 0.5 } });
+  assert.equal(relabelled.passed, false);
+  assert.match(relabelled.reasons.join(' '), /4 case\(s\) are in a different task family in each report/);
+});
+
 test('a report without per-case metrics cannot be gated', () => {
   const incumbent = holdoutReport(improving('base'));
   const bare = createEvaluationReport({
