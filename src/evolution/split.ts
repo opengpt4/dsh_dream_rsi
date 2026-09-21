@@ -32,7 +32,7 @@ export function splitDiscoveryNodes(
   validateRatios(config);
   const taskAssignments: Record<string, EvaluationSplitName> = {};
   for (const taskId of [...new Set(nodes.map((node) => node.taskId))].sort()) {
-    taskAssignments[taskId] = assignTask(taskId, config);
+    taskAssignments[taskId] = bucketFor(taskId, config);
   }
 
   const split: Record<EvaluationSplitName, DiscoveryNode[]> = {
@@ -57,10 +57,6 @@ export function bucketFor(key: string, config: EvaluationSplitConfig): Evaluatio
   if (bucket < config.trainRatio) return 'train';
   if (bucket < config.trainRatio + config.validationRatio) return 'validation';
   return 'holdout';
-}
-
-function assignTask(taskId: string, config: EvaluationSplitConfig): EvaluationSplitName {
-  return bucketFor(taskId, config);
 }
 
 function validateRatios(config: EvaluationSplitConfig): void {
