@@ -444,6 +444,8 @@ Database rows contain references, not large binary payloads.
 
 `PolicyArtifact.sourceRef` is an `ArtifactRef` pointing at the stored source. It is deliberately **not** part of the artifact id: the id covers what the artifact is, and `sourceSha256` already binds the content. A reference is a location, and two records of the same policy must share one identity regardless of where the bytes live. `verifyPolicyArtifactSource` therefore checks separately that the referenced bytes hash to `sourceSha256`.
 
+Metadata lives in one file per artifact under `metadata/`, not in a shared index. A single index cannot be written by two stores sharing a directory: each writes its whole in-memory map, so the later write silently drops the other's entries and leaves blobs on disk with no metadata and no way to verify them. Content addressing makes per-artifact files safe, because two writers can only ever write the same name for the same bytes. Read paths go to disk rather than to a cache, so one store sees what another put or deleted.
+
 Because storage is content-addressed, `artifactId` **is** the SHA-256 of the bytes: a separate `contentSha256` field would be the same value twice, and a stored `uri` is derivable from the id. `verify(artifactId)` re-hashes the blob on disk rather than trusting the index, and distinguishes `unknown`, `deleted`, `missing_blob`, and `checksum_mismatch`. `assertArtifactsVerified` fails closed before evaluation; deployment must call it rather than re-implement the check.
 
 Retention and deletion are recorded in metadata, never by rewriting or truncating a blob. `pruneExpired` deletes artifacts past `retentionUntil` and only ever runs when called: a retention policy that fires on its own is an audit-trail hazard.

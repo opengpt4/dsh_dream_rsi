@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -322,13 +322,46 @@ test('the pipeline rejects an unknown artifact before the episode runs', async (
   });
 });
 
-test('the artifact index is a readable, stable file listing', () => {
+test('each artifact keeps its metadata in its own file', () => {
   withTempDir((dir) => {
     const store = new FileArtifactStore(dir);
     const { artifactId } = store.put({ bytes: Buffer.from('x'), kind: 'observation', mediaType: 'text/plain', schemaVersion: 1 });
 
-    const written = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
-    assert.equal(written.length, 1);
-    assert.equal(written[0].artifactId, artifactId);
+    // One file per artifact rather than one index: a shared index cannot be
+    // written by two stores without one dropping the other's entries.
+    const written = JSON.parse(readFileSync(join(dir, 'metadata', `${artifactId}.json`), 'utf8'));
+    assert.equal(written.artifactId, artifactId);
+    assert.equal(readdirSync(join(dir, 'metadata')).length, 1);
+  });
+});
+
+test('two stores sharing a directory do not drop each other\'s artifacts', () => {
+  withTempDir((dir) => {
+    const first = new FileArtifactStore(dir);
+    const second = new FileArtifactStore(dir);
+
+    const a = first.put({ bytes: Buffer.from('from A'), kind: 'observation', mediaType: 'text/plain', schemaVersion: 1 });
+    const b = second.put({ bytes: Buffer.from('from B'), kind: 'observation', mediaType: 'text/plain', schemaVersion: 1 });
+
+    // Both artifacts survive, and a store loaded afterwards sees both. A single
+    // index file lost one of them, leaving a blob with no metadata and no way
+    // to verify it.
+    assert.equal(first.list().length, 2);
+    assert.equal(second.list().length, 2);
+    assert.equal(new FileArtifactStore(dir).list().length, 2);
+    assert.equal(first.verify(a.artifactId).ok, true);
+    assert.equal(second.verify(b.artifactId).ok, true);
+  });
+});
+
+test('one store sees an artifact another deleted', () => {
+  withTempDir((dir) => {
+    const first = new FileArtifactStore(dir);
+    const second = new FileArtifactStore(dir);
+    const { artifactId } = first.put({ bytes: Buffer.from('shared'), kind: 'observation', mediaType: 'text/plain', schemaVersion: 1 });
+
+    second.delete(artifactId);
+    assert.equal(first.verify(artifactId).reason, 'deleted');
+    assert.equal(first.get(artifactId), undefined);
   });
 });

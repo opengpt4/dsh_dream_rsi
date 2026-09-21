@@ -61,7 +61,8 @@ Implemented and tested capabilities include:
 - evaluate-only candidate generation over the Harness LLM facade: mutation classes restricted to
   scheduling, pruning, retry, parallelism, and budget; a prompt projected from named fields so holdout,
   evaluator internals, secrets, and deployment state cannot leak into it; and a reproducible build id
-- content-addressed artifact store: SHA-256 addressed blobs, kind/media type/schema/byte-length metadata,
+- content-addressed artifact store with one metadata file per artifact, so two stores sharing a directory
+  cannot drop each other's entries; SHA-256 addressed blobs, kind/media type/schema/byte-length metadata,
   retention and deletion recorded out of band, checksum re-verification, and fail-closed verification
   before evaluation
 - canonical ReplayKey and deterministic counterfactual replay: recorded alternatives for one state are
@@ -98,7 +99,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 343 passing tests. OS/container sandboxing and a real
+The current suite contains 345 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not

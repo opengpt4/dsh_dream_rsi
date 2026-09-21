@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /**
@@ -101,15 +101,24 @@ export interface ArtifactStore {
 }
 
 export class FileArtifactStore implements ArtifactStore {
-  private readonly indexFilePath: string;
   private readonly blobRoot: string;
-  private readonly entries = new Map<string, ArtifactMetadata>();
+  private readonly metadataRoot: string;
 
+  /**
+   * One metadata file per artifact, under `metadata/`.
+   *
+   * A single `index.json` holding every entry cannot be written by two stores
+   * sharing a directory: each writes its whole in-memory map, so the later
+   * write silently drops the other's entries and leaves blobs on disk with no
+   * metadata and no way to verify them. Content addressing makes per-artifact
+   * files safe, because two writers can only ever write the same name for the
+   * same bytes.
+   */
   constructor(rootDir: string, private readonly now: () => Date = () => new Date()) {
-    this.indexFilePath = join(rootDir, 'index.json');
     this.blobRoot = join(rootDir, 'blobs');
+    this.metadataRoot = join(rootDir, 'metadata');
     mkdirSync(this.blobRoot, { recursive: true });
-    for (const entry of this.readIndex()) this.entries.set(entry.artifactId, entry);
+    mkdirSync(this.metadataRoot, { recursive: true });
   }
 
   put(input: PutArtifactInput): ArtifactMetadata {
@@ -121,7 +130,7 @@ export class FileArtifactStore implements ArtifactStore {
     }
 
     const artifactId = createHash('sha256').update(input.bytes).digest('hex');
-    const existing = this.entries.get(artifactId);
+    const existing = this.metadata(artifactId);
     // Identical content is one artifact; re-putting an undeleted one changes nothing.
     if (existing !== undefined && existing.deletedAt === null) return existing;
 
@@ -147,25 +156,26 @@ export class FileArtifactStore implements ArtifactStore {
         : new Date(this.now().getTime() + input.retentionMs).toISOString(),
       deletedAt: null
     };
-    this.entries.set(artifactId, metadata);
-    this.persist();
+    this.writeMetadata(metadata);
     return metadata;
   }
 
   get(artifactId: string): Buffer | undefined {
-    const metadata = this.entries.get(artifactId);
+    const metadata = this.metadata(artifactId);
     if (metadata === undefined || metadata.deletedAt !== null) return undefined;
     const blobPath = this.blobPath(artifactId);
     return existsSync(blobPath) ? readFileSync(blobPath) : undefined;
   }
 
   metadata(artifactId: string): ArtifactMetadata | undefined {
-    return this.entries.get(artifactId);
+    const path = this.metadataPath(artifactId);
+    if (!existsSync(path)) return undefined;
+    return JSON.parse(readFileSync(path, 'utf8')) as ArtifactMetadata;
   }
 
   /** Re-hash the stored blob and compare it with the name it is filed under. */
   verify(artifactId: string): ArtifactVerification {
-    const metadata = this.entries.get(artifactId);
+    const metadata = this.metadata(artifactId);
     if (metadata === undefined) return failed(artifactId, 'unknown', 'no metadata for this artifact');
     if (metadata.deletedAt !== null) return failed(artifactId, 'deleted', `deleted at ${metadata.deletedAt}`);
 
@@ -182,11 +192,10 @@ export class FileArtifactStore implements ArtifactStore {
   }
 
   delete(artifactId: string): boolean {
-    const metadata = this.entries.get(artifactId);
+    const metadata = this.metadata(artifactId);
     if (metadata === undefined || metadata.deletedAt !== null) return false;
     rmSync(this.blobPath(artifactId), { force: true });
-    this.entries.set(artifactId, { ...metadata, deletedAt: this.now().toISOString() });
-    this.persist();
+    this.writeMetadata({ ...metadata, deletedAt: this.now().toISOString() });
     return true;
   }
 
@@ -197,7 +206,7 @@ export class FileArtifactStore implements ArtifactStore {
   pruneExpired(at: string = this.now().toISOString()): readonly string[] {
     const cutoff = Date.parse(at);
     if (Number.isNaN(cutoff)) throw new Error(`pruneExpired needs an ISO instant, received ${at}`);
-    const expired = [...this.entries.values()]
+    const expired = this.list()
       .filter((entry) => entry.deletedAt === null && entry.retentionUntil !== null)
       .filter((entry) => Date.parse(entry.retentionUntil!) <= cutoff)
       .map((entry) => entry.artifactId);
@@ -206,22 +215,28 @@ export class FileArtifactStore implements ArtifactStore {
   }
 
   list(): ArtifactMetadata[] {
-    return [...this.entries.values()].sort((left, right) => left.artifactId.localeCompare(right.artifactId));
+    // Read from disk each time: a store must see what another writer put, and
+    // an in-memory cache would make one writer's view depend on when it loaded.
+    return readdirSync(this.metadataRoot)
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => JSON.parse(readFileSync(join(this.metadataRoot, name), 'utf8')) as ArtifactMetadata)
+      .sort((left, right) => left.artifactId.localeCompare(right.artifactId));
   }
 
   private blobPath(artifactId: string): string {
     return join(this.blobRoot, artifactId.slice(0, 2), artifactId);
   }
 
-  private readIndex(): ArtifactMetadata[] {
-    if (!existsSync(this.indexFilePath)) return [];
-    return JSON.parse(readFileSync(this.indexFilePath, 'utf8')) as ArtifactMetadata[];
+  private metadataPath(artifactId: string): string {
+    return join(this.metadataRoot, `${artifactId}.json`);
   }
 
-  private persist(): void {
-    const temporaryPath = `${this.indexFilePath}.${process.pid}.tmp`;
-    writeFileSync(temporaryPath, `${JSON.stringify(this.list(), null, 2)}\n`);
-    renameSync(temporaryPath, this.indexFilePath);
+  /** Write then rename, so a reader never observes a partial file. */
+  private writeMetadata(metadata: ArtifactMetadata): void {
+    const path = this.metadataPath(metadata.artifactId);
+    const temporaryPath = `${path}.${process.pid}.tmp`;
+    writeFileSync(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`);
+    renameSync(temporaryPath, path);
   }
 }
 
