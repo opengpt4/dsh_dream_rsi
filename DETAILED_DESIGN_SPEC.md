@@ -529,14 +529,16 @@ For visited nodes:
 ```text
 Q_raw = max(score(node)) or 0
 C_raw = sum(tokenCost(node) + gamma * execTimeMs(node))
-P_raw = totalExecTime / max(criticalPathMs, 1)
+P_raw = totalExecTime / positive(criticalPathMs)
 M = boundaryMissCount / max(totalAttempts, 1)
 
-Q = Q_raw / max(qualityReference, 1)
-C = C_raw / max(costBudget, 1)
-P = P_raw / max(idealParallelEfficiency, 1)
+Q = Q_raw / positive(qualityReference)
+C = C_raw / positive(costBudget)
+P = P_raw / positive(idealParallelEfficiency)
 S = wq*Q - wc*C + wp*P - boundaryPenalty*M
 ```
+
+`positive(x)` is `x` when it is finite and greater than zero, and `1` otherwise. It is a guard against a denominator that would poison the score, not a floor at one: a fractional reference divides by that fraction, while a zero, negative, NaN or infinite one divides by one rather than yielding `Infinity`, `NaN` or `0`. The written form used to say `max(x, 1)`, which agrees only for references at or above one and would have described the opposite behaviour for the other two cases.
 
 Store Q, C, P, M and S separately. A single score cannot hide a quality or safety regression.
 

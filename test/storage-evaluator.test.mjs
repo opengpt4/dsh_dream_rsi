@@ -91,6 +91,37 @@ test('a zero denominator is floored rather than dividing by zero', () => {
   }
 });
 
+test('a reference that is not finite and positive counts as one', () => {
+  // The documented formula said `max(reference, 1)`, which agrees with the code
+  // only for references at or above one: it would have divided by NaN and by
+  // Infinity, poisoning or zeroing the score. The guard is "finite and
+  // positive", and every one of these must leave the metrics finite and equal to
+  // the reference-of-one result.
+  const of = (qualityReference) =>
+    evaluateReplay(
+      { visitedNodes: [node], boundaryMissCount: 0, totalAttempts: 1, criticalPathMs: 6 },
+      { ...DEFAULT_EVALUATOR_CONFIG, qualityReference }
+    );
+
+  const one = of(1);
+  for (const reference of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.deepEqual(of(reference), one, `reference ${reference} is not treated as one`);
+  }
+});
+
+test('a fractional reference divides by the fraction rather than being floored at one', () => {
+  // Pinned because the two readings differ here and only the code was in the
+  // tree: a reference of one half doubles the quality it normalizes. If the
+  // spec and the code must agree, this is the direction they agree on.
+  const result = evaluateReplay(
+    { visitedNodes: [node], boundaryMissCount: 0, totalAttempts: 1, criticalPathMs: 6 },
+    { ...DEFAULT_EVALUATOR_CONFIG, qualityReference: 0.5 }
+  );
+
+  assert.equal(result.quality, node.score / 0.5);
+  assert.equal(Number.isFinite(result.score), true);
+});
+
 test('the stored schema version is read back rather than defaulted', () => {
   // The existing round-trip test uses the current schema version, so a store
   // that returned the constant 1 instead of the stored column passed it. The
