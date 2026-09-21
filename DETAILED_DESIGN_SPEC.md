@@ -223,6 +223,8 @@ export interface Episode {
 
 Every task receives a policy version at start. A later deployment cannot mutate the policy used by an already-running episode unless the host explicitly supports a version boundary.
 
+`validateTask` runs first, before the runner touches the environment: a task with a blank `taskId`, `environmentId`, or `policyVersion`, a non-positive-integer `maxSteps`, or a non-positive or non-finite `wallClockMs` is refused without a single observation. A malformed task that had already been read against would create or advance environment state for an episode that can never be bounded, and the budget is the only thing standing between a policy loop and an unbounded run.
+
 `emergency_stop` is a terminal episode status distinct from `cancelled`: an operator stop forbids automatic retry. `wallClockMs` is enforced between steps and clamps each action deadline; `maxSteps` bounds recorded nodes.
 
 ### 5.2 Environment protocol
