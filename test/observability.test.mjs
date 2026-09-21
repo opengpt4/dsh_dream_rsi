@@ -210,6 +210,7 @@ test('the report lists deployment history including the path taken', () => {
     registry,
     lock: new SingleWriterLock('/tmp/dream-rsi-obs.lock', 30_000),
     audit: new InMemoryAuditLog(),
+    principal: { principalId: 'operator-1', roles: ['admin'] },
     signatureVerifier: { verify: () => true }
   });
   const proposed = writer.propose({

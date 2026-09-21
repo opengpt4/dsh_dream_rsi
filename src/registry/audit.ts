@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+
+import { redactSecrets } from '../governance/redaction.js';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -52,6 +54,10 @@ export interface AuditSink {
 }
 
 export function createAuditEvent(input: AuditEventInput): AuditEvent {
+  // An operator pasting a token into a free-text reason must not put it in the
+  // permanent trail. Redaction happens before hashing, so the id covers what is
+  // actually stored.
+  const reason = input.reason === undefined ? undefined : redactSecrets(input.reason).text;
   const body = {
     schemaVersion: AUDIT_SCHEMA_VERSION,
     type: input.type,
@@ -61,7 +67,7 @@ export function createAuditEvent(input: AuditEventInput): AuditEvent {
     at: input.at,
     ...(input.policyArtifactId !== undefined ? { policyArtifactId: input.policyArtifactId } : {}),
     ...(input.operator !== undefined ? { operator: input.operator } : {}),
-    ...(input.reason !== undefined ? { reason: input.reason } : {}),
+    ...(reason !== undefined ? { reason } : {}),
     ...(input.lockOwner !== undefined ? { lockOwner: input.lockOwner } : {})
   };
   return { eventId: createHash('sha256').update(JSON.stringify(body)).digest('hex'), ...body };

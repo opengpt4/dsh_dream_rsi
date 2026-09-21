@@ -4,6 +4,33 @@ export { InMemoryDiscoveryStore, DISCOVERY_NODE_SCHEMA_VERSION, type DiscoveryNo
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { canonicalJson, hashJson } from './hash.js';
 export {
+  DEFAULT_REDACTION_RULES,
+  redactSecrets,
+  redactValue,
+  type Redaction,
+  type RedactionResult,
+  type RedactionRule
+} from './governance/redaction.js';
+export {
+  assertAccess,
+  checkAccess,
+  DEFAULT_ACCESS_POLICY,
+  GOVERNED_ACTIONS,
+  type AccessDecision,
+  type AccessPolicy,
+  type GovernedAction,
+  type Principal,
+  type Role
+} from './governance/access-control.js';
+export {
+  DEFAULT_RETENTION_POLICY,
+  expiredArtifacts,
+  putWithRetention,
+  retentionFor,
+  validateRetentionPolicy,
+  type RetentionPolicy
+} from './governance/retention.js';
+export {
   InMemoryMetrics,
   type MetricLabels,
   type MetricName,

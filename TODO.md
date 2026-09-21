@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：178 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：252 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -174,11 +174,11 @@
 
 ### 15. Privacy and Governance
 
-- [ ] Define observation/artifact retention and deletion policy.
-- [ ] Add secret redaction and sensitive prompt/tool-output handling.
-- [ ] Define access control for evolve, approve, deploy, rollback, and tool approval.
-- [ ] Review high-risk embodied actions with a human safety owner.
-- [ ] Document production approval policy; keep auto-deploy disabled unless explicitly approved.
+- [x] Define observation/artifact retention and deletion policy (`src/governance/retention.ts`): retention is decided per artifact kind at write time, a caller cannot shorten it, and policy/tool/evaluation artifacts are retained indefinitely because they are the audit trail. Deletion stays an explicit operator act.
+- [x] Add secret redaction and sensitive prompt/tool-output handling (`src/governance/redaction.ts`), applied to audit reasons before they are stored and hashed, and available as `redactValue` for any structure that leaves the trust boundary. Recorded ground truth is deliberately not redacted: replay must reproduce it.
+- [x] Define access control for evolve, approve, deploy, rollback, and tool approval (`src/governance/access-control.ts`), deny by default, enforced on every governed deployment transition, with approval and deployment as separate grants and a check that a writer cannot record an approval made under another principal.
+- [ ] Review high-risk embodied actions with a human safety owner. `[!]` Needs a named person; the capability profile and confirmation gate are ready for that review.
+- [x] Document the production approval policy (`PRODUCTION_POLICY.md`) and keep auto-deploy disabled unless explicitly approved. The policy's safety defaults are a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code.
 
 ## Release Blockers
 

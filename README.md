@@ -37,6 +37,9 @@ Implemented and tested capabilities include:
   and a file store that re-verifies every record on load
 - evaluation reports persisted per run, with rejection reasons summarised by task family
 - correlation-aware metrics and a machine-readable Q/C/P/M/S report per evaluation and task family
+- governance: deny-by-default access control on every governed transition, secret redaction at the
+  operator-facing boundary, per-kind artifact retention, and a production approval policy checked
+  against the running configuration
 - one append-only audit trail covering policy deployment and action-safety events
 - failure-injection coverage for provider outage, worker crash, stale lease, corrupted artifact,
   timeout, cancellation, and rollback failure
@@ -73,7 +76,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 233 passing tests. OS/container sandboxing, candidate
+The current suite contains 252 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

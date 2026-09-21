@@ -1,4 +1,5 @@
 import type { SingleWriterLock } from '../operations/single-writer-lock.js';
+import { checkAccess, DEFAULT_ACCESS_POLICY, type AccessPolicy, type GovernedAction, type Principal } from '../governance/access-control.js';
 import { isRollbackReachable, transitionDeployment } from './deployment-state.js';
 import type { AuditEventType, AuditSink } from './audit.js';
 import {
@@ -39,6 +40,10 @@ export interface DeploymentWriterOptions {
    * an unsigned artifact must not reach production because nobody wired the check.
    */
   readonly signatureVerifier?: SignatureVerifier;
+  /** Who this writer acts as. Every governed transition is checked against it. */
+  readonly principal: Principal;
+  /** Defaults to the deny-by-default policy. */
+  readonly accessPolicy?: AccessPolicy;
   readonly now?: () => Date;
 }
 
@@ -57,14 +62,17 @@ export interface RollbackInput {
 
 export class DeploymentWriter {
   private readonly now: () => Date;
+  private readonly accessPolicy: AccessPolicy;
   private sequence = 0;
 
   constructor(private readonly options: DeploymentWriterOptions) {
     this.now = options.now ?? (() => new Date());
+    this.accessPolicy = options.accessPolicy ?? DEFAULT_ACCESS_POLICY;
   }
 
   /** PROPOSED. Records the baseline the gate evidence was taken against. */
   propose(input: ProposeDeploymentInput): Deployment {
+    this.assertAllowed('evolve');
     return this.transition('policy.proposed', input.correlationId, () => {
       const { registry } = this.options;
       const artifact = registry.policy(input.policyArtifactId);
@@ -104,6 +112,13 @@ export class DeploymentWriter {
 
   /** PROPOSED -> APPROVED, or PROPOSED -> REJECTED. */
   decide(deploymentId: string, approval: Approval, correlationId?: string): Deployment {
+    this.assertAllowed('approve');
+    // Recording someone else's approval is not approval.
+    if (approval.operator !== this.options.principal.principalId) {
+      throw new Error(
+        `approval names ${approval.operator} but this writer acts as ${this.options.principal.principalId}`
+      );
+    }
     const current = this.require(deploymentId);
     const to: DeploymentState = approval.decision === 'approved' ? 'APPROVED' : 'REJECTED';
     return this.advance(
@@ -118,6 +133,7 @@ export class DeploymentWriter {
 
   /** APPROVED -> CANARY. Verifies the artifact before any traffic reaches it. */
   startCanary(deploymentId: string, correlationId?: string): Deployment {
+    this.assertAllowed('deploy');
     const current = this.require(deploymentId);
     return this.advance(current, 'CANARY', 'canary.started', correlationId, {}, {
       beforeAdvance: () => this.assertArtifactDeployable(current.policyArtifactId)
@@ -136,6 +152,7 @@ export class DeploymentWriter {
     thresholds: CanaryThresholds,
     correlationId?: string
   ): Deployment {
+    this.assertAllowed('deploy');
     const current = this.require(deploymentId);
     const canary = summarizeCanary(observation, thresholds, this.timestamp());
 
@@ -178,6 +195,7 @@ export class DeploymentWriter {
    * degradation was observed rather than jumping to the end state.
    */
   rollback(deploymentId: string, input: RollbackInput): Deployment {
+    this.assertAllowed('rollback');
     return this.transition('policy.rolled-back', input.correlationId, () => {
       let current = this.require(deploymentId);
       // ACTIVE is rollback-able, but only through DEGRADED, so it is not
@@ -224,6 +242,12 @@ export class DeploymentWriter {
         lockOwner: rolledBack.lockOwner ?? undefined
       };
     }).deployment;
+  }
+
+  /** Refuses before any state is read or written, so a denial changes nothing. */
+  private assertAllowed(action: GovernedAction): void {
+    const decision = checkAccess(this.accessPolicy, this.options.principal, action);
+    if (!decision.allowed) throw new Error(`access denied for ${action}: ${decision.reason}`);
   }
 
   private require(deploymentId: string): Deployment {

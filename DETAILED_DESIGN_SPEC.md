@@ -729,6 +729,20 @@ Controls:
 
 AST checking is a prefilter, never the security boundary. Any candidate capable of executing code must run in an OS-level restricted environment.
 
+#### Implemented governance
+
+**Secret redaction** (`src/governance/redaction.ts`). Rules cover provider keys, bearer tokens, JWTs, `Authorization` headers, credential-shaped assignments, and credentials embedded in URLs. Rules are reusable across calls: they carry the `g` flag, so `lastIndex` is reset or alternating calls would skip matches.
+
+Redaction applies where data is *emitted for operators* — audit reasons, before they are stored and hashed — and never to recorded ground truth. A discovery node must record what the environment actually returned, or replay stops reproducing it.
+
+**Access control** (`src/governance/access-control.ts`). Deny by default: a principal with no matching role is refused, and an action absent from the policy is refused rather than assumed permitted. `approve` and `deploy` are separate grants from `evolve`, so the principal that proposes a candidate is not automatically the one that may put it live. `admin` is the break-glass role.
+
+Every governed transition on the deployment writer checks the acting principal before reading or writing state, so a denial changes nothing. The writer also refuses an approval recorded under another principal's name: recording someone else's approval is not approval.
+
+**Retention** (`src/governance/retention.ts`). Decided per artifact kind at write time; a caller cannot shorten it, so a tool cannot arrange for its own evidence to expire. Policy, tool, and evaluation artifacts are retained indefinitely because they are the audit trail. `pruneExpired` and `expiredArtifacts` never remove anything on their own.
+
+**Production policy** (`PRODUCTION_POLICY.md`). States the safety defaults as a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code in either direction. While any release blocker remains open, `evolution.autoDeploy` stays `false`.
+
 #### Candidate gate
 
 Two independent checks run over the same source before a candidate is evaluated or executed, composed by `scanCandidate` and enforced by `assertCandidateAccepted`:

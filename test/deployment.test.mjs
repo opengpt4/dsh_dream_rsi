@@ -82,6 +82,7 @@ function setup({ signatureVerifier = { verify: () => true }, registry = undefine
     registry: owner,
     lock,
     audit,
+    principal: { principalId: 'operator-1', roles: ['admin'] },
     now: () => new Date((tick += 1_000)),
     // `null` means "deliberately unconfigured"; an explicit `undefined` would
     // trip the default parameter instead.
