@@ -206,7 +206,7 @@ profile now or waits for the real adapter.
 
 ## 8. Open items that do not wait on these
 
-- None. Every open item waits on one of the six decisions above.
+- None. Every open item waits on one of the four decisions above.
 
 ---
 
