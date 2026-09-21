@@ -79,7 +79,10 @@ export interface DreamRsiHooks {
  * Build the runtime for one config.
  *
  * Validates before constructing anything: an invalid config must throw rather
- * than create the SQLite file or hand back a partially-built runtime.
+ * than create the SQLite file or hand back a partially-built runtime. A
+ * disabled config is the exception — `validateDreamRsiConfig` returns early for
+ * one, so its values are not checked here. That is safe because each consumer
+ * validates what it is handed, which is what `test/config.test.mjs` pins.
  *
  * The store is built on first access. Opening it is what creates the database
  * file and its parent directory, and mounting the plugin must not write to the

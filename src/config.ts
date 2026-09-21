@@ -130,6 +130,14 @@ export function hashDreamRsiConfig(config: DreamRsiConfig): string {
   return hashJson(JSON.parse(JSON.stringify(config)) as Parameters<typeof hashJson>[0]);
 }
 
+/**
+ * Validate a resolved configuration.
+ *
+ * A disabled config is not checked: nothing will use it, and a host that turns
+ * the plugin off should not have to supply settings it never reads. The values
+ * are therefore only refused where they are used, and each consumer does its
+ * own check rather than trusting the resolver.
+ */
 export function validateDreamRsiConfig(config: DreamRsiConfig): void {
   if (!config.enabled) return;
   assertPositiveInteger(config.runtime.maxWorkers, 'runtime.maxWorkers');
