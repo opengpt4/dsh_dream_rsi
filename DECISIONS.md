@@ -2,7 +2,7 @@
 
 6 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
 repository because they choose a provider, a runtime, a benchmark, or a person.
-Of the 17 open items, 14 wait on one of these six; the remaining 3 are in-tree
+Of the 16 open items, 14 wait on one of these six; the remaining 2 are in-tree
 work (§8). Sections whose decision has been made are kept as the record of what
 was chosen.
 
@@ -181,9 +181,6 @@ profile now or waits for the real adapter.
 
 ## 8. Open items that do not wait on these
 
-- `TODO: Extend the dream status facade to the rest of the FUNCTIONAL_SPEC.md §4.4 report`
-  — current policy, latest evaluation, and resource usage, none of which waits on
-  a decision.
 - `TODO: Sign snapshots and emit a candidate signature guard` — the scheme is
   chosen (§1) and applied to policy artifacts and evaluation reports; snapshots
   and the candidate guard are what remain.

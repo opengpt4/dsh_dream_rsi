@@ -9,6 +9,8 @@ export interface DreamRsiConfig {
   readonly storage: {
     readonly sqlitePath: string;
     readonly artifactDir: string;
+    /** Registry records. Read-only consumers must not create this directory. */
+    readonly registryDir: string;
   };
   readonly runtime: {
     readonly maxWorkers: number;
@@ -69,7 +71,9 @@ export const DreamRsiConfigSchema = Schema.object({
     sqlitePath: Schema.string().default('data/discovery.db')
       .description('SQLite database holding Discovery nodes. ":memory:" keeps storage in-process.'),
     artifactDir: Schema.string().default('data/artifacts')
-      .description('Root directory for content-addressed artifacts.')
+      .description('Root directory for content-addressed artifacts.'),
+    registryDir: Schema.string().default('data/registry')
+      .description('Root directory for policy, evaluation, and deployment records, read without being created.')
   }),
   runtime: Schema.object({
     maxWorkers: Schema.number().default(4),
@@ -173,6 +177,7 @@ export function validateDreamRsiConfig(config: DreamRsiConfig): void {
   for (const [value, name] of [
     [config.storage.sqlitePath, 'storage.sqlitePath'],
     [config.storage.artifactDir, 'storage.artifactDir'],
+    [config.storage.registryDir, 'storage.registryDir'],
     [config.operations.evolutionLock, 'operations.evolutionLock'],
     [config.operations.deploymentLock, 'operations.deploymentLock']
   ] as const) {

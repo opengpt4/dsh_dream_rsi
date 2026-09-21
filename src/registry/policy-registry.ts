@@ -289,6 +289,7 @@ export class InMemoryPolicyRegistryStore implements PolicyRegistryStore {
  * rejected at construction rather than silently trusted.
  */
 export class FilePolicyRegistryStore implements PolicyRegistryStore {
+  private readonly rootDir: string;
   private readonly policiesDir: string;
   private readonly evaluationsDir: string;
   private readonly deploymentsDir: string;
@@ -309,6 +310,7 @@ export class FilePolicyRegistryStore implements PolicyRegistryStore {
    * are the shared state; the map is a cache.
    */
   constructor(rootDir: string) {
+    this.rootDir = rootDir;
     this.policiesDir = join(rootDir, 'policies');
     this.evaluationsDir = join(rootDir, 'evaluations');
     this.deploymentsDir = join(rootDir, 'deployments');
@@ -319,27 +321,47 @@ export class FilePolicyRegistryStore implements PolicyRegistryStore {
   }
 
   load(): RegistrySnapshot {
-    const policies = readRecords<PolicyArtifact>(this.policiesDir);
-    const evaluations = readRecords<EvaluationReport>(this.evaluationsDir);
-    const deployments = readRecords<Deployment>(this.deploymentsDir);
-    const currentPolicyArtifactId = existsSync(this.pointerPath)
-      ? (JSON.parse(readFileSync(this.pointerPath, 'utf8')) as { current: string | null }).current
-      : null;
+    return loadSnapshotFrom(this.rootDir);
+  }
+
+  save(snapshot: RegistrySnapshot): void {
+    for (const policy of snapshot.policies) writeRecord(this.policiesDir, policy.artifactId, policy);
+    for (const report of snapshot.evaluations) writeRecord(this.evaluationsDir, report.evaluationId, report);
+    for (const deployment of snapshot.deployments) writeRecord(this.deploymentsDir, deployment.deploymentId, deployment);
+    writeAtomic(this.pointerPath, { current: snapshot.currentPolicyArtifactId });
+  }
+}
+
+/**
+ * Read a registry directory and verify every record in it.
+ *
+ * Shared by the writable and read-only stores so their strictness cannot
+ * drift apart. A directory that does not exist is an empty registry: an
+ * absent registry is the state before anything was registered, not a fault,
+ * and a reader must not create it.
+ */
+function loadSnapshotFrom(rootDir: string): RegistrySnapshot {
+    const policies = readDirIfPresent<PolicyArtifact>(join(rootDir, 'policies'));
+    const evaluations = readDirIfPresent<EvaluationReport>(join(rootDir, 'evaluations'));
+    const deployments = readDirIfPresent<Deployment>(join(rootDir, 'deployments'));
+    const pointerPath = join(rootDir, 'current.json');
+    let currentPolicyArtifactId: string | null = null;
+    if (existsSync(pointerPath)) {
+      try {
+        currentPolicyArtifactId = (JSON.parse(readFileSync(pointerPath, 'utf8')) as { current: string | null }).current;
+      } catch (error) {
+        throw new Error(`registry is corrupt: ${pointerPath} is unreadable: ${messageOf(error)}`);
+      }
+    }
 
     for (const policy of policies) {
-      if (!verifyPolicyArtifact(policy)) {
-        throw new Error(`registry is corrupt: policy ${policy.artifactId} does not match its content`);
-      }
+      assertRecordIntact('policy', policy?.artifactId, () => verifyPolicyArtifact(policy));
     }
     for (const report of evaluations) {
-      if (!verifyEvaluationReport(report)) {
-        throw new Error(`registry is corrupt: evaluation ${report.evaluationId} does not match its content`);
-      }
+      assertRecordIntact('evaluation', report?.evaluationId, () => verifyEvaluationReport(report));
     }
     for (const deployment of deployments) {
-      if (!verifyDeployment(deployment)) {
-        throw new Error(`registry is corrupt: deployment ${deployment.deploymentId} does not match its content`);
-      }
+      assertRecordIntact('deployment', deployment?.deploymentId, () => verifyDeployment(deployment));
       // A deployment names the artifact it deploys and the evaluation it rests
       // on. Either reference pointing at a record this registry does not hold
       // means the record is not the one that was written.
@@ -364,13 +386,52 @@ export class FilePolicyRegistryStore implements PolicyRegistryStore {
       }
     }
     return { policies, evaluations, deployments, currentPolicyArtifactId };
+}
+
+/**
+ * A record that cannot even be checked is corruption, not a crash.
+ *
+ * Verification reads fields off the record, so a truncated or hand-edited file
+ * throws inside it. An operator needs to read "this record is corrupt" with the
+ * id, not a property access error from deep inside the verifier.
+ */
+function assertRecordIntact(kind: string, id: unknown, verify: () => boolean): void {
+  let intact: boolean;
+  try {
+    intact = verify();
+  } catch (error) {
+    throw new Error(`registry is corrupt: ${kind} ${String(id)} could not be verified: ${messageOf(error)}`);
+  }
+  if (!intact) throw new Error(`registry is corrupt: ${kind} ${id} does not match its content`);
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Records under a directory, or nothing when the directory is absent. */
+function readDirIfPresent<T>(directory: string): T[] {
+  return existsSync(directory) ? readRecords<T>(directory) : [];
+}
+
+/**
+ * A registry view that reads without creating anything.
+ *
+ * `FilePolicyRegistryStore` creates its directories when constructed, so
+ * reading through it is a write. A surface that must not touch the host
+ * filesystem — the status tool reports readiness without opening storage —
+ * reads through this instead: a missing directory is an empty registry, and
+ * `save` refuses rather than creating one.
+ */
+export class ReadOnlyFilePolicyRegistryStore implements PolicyRegistryStore {
+  constructor(private readonly rootDir: string) {}
+
+  load(): RegistrySnapshot {
+    return loadSnapshotFrom(this.rootDir);
   }
 
-  save(snapshot: RegistrySnapshot): void {
-    for (const policy of snapshot.policies) writeRecord(this.policiesDir, policy.artifactId, policy);
-    for (const report of snapshot.evaluations) writeRecord(this.evaluationsDir, report.evaluationId, report);
-    for (const deployment of snapshot.deployments) writeRecord(this.deploymentsDir, deployment.deploymentId, deployment);
-    writeAtomic(this.pointerPath, { current: snapshot.currentPolicyArtifactId });
+  save(): never {
+    throw new Error(`registry view at ${this.rootDir} is read-only`);
   }
 }
 

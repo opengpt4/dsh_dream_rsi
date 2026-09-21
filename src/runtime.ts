@@ -8,6 +8,7 @@ import { DEFAULT_HOLDOUT_GATE_CONFIG, type HoldoutGateConfig } from './evolution
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/split.js';
 import { SingleWriterLock } from './operations/single-writer-lock.js';
 import { InMemoryAuditLog, type AuditSink } from './registry/audit.js';
+import { PolicyRegistry, ReadOnlyFilePolicyRegistryStore } from './registry/policy-registry.js';
 import { ActionGuard, type ConfirmationRequest } from './safety/action-guard.js';
 import { narrowCapabilityProfile } from './embodied/capability.js';
 import { MOCK_CAPABILITY_PROFILE } from './safety/capability.js';
@@ -59,6 +60,16 @@ export interface DreamRsiRuntime {
   readonly audit: AuditSink;
   readonly evolutionLock: SingleWriterLock;
   readonly deploymentLock: SingleWriterLock;
+  /**
+   * Read the persisted policy registry without creating anything.
+   *
+   * Fresh on every call rather than cached: a cached view would report the
+   * state at its first read and miss every later registration, which is the
+   * one thing a status surface must not do. A directory that does not exist is
+   * an empty registry; a record that does not match its id throws, and the
+   * caller reports that rather than trusting the record.
+   */
+  readPolicyRegistry(): PolicyRegistry;
   /** Releases every resource this runtime owns. Safe to call more than once. */
   dispose(): void;
 }
@@ -152,6 +163,9 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
     capabilityProfile,
     guard,
     audit,
+    readPolicyRegistry(): PolicyRegistry {
+      return new PolicyRegistry(new ReadOnlyFilePolicyRegistryStore(config.storage.registryDir));
+    },
     evolutionLock: new SingleWriterLock(config.operations.evolutionLock, config.operations.jobLeaseMs),
     deploymentLock: new SingleWriterLock(config.operations.deploymentLock, config.operations.jobLeaseMs),
     dispose() {

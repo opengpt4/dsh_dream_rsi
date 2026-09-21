@@ -243,7 +243,21 @@ test('the status tool surfaces readiness and still opens nothing', () => {
 
     const status = getDreamRsiStatus(config, instance);
     assert.ok(status.readiness);
-    assert.deepEqual(status.readiness.checks.map((check) => check.state), ['not-probed', 'ready', 'ready']);
+    // The current-policy check runs now that the registry view is supplied; it
+    // reports ready because no policy has been deployed, which is the initial
+    // state rather than a fault.
+    assert.deepEqual(status.readiness.checks.map((check) => check.state), [
+      'not-probed',
+      'ready',
+      'ready',
+      'ready'
+    ]);
+    assert.deepEqual(status.readiness.checks.map((check) => check.name), [
+      'storage',
+      'capabilityProfile',
+      'evaluatorWorker',
+      'currentPolicy'
+    ]);
     // The whole point of `not-probed`: the tool stays side-effect free.
     assert.deepEqual(instance.store.readAll(), []);
   } finally {

@@ -94,7 +94,8 @@ Implemented and tested capabilities include:
   never widen it
 - read-only `dream_status` tool reporting enabled capabilities, the controls that admit an action
   (`requireConfirmation`, `allowActions`, `actionLeaseMs`, `maxActionsPerMinute`), the promotion thresholds,
-  and readiness checks that never open storage as a side effect
+  the persisted registry (current policy, latest evaluation), the limits the evaluator enforces, and
+  readiness checks that never open storage as a side effect
 - disposal releases adapter sessions and guard latches, so an environment is not left holding a pose
 - import and capability allowlist, composed with the AST guard into a candidate gate that the pipeline
   enforces before running anything; a capability-granting built-in cannot be allowlisted
@@ -109,7 +110,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 468 passing tests. OS/container sandboxing and a real
+The current suite contains 473 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work; the seven decisions those and the other
 outstanding items depend on are set out with their options in `DECISIONS.md`.
 

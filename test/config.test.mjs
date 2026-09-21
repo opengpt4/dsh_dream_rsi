@@ -36,6 +36,14 @@ test('config rejects invalid ratios and unsafe auto-deploy setup', () => {
   assert.throws(() => resolveDreamRsiConfig({ evolution: { autoDeploy: true } }), /requires evolution.enabled/);
 });
 
+test('the registry directory is a validated path with a default outside the artifact store', () => {
+  const config = resolveDreamRsiConfig();
+  assert.equal(config.storage.registryDir, 'data/registry');
+  assert.notEqual(config.storage.registryDir, config.storage.artifactDir);
+  assert.equal(resolveDreamRsiConfig({ storage: { registryDir: 'var/registry' } }).storage.registryDir, 'var/registry');
+  assert.throws(() => resolveDreamRsiConfig({ storage: { registryDir: '   ' } }), /storage\.registryDir must not be empty/);
+});
+
 test('disabled configuration skips enabled-only validation', () => {
   const config = { ...DEFAULT_DREAM_RSI_CONFIG, enabled: false, runtime: { ...DEFAULT_DREAM_RSI_CONFIG.runtime, maxWorkers: 0 } };
   assert.doesNotThrow(() => validateDreamRsiConfig(config));
