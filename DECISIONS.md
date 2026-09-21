@@ -33,8 +33,12 @@ a body that does not hash to its id, and the verifier recomputes that hash befor
 checking the signature, so a swapped body cannot ride a signature made for the
 id it now claims.
 
-**What remains, and why it is not a decision.** Applying the same scheme to
-evaluation reports and snapshots needs no answer from anyone; it is in §8.
+**What the scheme now covers.** Policy artifacts and evaluation reports, both
+required at activation: the writer refuses to canary a deployment whose artifact
+or evidence report is unsigned, tampered, or signed by a key outside the ring.
+
+**What remains, and why it is not a decision.** Signing snapshots and emitting a
+candidate `signature` guard need no answer from anyone; they are in §8.
 
 ---
 
@@ -180,8 +184,9 @@ profile now or waits for the real adapter.
 - `TODO: Extend the dream status facade to the rest of the FUNCTIONAL_SPEC.md §4.4 report`
   — current policy, latest evaluation, and resource usage, none of which waits on
   a decision.
-- `TODO: Extend signing to evaluation reports and snapshots` — the scheme is
-  chosen (§1); applying it to two more record ids is the remaining work.
+- `TODO: Sign snapshots and emit a candidate signature guard` — the scheme is
+  chosen (§1) and applied to policy artifacts and evaluation reports; snapshots
+  and the candidate guard are what remain.
 - `TODO: Immutable signed policy/evaluation/snapshot artifacts` — the release
   blocker whose scheme is decided in §1; only the item above closes it.
 

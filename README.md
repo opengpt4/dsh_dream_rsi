@@ -80,9 +80,10 @@ Implemented and tested capabilities include:
   quality/cost/parallel/miss-rate/sample budgets, candidate guard failures, and per-task-family verdicts,
   with a passing verdict required before any promotion
 - immutable evaluation snapshots
-- Ed25519 signatures over policy artifact ids, with public keys in an SPKI PEM key ring whose per-key
-  validity windows make rotation non-breaking; activation refuses an unsigned artifact, a tampered body, a
-  key that is absent, expired, unparseable or not Ed25519, and names the reason it refused
+- Ed25519 signatures over policy artifact and evaluation report ids, with public keys in an SPKI PEM key
+  ring whose per-key validity windows make rotation non-breaking; activation refuses an unsigned artifact,
+  an unsigned evidence report, a tampered body, a key that is absent, expired, unparseable or not Ed25519,
+  and names the reason it refused
 - process-isolated evaluator with timeout, and Node's permission model applied to every isolated child by
   default: reads scoped to the child's own directory, writes and child processes denied
 - lease-based single-writer lock with heartbeat and stale-lock recovery, where takeover is an atomic rename
@@ -108,7 +109,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 460 passing tests. OS/container sandboxing and a real
+The current suite contains 468 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work; the seven decisions those and the other
 outstanding items depend on are set out with their options in `DECISIONS.md`.
 

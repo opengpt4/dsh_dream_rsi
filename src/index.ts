@@ -160,10 +160,11 @@ export {
 export {
   Ed25519SignatureVerifier,
   loadKeyRing,
+  signEvaluationReport,
   signPolicyArtifact,
   type KeyRing,
   type KeyRingEntry,
-  type SignPolicyArtifactInput
+  type SignArtifactInput
 } from './registry/signing.js';
 export {
   EMPTY_REGISTRY_SNAPSHOT,

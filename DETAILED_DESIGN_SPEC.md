@@ -569,7 +569,7 @@ export interface EvaluationReport {
 }
 ```
 
-`configHash` is `hashDreamRsiConfig(config)`: a score is only comparable with another taken under the same configuration. The report's own `signature` field is not implemented: policy artifacts are signed (§9.1.2), and reports and snapshots are not.
+`configHash` is `hashDreamRsiConfig(config)`: a score is only comparable with another taken under the same configuration. The report carries a detached signature over its id like a policy artifact (§9.1.2), and the deployment gate verifies it before a canary starts.
 
 The report id covers the body field by field, `split` included: the split is what makes a report holdout evidence at all, so a body that ignored it would let a train report be relabelled holdout and still verify. `sampleCount` is the holdout evidence the report rests on — the holdout node count of the snapshot it was produced from — because that is what the holdout gate's `minimumHoldoutSamples` floor counts, and what the report's own `holdoutSamples` guard records. It is not the evaluated episode's step count: a report carrying both numbers let one run assert a sample count and a guard detail that disagreed, and the gate then rejected a run whose guard said the evidence was sufficient. `caseResults` is a separate axis: a single-episode run reports one case and its metrics, so the two numbers are not expected to match.
 
@@ -640,7 +640,9 @@ The key ring is the rotation mechanism, not a key file. A signature names its `k
 
 Verification refuses with a reason: an unsigned artifact, a body that does not match its id, a key that is absent, outside its window, unparseable, or not Ed25519, and a signature not made for that id. That reason reaches the operator through the deployment refusal, because "expired key" and "tampered artifact" call for different action.
 
-Enforcement is the deployment gate: `DeploymentWriter` refuses to leave `APPROVED` when no verifier is configured, so an unsigned artifact cannot reach production because nobody wired the check. Evaluation reports and snapshots carry no signature yet; the same scheme applies to their ids.
+Enforcement is the deployment gate. `DeploymentWriter` refuses to leave `APPROVED` when no verifier is configured, so an unsigned artifact cannot reach production because nobody wired the check, and it verifies the evaluation report the deployment rests on as well: a signature over the policy says what is being deployed, and one over the report says why it is allowed to be. Both are required of the verifier, so a verifier that can only check artifacts refuses by returning a reason rather than by being skipped.
+
+Snapshots carry no signature. Their integrity rests on two things: `createEvaluationSnapshot` deep-freezes the node sets it copies, and the report that evaluated a snapshot names its `snapshotId` and is signed, so a rewritten snapshot cannot be presented under a signed report.
 
 ### 9.2 Candidate generation
 
@@ -795,7 +797,7 @@ Takeover renames the stale directory aside rather than removing and recreating i
 |---|---|
 | `propose` | the artifact is registered, the evaluation covers it and passed, and the holdout gate passed and covers that evaluation. Records `rollbackTarget` as the policy live at proposal time |
 | `decide` | `PROPOSED -> APPROVED` or `PROPOSED -> REJECTED`, with an operator identity |
-| `startCanary` | `APPROVED -> CANARY`, after verifying the artifact checksum and signature |
+| `startCanary` | `APPROVED -> CANARY`, after verifying the artifact checksum and signature, and the signature on the evidence report |
 | `completeCanary` | `CANARY -> ACTIVE` or `CANARY -> ROLLED_BACK` from the threshold verdict |
 | `markDegraded` | `ACTIVE -> DEGRADED` |
 | `rollback` | to `ROLLED_BACK`, degrading an active deployment first, then restoring the pointer |

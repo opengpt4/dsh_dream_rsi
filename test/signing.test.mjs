@@ -8,9 +8,12 @@ import test from 'node:test';
 import {
   Ed25519SignatureVerifier,
   SIGNATURE_ALGORITHM,
+  createEvaluationReport,
   createPolicyArtifact,
   loadKeyRing,
+  signEvaluationReport,
   signPolicyArtifact,
+  verifyEvaluationReport,
   verifyPolicyArtifact
 } from '../dist/index.js';
 
@@ -38,12 +41,30 @@ function policy(overrides = {}) {
   });
 }
 
+function report(overrides = {}) {
+  return createEvaluationReport({
+    evaluatorVersion: '0.1.0',
+    sourceHash: 'a'.repeat(64),
+    snapshotId: 'b'.repeat(64),
+    policyArtifactId: 'c'.repeat(64),
+    split: 'holdout',
+    configHash: 'd'.repeat(64),
+    metrics: { quality: 1, cost: 0.1, parallelEfficiency: 1, missRate: 0, score: 1 },
+    caseResults: [],
+    sampleCount: 4,
+    passed: true,
+    guardResults: [],
+    createdAt: AT,
+    ...overrides
+  });
+}
+
 const ringOf = (...keys) => ({ keys });
 const verifierAt = (ring, iso) => new Ed25519SignatureVerifier(ring, () => new Date(iso));
 
 /** Reason the verifier gives for a refusal, or a failure if it accepted. */
-function refusalReason(verifier, artifact) {
-  const verdict = verifier.verify(artifact);
+function refusalReason(verifier, record, method = 'verify') {
+  const verdict = verifier[method](record);
   assert.equal(verdict.valid, false, 'expected the verifier to refuse');
   return verdict.reason;
 }
@@ -103,6 +124,69 @@ test('an unsigned artifact is refused', () => {
   const { publicKeyPem } = keyPair();
   const reason = refusalReason(verifierAt(ringOf({ keyId: 'k1', publicKeyPem }), LATER), policy());
   assert.match(reason, /unsigned/);
+});
+
+// -------------------------------------------------------- evaluation reports
+
+test('a signed report verifies and keeps the id it had', () => {
+  const { publicKeyPem, privateKeyPem } = keyPair();
+  const unsigned = report();
+  const signed = signEvaluationReport(unsigned, { privateKeyPem, keyId: 'rotate-2026', now: () => new Date(AT) });
+
+  // Same contract as the artifact signer: the signature is not part of the id,
+  // so a report already held by a registry is not re-identified by signing it.
+  assert.equal(signed.evaluationId, unsigned.evaluationId);
+  assert.equal(verifyEvaluationReport(signed), true);
+  assert.equal(signed.signature.signedAt, AT);
+  assert.deepEqual(
+    verifierAt(ringOf({ keyId: 'rotate-2026', publicKeyPem }), LATER).verifyReport(signed),
+    { valid: true }
+  );
+});
+
+test('an unsigned report is refused', () => {
+  const { publicKeyPem } = keyPair();
+  const reason = refusalReason(verifierAt(ringOf({ keyId: 'k1', publicKeyPem }), AT), report(), 'verifyReport');
+  assert.match(reason, /the report is unsigned/);
+});
+
+test('a tampered report is refused even though the signature is untouched', () => {
+  const { publicKeyPem, privateKeyPem } = keyPair();
+  const signed = signEvaluationReport(report(), { privateKeyPem, keyId: 'k1' });
+  const tampered = { ...signed, passed: false };
+
+  const reason = refusalReason(verifierAt(ringOf({ keyId: 'k1', publicKeyPem }), AT), tampered, 'verifyReport');
+  assert.match(reason, /does not match its id/);
+});
+
+test('a signature made over an artifact id does not verify as a report', () => {
+  const { publicKeyPem, privateKeyPem } = keyPair();
+  const artifact = signPolicyArtifact(policy(), { privateKeyPem, keyId: 'k1' });
+  const carrying = { ...report(), signature: artifact.signature };
+
+  // The ring and key are right; the signed value is the artifact id, not this
+  // report's id, so the check names what it was not made for.
+  const reason = refusalReason(verifierAt(ringOf({ keyId: 'k1', publicKeyPem }), AT), carrying, 'verifyReport');
+  assert.match(reason, /not made for report/);
+});
+
+test('the report signer refuses a report whose body does not match its id', () => {
+  const { privateKeyPem } = keyPair();
+  const tampered = { ...report(), sampleCount: 99 };
+
+  assert.throws(
+    () => signEvaluationReport(tampered, { privateKeyPem, keyId: 'k1' }),
+    /refusing to sign evaluation report .* body does not match its id/
+  );
+});
+
+test('a retired key refuses a report it signed before retirement', () => {
+  const oldKey = keyPair();
+  const report2 = signEvaluationReport(report(), { privateKeyPem: oldKey.privateKeyPem, keyId: 'old' });
+  const ring = ringOf({ keyId: 'old', publicKeyPem: oldKey.publicKeyPem, notAfter: '2026-06-30T00:00:00.000Z' });
+
+  assert.deepEqual(verifierAt(ring, AT).verifyReport(report2), { valid: true });
+  assert.match(refusalReason(verifierAt(ring, LATER), report2, 'verifyReport'), /key old expired at 2026-06-30/);
 });
 
 // ---------------------------------------------------------------- rotation

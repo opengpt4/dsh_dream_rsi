@@ -243,7 +243,7 @@ function deploymentFixture(principal, registry = new PolicyRegistry(new InMemory
     lock: new SingleWriterLock(join(dir, 'deployment.lock'), 30_000),
     audit: new InMemoryAuditLog(),
     principal,
-    signatureVerifier: { verify: () => ({ valid: true }) }
+    signatureVerifier: { verify: () => ({ valid: true }), verifyReport: () => ({ valid: true }) }
   });
   return { registry, artifact, evaluation, writer, dir };
 }

@@ -80,7 +80,7 @@ MVP 完成必須同時滿足：
 | Real profile/patch adapter | Not started | Depends on selected DSH profile contract |
 | Candidate generation, dependency allowlist, deployment registry | Not started | Next implementation track |
 
-Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 460 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
+Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 468 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
 
 ## 4. Delivery Strategy
 
@@ -284,7 +284,7 @@ Exit gate:
 | Candidate code escape | Host/data compromise | AST plus process/container sandbox, no secrets | Phase 4-5 |
 | Semantic guidance reduces diversity | Search regression | Evolve control flow/data structures, avoid text pruning rules | Phase 5 |
 | Stale writer after crash | Evolution/deploy blocked | Lease, heartbeat, expiry recovery, audit | Phase 4 |
-| Artifact mutation after evaluation | Invalid comparison | Immutable snapshot/hash/signature | Policy artifacts signed (Ed25519, PEM key ring); report and snapshot signing pending |
+| Artifact mutation after evaluation | Invalid comparison | Immutable snapshot/hash/signature | Policy artifacts and evaluation reports signed (Ed25519, PEM key ring) and verified at activation; snapshot signing pending |
 | Cross-task overfitting | Poor generalization | Task-level split and multiple task families | Phase 7 |
 | DSH preview API changes | Integration breakage | Adapter layer, pinned versions, compatibility tests | Phase 0-1 |
 | Embodied action hazard | Physical or simulated damage | Capability profile, confirmation, timeout, emergency stop | Phase 2/6 |

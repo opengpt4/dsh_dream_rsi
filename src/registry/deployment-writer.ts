@@ -13,6 +13,7 @@ import {
   type CanaryThresholds,
   type Deployment,
   type DeploymentState,
+  type EvaluationReport,
   type HoldoutGateVerdict,
   type PolicyArtifact
 } from './models.js';
@@ -35,9 +36,17 @@ import type { PolicyRegistry } from './policy-registry.js';
  */
 export type SignatureVerdict = { readonly valid: true } | { readonly valid: false; readonly reason: string };
 
-/** Verifies a policy artifact's signature. Absent means nothing may be activated. */
+/**
+ * Verifies the records a deployment rests on. Absent means nothing may be
+ * activated.
+ *
+ * Both methods are required rather than one being optional: a verifier that
+ * cannot check evidence should refuse, not stay silent, so "this deployment's
+ * evidence was never checked" is not a state a deployment reaches by omission.
+ */
 export interface SignatureVerifier {
   verify(artifact: PolicyArtifact): SignatureVerdict;
+  verifyReport(report: EvaluationReport): SignatureVerdict;
 }
 
 export interface DeploymentWriterOptions {
@@ -145,7 +154,7 @@ export class DeploymentWriter {
     this.assertAllowed('deploy');
     const current = this.require(deploymentId);
     return this.advance(current, 'CANARY', 'canary.started', correlationId, {}, {
-      beforeAdvance: () => this.assertArtifactDeployable(current.policyArtifactId)
+      beforeAdvance: () => this.assertArtifactDeployable(current.policyArtifactId, current.evaluationId)
     });
   }
 
@@ -173,7 +182,7 @@ export class DeploymentWriter {
 
     return this.transition('policy.deployed', correlationId, () => {
       this.assertBaselineUnchanged(current);
-      this.assertArtifactDeployable(current.policyArtifactId);
+      this.assertArtifactDeployable(current.policyArtifactId, current.evaluationId);
       if (current.approval === null || current.evaluationId === null || current.holdoutGate === null) {
         throw new Error(`deployment ${deploymentId} cannot activate without an approval, an evaluation, and a gate verdict`);
       }
@@ -356,7 +365,7 @@ export class DeploymentWriter {
     });
   }
 
-  private assertArtifactDeployable(artifactId: string): void {
+  private assertArtifactDeployable(artifactId: string, evaluationId: string | null): void {
     const artifact = this.options.registry.policy(artifactId);
     if (artifact === undefined) throw new Error(`unknown policy artifact ${artifactId}`);
     // The checksum is the artifact's own identity: recompute it from the body.
@@ -370,6 +379,28 @@ export class DeploymentWriter {
     const verdict = verifier.verify(artifact);
     if (!verdict.valid) {
       throw new Error(`policy artifact ${artifactId} failed signature verification: ${verdict.reason}`);
+    }
+    this.assertEvidenceDeployable(artifactId, evaluationId);
+  }
+
+  /**
+   * The evidence a deployment rests on must be signed by a trusted key too.
+   *
+   * A signed policy says what is being deployed; the report says why it is
+   * allowed to be. Checking only the first would let an unsigned or rewritten
+   * report justify an activation.
+   */
+  private assertEvidenceDeployable(artifactId: string, evaluationId: string | null): void {
+    const verifier = this.options.signatureVerifier;
+    if (verifier === undefined) return;
+    if (evaluationId === null) {
+      throw new Error(`policy artifact ${artifactId} cannot be deployed: the deployment rests on no evaluation`);
+    }
+    const report = this.options.registry.evaluation(evaluationId);
+    if (report === undefined) throw new Error(`unknown evaluation report ${evaluationId}`);
+    const verdict = verifier.verifyReport(report);
+    if (!verdict.valid) {
+      throw new Error(`evaluation report ${evaluationId} failed signature verification: ${verdict.reason}`);
     }
   }
 

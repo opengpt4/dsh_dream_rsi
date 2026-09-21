@@ -121,6 +121,13 @@ export interface EvaluationReport {
   readonly passed: boolean;
   readonly guardResults: readonly GuardResult[];
   readonly createdAt: string;
+  /**
+   * Detached signature over {@link EvaluationReport.evaluationId}.
+   *
+   * The deployment gate refuses to canary a deployment whose evidence is
+   * unsigned, so a report that no key vouches for cannot promote a policy.
+   */
+  readonly signature?: ArtifactSignature;
 }
 
 /**
@@ -402,7 +409,7 @@ export function verifyPolicyArtifactSource(artifact: PolicyArtifact, store: Arti
   return sha256(bytes.toString('utf8')) === artifact.sourceSha256;
 }
 
-export type EvaluationReportInput = Omit<EvaluationReport, 'evaluationId' | 'createdAt'> & {
+export type EvaluationReportInput = Omit<EvaluationReport, 'evaluationId' | 'createdAt' | 'signature'> & {
   readonly createdAt?: string;
 };
 

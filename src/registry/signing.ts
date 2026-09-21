@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import type { SignatureVerifier, SignatureVerdict } from './deployment-writer.js';
 import {
   SIGNATURE_ALGORITHM,
+  verifyEvaluationReport,
   verifyPolicyArtifact,
   type ArtifactSignature,
+  type EvaluationReport,
   type PolicyArtifact
 } from './models.js';
 
@@ -41,7 +43,7 @@ export interface KeyRing {
   readonly keys: readonly KeyRingEntry[];
 }
 
-export interface SignPolicyArtifactInput {
+export interface SignArtifactInput {
   /** PKCS#8 PEM private key. */
   readonly privateKeyPem: string;
   readonly keyId: string;
@@ -87,21 +89,37 @@ export function loadKeyRing(path: string): KeyRing {
  * be. The returned artifact has the same id, because the signature is not part
  * of it.
  */
-export function signPolicyArtifact(artifact: PolicyArtifact, input: SignPolicyArtifactInput): PolicyArtifact {
+export function signPolicyArtifact(artifact: PolicyArtifact, input: SignArtifactInput): PolicyArtifact {
   if (!verifyPolicyArtifact(artifact)) {
     throw new Error(`refusing to sign policy artifact ${artifact.artifactId}: its body does not match its id`);
   }
+  return { ...artifact, signature: createSignature(artifact.artifactId, input) };
+}
+
+/**
+ * Attach a detached signature over the report's id.
+ *
+ * Same contract as the artifact signer: a report whose body does not hash to its
+ * id is refused rather than signed.
+ */
+export function signEvaluationReport(report: EvaluationReport, input: SignArtifactInput): EvaluationReport {
+  if (!verifyEvaluationReport(report)) {
+    throw new Error(`refusing to sign evaluation report ${report.evaluationId}: its body does not match its id`);
+  }
+  return { ...report, signature: createSignature(report.evaluationId, input) };
+}
+
+function createSignature(recordId: string, input: SignArtifactInput): ArtifactSignature {
   const key = createPrivateKey(input.privateKeyPem);
   if (key.asymmetricKeyType !== SIGNATURE_ALGORITHM) {
     throw new Error(`refusing to sign with a ${key.asymmetricKeyType ?? 'unknown'} key: the scheme is ${SIGNATURE_ALGORITHM}`);
   }
-  const signature: ArtifactSignature = {
+  return {
     algorithm: SIGNATURE_ALGORITHM,
     keyId: input.keyId,
-    value: sign(null, Buffer.from(artifact.artifactId, 'utf8'), key).toString('base64'),
+    value: sign(null, Buffer.from(recordId, 'utf8'), key).toString('base64'),
     signedAt: (input.now?.() ?? new Date()).toISOString()
   };
-  return { ...artifact, signature };
 }
 
 export class Ed25519SignatureVerifier implements SignatureVerifier {
@@ -115,9 +133,22 @@ export class Ed25519SignatureVerifier implements SignatureVerifier {
     // Before the signature: the signature covers the id, so a body that no
     // longer hashes to it is not the artifact anything was signed about.
     if (!verifyPolicyArtifact(artifact)) return refuse('its body does not match its id');
+    return this.check(artifact.artifactId, artifact.signature, 'artifact');
+  }
 
-    const signature = artifact.signature;
-    if (signature === undefined) return refuse('it is unsigned');
+  /**
+   * Verify the evaluation report a deployment rests on.
+   *
+   * Separate from {@link verify} because the record types differ, not the
+   * check: the same ring, windows, and reasons apply.
+   */
+  verifyReport(report: EvaluationReport): SignatureVerdict {
+    if (!verifyEvaluationReport(report)) return refuse('its body does not match its id');
+    return this.check(report.evaluationId, report.signature, 'report');
+  }
+
+  private check(recordId: string, signature: ArtifactSignature | undefined, noun: string): SignatureVerdict {
+    if (signature === undefined) return refuse(`the ${noun} is unsigned`);
     if (signature.algorithm !== SIGNATURE_ALGORITHM) {
       return refuse(`its signature algorithm ${signature.algorithm} is not ${SIGNATURE_ALGORITHM}`);
     }
@@ -133,8 +164,8 @@ export class Ed25519SignatureVerifier implements SignatureVerifier {
 
     const signatureBytes = Buffer.from(signature.value, 'base64');
     if (signatureBytes.length === 0) return refuse('its signature is empty');
-    if (!verify(null, Buffer.from(artifact.artifactId, 'utf8'), publicKey.key, signatureBytes)) {
-      return refuse(`its signature was not made for artifact ${artifact.artifactId}`);
+    if (!verify(null, Buffer.from(recordId, 'utf8'), publicKey.key, signatureBytes)) {
+      return refuse(`its signature was not made for ${noun} ${recordId}`);
     }
     return { valid: true };
   }

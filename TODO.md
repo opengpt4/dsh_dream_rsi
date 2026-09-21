@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：460 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：468 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -82,7 +82,7 @@
 - [x] Materialize ReplaySnapshot from a consistent SQLite read transaction: `DiscoveryStore.readAll()` serves the tree under one deferred transaction, and `EpisodePipelineOptions.snapshotSource: 'store'` snapshots the persisted tree rather than the run in memory.
 - [x] Revised: snapshot identity covers content only (`schemaVersion` + `splits`), with `createdAt` recorded but excluded. Including creation time meant two snapshots of the identical tree never shared an id, so the id was not the content address the design claims. Node-level `createdAt` values remain part of the content.
 - [x] Add artifact checksum verification before evaluation (`assertArtifactsVerified` runs before the evaluator and fails the run). Deployment does not exist yet; it must call the same function rather than re-implement the check.
-- [ ] Extend signing to evaluation reports and snapshots. Decided and implemented for policy artifacts: Ed25519 detached signatures over the record id, SPKI PEM key ring with validity windows, rotation, and named refusal reasons (`src/registry/signing.ts`, `test/signing.test.mjs`), enforced at activation by `DeploymentWriter`, where no verifier configured is a refusal. Reports and snapshots carry no signature field yet, and no `signature` guard is emitted in candidate `guardResults`.
+- [ ] Sign snapshots and emit a candidate `signature` guard. Ed25519 detached signatures over the record id, with an SPKI PEM key ring carrying validity windows, rotation, and named refusal reasons (`src/registry/signing.ts`, `test/signing.test.mjs`), now cover policy artifacts and evaluation reports: `DeploymentWriter` refuses to canary a deployment whose artifact or evidence report is unsigned, tampered, or signed by a key outside the ring. Snapshots carry no signature field — the report that names a `snapshotId` is signed, and the snapshot itself is frozen in memory only — and no `signature` guard is emitted in candidate `guardResults`.
 
 ### 6. Strong Evaluator Isolation
 
@@ -187,10 +187,10 @@ The project is not ready for production pilot until all of these have evidence:
 - [x] Verified target DSH profile/patch integration (DSH 0.1.5-rc.1, `@deepseek-ai/cordis-plugin-loader@1.0.3`; see BASELINE.md), including the bundle patch without which a profile cannot mount the package. Covered by `test/adapter-compat.test.mjs`.
 - [x] Complete task-to-Discovery-to-Replay-to-evaluation trace, verified against the mock environment (`test/end-to-end.test.mjs`). Real-simulator evidence is still tracked under item 10.
 - [ ] Strong OS/container isolation for untrusted candidate code.
-- [ ] Immutable signed policy/evaluation/snapshot artifacts. Policy artifacts are signed and the signature is enforced at activation; evaluation reports and snapshots are not signed yet.
+- [ ] Immutable signed policy/evaluation/snapshot artifacts. Policy artifacts and evaluation reports are signed, and both signatures are enforced at activation; snapshots are not signed, and their integrity rests on the frozen in-memory copy plus the signed report that names their id.
 - [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested; runtime filesystem writes and process spawning are denied by Node's permission model, and the child's heap is capped by `--max-old-space-size`. Runtime CPU-time and network limits do not, so this stays open.
 - [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
-- [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, covered by `test/deployment.test.mjs`, 23 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
+- [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, covered by `test/deployment.test.mjs`, 25 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).
 - [x] Audit, retention, deletion, and secret-redaction controls. Audit is append-only with content-hash event ids (`src/registry/audit.ts`); retention is per artifact kind and cannot be shortened by a caller, with deletion metadata and an operator-triggered prune (`src/governance/retention.ts`, `src/artifacts/store.ts`); redaction covers provider keys, bearer tokens, JWTs, credential assignments, and URL credentials, applied to audit reasons before storage (`src/governance/redaction.ts`).
 - [ ] Multi-task benchmark evidence; no performance claim based only on replay fixtures.
