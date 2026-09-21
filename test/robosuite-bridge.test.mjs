@@ -106,6 +106,22 @@ test('a bad command is answered without killing the session', { skip }, () => {
   assert.equal(typeof responses[2].state.pose.x, 'number');
 });
 
+test('an action the bridge does not implement is refused without losing the session', { skip }, () => {
+  // The plugin's action vocabulary is closed, but the bridge takes its action
+  // from a request that could name anything. It must refuse by name and leave
+  // the environment usable, rather than stepping something arbitrary.
+  const { responses, status } = bridge([
+    { command: 'reset', sessionId: 's1', environment: 'Lift', seed: 1 },
+    { command: 'execute', sessionId: 's1', actionType: 'teleport', parameters: {}, steps: 5 },
+    { command: 'observe', sessionId: 's1' },
+    { command: 'shutdown' }
+  ]);
+
+  assert.equal(status, 0);
+  assert.match(responses[1].error, /unsupported action teleport/);
+  assert.equal(responses[2].state.step, 0, 'the refused action must not have stepped the environment');
+});
+
 test('an environment the bridge does not build is refused by name', { skip }, () => {
   const { responses } = bridge([
     { command: 'reset', sessionId: 's1', environment: 'Door', seed: 1 },
