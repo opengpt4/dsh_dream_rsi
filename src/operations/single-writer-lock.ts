@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 
 export class SingleWriterLock {
   private held = false;
+  private recovered = false;
   private readonly ownerId = `${process.pid}-${Math.random().toString(36).slice(2)}`;
 
   constructor(
@@ -12,8 +13,19 @@ export class SingleWriterLock {
     if (!Number.isFinite(leaseMs) || leaseMs <= 0) throw new Error('leaseMs must be positive');
   }
 
+  /** True when the most recent `acquire` took over an expired lease. */
+  get recoveredStaleLock(): boolean {
+    return this.recovered;
+  }
+
+  /** Identity recorded in the lease, so an audit event can name the writer. */
+  get owner(): string {
+    return this.ownerId;
+  }
+
   acquire(): void {
     if (this.held) throw new Error(`lock ${this.lockPath} is already held by this instance`);
+    this.recovered = false;
     mkdirSync(dirname(this.lockPath), { recursive: true });
     try {
       mkdirSync(this.lockPath);
@@ -21,6 +33,9 @@ export class SingleWriterLock {
       const code = error as NodeJS.ErrnoException;
       if (code.code === 'EEXIST') {
         if (this.isExpired()) {
+          // Recovering a crashed owner's lease must be auditable, so the caller
+          // can tell a clean acquire from a takeover.
+          this.recovered = true;
           rmSync(this.lockPath, { recursive: true, force: true });
           mkdirSync(this.lockPath);
         } else {

@@ -4,6 +4,7 @@ export { InMemoryDiscoveryStore, DISCOVERY_NODE_SCHEMA_VERSION, type DiscoveryNo
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { canonicalJson, hashJson } from './hash.js';
 export {
+  advanceDeployment,
   createEvaluationReport,
   createPolicyArtifact,
   POLICY_ARTIFACT_SCHEMA_VERSION,
@@ -24,15 +25,37 @@ export {
   type EvaluationReport,
   type FamilyRejectionSummary,
   type GuardResult,
+  type HoldoutGateVerdict,
   type PolicyArtifact,
   type PolicyManifest
 } from './registry/models.js';
+export {
+  canTransitionDeployment,
+  isRollbackReachable,
+  transitionDeployment
+} from './registry/deployment-state.js';
+export {
+  AUDIT_SCHEMA_VERSION,
+  createAuditEvent,
+  FileAuditLog,
+  InMemoryAuditLog,
+  type AuditEvent,
+  type AuditEventInput,
+  type AuditEventType,
+  type AuditSink
+} from './registry/audit.js';
+export {
+  DeploymentWriter,
+  type DeploymentWriterOptions,
+  type ProposeDeploymentInput,
+  type RollbackInput,
+  type SignatureVerifier
+} from './registry/deployment-writer.js';
 export {
   EMPTY_REGISTRY_SNAPSHOT,
   FilePolicyRegistryStore,
   InMemoryPolicyRegistryStore,
   PolicyRegistry,
-  type HoldoutGateVerdict,
   type PolicyPromotion,
   type PolicyRegistryStore,
   type RegistrySnapshot

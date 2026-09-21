@@ -125,13 +125,15 @@
 
 ### 10. Deployment, Canary, and Rollback
 
-- [ ] Implement deployment state machine: `PROPOSED -> APPROVED -> CANARY -> ACTIVE`.
-- [ ] Serialize evolution/deployment transitions with the writer lease.
-- [ ] Verify artifact checksum/signature and current baseline before deployment.
-- [ ] Implement canary health checks for quality, error rate, latency, cost, and miss rate.
-- [ ] Atomically update current policy pointer only after canary success.
-- [ ] Retain at least three stable versions and implement rollback.
-- [ ] Emit approval, deployment, degraded, and rollback audit events.
+- [x] Implement deployment state machine: `PROPOSED -> APPROVED -> CANARY -> ACTIVE` (`src/registry/deployment-state.ts`, `src/registry/deployment-writer.ts`). `ACTIVE -> ROLLED_BACK` is deliberately absent: an active deployment degrades first, so a rollback records that degradation was observed.
+- [x] Serialize evolution/deployment transitions with the writer lease. Every transition holds the deployment `SingleWriterLock`, and taking over an expired lease emits a `lock.recovered` audit event rather than passing silently.
+- [x] Verify the artifact checksum and the current baseline before deployment: the artifact's id is recomputed from its body, and activation is refused if the current policy no longer matches the baseline the gate evidence was taken against.
+- [x] Add a `SignatureVerifier` seam that fails closed: with no verifier configured, activation is refused rather than permitted.
+- [ ] Select and implement a signing scheme (provider, key rotation, failure tests). `[!]`
+- [x] Implement canary health checks for quality, error rate, latency, cost, and miss rate (`summarizeCanary`, applied by `DeploymentWriter.completeCanary`); breached thresholds are named, and a breach rolls the deployment back.
+- [x] Atomically update the current policy pointer only after canary success. The pointer moves only inside `PolicyRegistry.promotePolicy`, which re-validates the gate, approval, and canary before mutating; a failure before that leaves it untouched.
+- [x] Retain at least three stable versions (`stableVersions`) and implement rollback to the previous stable artifact, restoring the pointer only to a registered one.
+- [x] Emit approval, deployment, degraded, and rollback audit events to an append-only sink (`InMemoryAuditLog`, `FileAuditLog`), each with a content-hash event id. Degradation during a rollback is its own event, not a footnote on it.
 
 ## P2: Tool and Environment Expansion
 
@@ -188,7 +190,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
 - [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested, but runtime CPU/memory/filesystem/network limits do not, so this stays open.
 - [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
-- [ ] Approval, canary, atomic deployment, and rollback.
+- [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, 15 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).
 - [ ] Audit, retention, deletion, and secret-redaction controls.
 - [ ] Multi-task benchmark evidence; no performance claim based only on replay fixtures.

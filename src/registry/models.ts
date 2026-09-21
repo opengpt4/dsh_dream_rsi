@@ -81,6 +81,18 @@ export interface EvaluationReport {
   readonly createdAt: string;
 }
 
+/**
+ * Holdout verdict a promotion rests on.
+ *
+ * Structural rather than imported from the gate module, and checked against the
+ * evaluation it covers, so a verdict taken over some other evaluation cannot
+ * justify a promotion.
+ */
+export interface HoldoutGateVerdict {
+  readonly passed: boolean;
+  readonly candidateEvaluationId: string;
+}
+
 export type DeploymentState =
   | 'PROPOSED'
   | 'APPROVED'
@@ -128,12 +140,43 @@ export interface Deployment {
   readonly deploymentId: string;
   readonly policyArtifactId: string;
   readonly state: DeploymentState;
-  readonly evaluationId: string;
-  readonly approval: Approval;
-  readonly canary: CanaryResult;
+  /** Every state this deployment passed through, in order. */
+  readonly history: readonly DeploymentState[];
+  /** Absent until the deployment is gated on an evaluation. */
+  readonly evaluationId: string | null;
+  /** Absent until an operator decides. */
+  readonly approval: Approval | null;
+  /** Absent until a canary has run. */
+  readonly canary: CanaryResult | null;
+  /**
+   * The verdict this deployment was proposed on. Carried rather than recomputed
+   * so activation re-checks the evidence that was actually reviewed.
+   */
+  readonly holdoutGate: HoldoutGateVerdict | null;
   /** Policy to return to on rollback, or `null` for the first deployment. */
   readonly rollbackTarget: string | null;
+  /** Held by the writer that last transitioned this record. */
+  readonly lockOwner: string | null;
+  /** Why the deployment left the happy path, when it did. */
+  readonly reason?: string;
   readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** Applies a state transition, recording it in `history`. */
+export function advanceDeployment(
+  deployment: Deployment,
+  to: DeploymentState,
+  changes: Partial<Pick<Deployment, 'evaluationId' | 'approval' | 'canary' | 'holdoutGate' | 'lockOwner' | 'reason'>>,
+  updatedAt: string
+): Deployment {
+  return {
+    ...deployment,
+    ...changes,
+    state: to,
+    history: [...deployment.history, to],
+    updatedAt
+  };
 }
 
 export interface PolicyArtifactInput {

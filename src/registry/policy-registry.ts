@@ -2,13 +2,16 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 
 import { hashJson } from '../hash.js';
+import { transitionDeployment } from './deployment-state.js';
 import {
+  advanceDeployment,
   verifyEvaluationReport,
   verifyPolicyArtifact,
   type Approval,
   type CanaryResult,
   type Deployment,
   type EvaluationReport,
+  type HoldoutGateVerdict,
   type PolicyArtifact
 } from './models.js';
 
@@ -30,6 +33,8 @@ export interface RegistrySnapshot {
 }
 
 /** Persistence port. The rules live in `PolicyRegistry`, not in a backend. */
+export type { HoldoutGateVerdict };
+
 export interface PolicyRegistryStore {
   load(): RegistrySnapshot;
   save(snapshot: RegistrySnapshot): void;
@@ -42,19 +47,12 @@ export const EMPTY_REGISTRY_SNAPSHOT: RegistrySnapshot = {
   currentPolicyArtifactId: null
 };
 
-/**
- * Holdout verdict the promotion rests on.
- *
- * Structural rather than imported, and checked against `evaluationId`, so a
- * gate verdict taken over some other evaluation cannot be used to justify this
- * promotion.
- */
-export interface HoldoutGateVerdict {
-  readonly passed: boolean;
-  readonly candidateEvaluationId: string;
-}
-
 export interface PolicyPromotion {
+  /**
+   * Deployment record to finalize. When omitted a new ACTIVE record is created,
+   * which is the one-shot path for callers that do not run the state machine.
+   */
+  readonly deploymentId?: string;
   readonly evaluationId: string;
   readonly holdoutGate: HoldoutGateVerdict;
   readonly approval: Approval;
@@ -171,26 +169,76 @@ export class PolicyRegistry {
     if (!report.passed) throw new Error(`evaluation ${report.evaluationId} did not pass`);
 
     const previous = this.currentPolicy;
-    const deployment: Deployment = {
-      deploymentId: hashJson({
-        policyArtifactId: artifactId,
-        evaluationId: promotion.evaluationId,
-        approvalId: promotion.approval.approvalId,
-        parentVersion: previous
-      }),
+    const deploymentId = promotion.deploymentId ?? hashJson({
       policyArtifactId: artifactId,
-      state: 'ACTIVE',
+      evaluationId: promotion.evaluationId,
+      approvalId: promotion.approval.approvalId,
+      parentVersion: previous
+    });
+    const existing = this.deployments.get(deploymentId);
+    const changes = {
       evaluationId: promotion.evaluationId,
       approval: promotion.approval,
       canary: promotion.canary,
-      rollbackTarget: previous,
-      createdAt: promotion.approval.decidedAt
+      holdoutGate: promotion.holdoutGate
     };
+
+    // Finalizing a record the writer advanced validates the transition; the
+    // one-shot path has no prior state and starts at ACTIVE.
+    const deployment: Deployment = existing === undefined
+      ? {
+          deploymentId,
+          policyArtifactId: artifactId,
+          state: 'ACTIVE',
+          history: ['ACTIVE'],
+          evaluationId: promotion.evaluationId,
+          approval: promotion.approval,
+          canary: promotion.canary,
+          holdoutGate: promotion.holdoutGate,
+          rollbackTarget: previous,
+          lockOwner: null,
+          createdAt: promotion.approval.decidedAt,
+          updatedAt: promotion.approval.decidedAt
+        }
+      : advanceDeployment(
+          { ...existing, ...changes },
+          transitionDeployment(existing.state, 'ACTIVE'),
+          changes,
+          promotion.approval.decidedAt
+        );
 
     this.deployments.set(deployment.deploymentId, deployment);
     this.currentPolicy = artifactId;
     this.persist();
     return deployment;
+  }
+
+  /**
+   * Persist a deployment record. The deployment writer owns state transitions;
+   * this only stores what it produced.
+   */
+  saveDeployment(deployment: Deployment): void {
+    this.deployments.set(deployment.deploymentId, deployment);
+    this.persist();
+  }
+
+  /**
+   * Policy artifacts currently considered stable, most recently activated first,
+   * capped at `limit`. Rollback targets come from here.
+   */
+  stableVersions(limit = 3): readonly string[] {
+    if (!Number.isInteger(limit) || limit <= 0) throw new Error('limit must be a positive integer');
+    const ordered = [...this.deployments.values()]
+      .filter((deployment) => deployment.history.includes('ACTIVE'))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    return [...new Set(ordered.map((deployment) => deployment.policyArtifactId))].slice(0, limit);
+  }
+
+  /** Moves the pointer back to `artifactId`. The caller owns the rollback decision. */
+  restoreCurrentPolicy(artifactId: string): void {
+    if (!this.policies.has(artifactId)) throw new Error(`cannot restore unregistered policy artifact ${artifactId}`);
+    this.currentPolicy = artifactId;
+    this.persist();
   }
 
   private persist(): void {

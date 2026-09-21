@@ -672,7 +672,28 @@ A failure before step 7 leaves current pointer untouched. A failure after step 7
 
 ### 11.3 Writer lease
 
-`SingleWriterLock` uses atomic directory creation, lease metadata, expiry recovery and heartbeat. A crashed owner is recoverable after lease expiry. Recovery must be audited, and production should additionally use a monotonic clock/transactional storage where available to avoid wall-clock anomalies.
+`SingleWriterLock` uses atomic directory creation, lease metadata, expiry recovery and heartbeat. A crashed owner is recoverable after lease expiry. Recovery must be audited, and production should additionally use a monotonic clock/transactional storage where available to avoid wall-clock anomalies. `SingleWriterLock.recoveredStaleLock` reports a takeover so the caller can emit a `lock.recovered` event.
+
+#### Implemented (`src/registry/deployment-writer.ts`)
+
+`DeploymentWriter` is the only component that moves a deployment between states, and every transition holds the deployment writer lease, so two writers cannot interleave a state machine.
+
+| Transition | Gate |
+|---|---|
+| `propose` | the artifact is registered, the evaluation covers it and passed, and the holdout gate passed and covers that evaluation. Records `rollbackTarget` as the policy live at proposal time |
+| `decide` | `PROPOSED -> APPROVED` or `PROPOSED -> REJECTED`, with an operator identity |
+| `startCanary` | `APPROVED -> CANARY`, after verifying the artifact checksum and signature |
+| `completeCanary` | `CANARY -> ACTIVE` or `CANARY -> ROLLED_BACK` from the threshold verdict |
+| `markDegraded` | `ACTIVE -> DEGRADED` |
+| `rollback` | to `ROLLED_BACK`, degrading an active deployment first, then restoring the pointer |
+
+Deployment records carry `history`, so the path taken is recoverable even though `state` is mutable. The `holdoutGate` verdict is recorded at proposal time and passed through at activation unchanged: activation must re-check the evidence that was actually reviewed, not a freshly synthesized one.
+
+**Baseline check.** Activation is refused when the current policy no longer matches the `rollbackTarget` recorded at proposal, because gate evidence taken against a policy that is no longer live proves nothing.
+
+**Signature posture.** `SignatureVerifier` is a seam, and its absence is a refusal rather than a bypass: an unsigned artifact must not reach production because nobody wired the check. The signing scheme itself is an open blocker.
+
+**Audit.** `AuditSink` is append-only; `FileAuditLog` writes one JSON object per line and never rewrites. Each event's `eventId` is the hash of its body, so a reader can tell whether a line was altered. Degradation performed as part of a rollback is emitted as its own `policy.degraded` event.
 
 ## 12. Security Model
 
