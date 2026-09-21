@@ -585,6 +585,37 @@ test('rolling back an active deployment degrades first and restores the previous
   }
 });
 
+test('a rollback from a state that cannot reach one is refused without a trace', () => {
+  // PROPOSED never became anything: rolling it back would record a rollback of
+  // a policy that was never deployed. ROLLED_BACK is already there, and rolling
+  // it back again would rewrite the pointer and the trail.
+  const context = setup();
+  try {
+    const proposed = context.propose();
+    assert.throws(
+      () => context.writer.rollback(proposed.deploymentId, { operator: 'operator-1', reason: 'nothing happened' }),
+      /cannot be rolled back from PROPOSED/
+    );
+
+    context.writer.decide(proposed.deploymentId, APPROVAL);
+    context.writer.startCanary(proposed.deploymentId);
+    context.writer.completeCanary(proposed.deploymentId, HEALTHY, THRESHOLDS);
+    const rolledBack = context.writer.rollback(proposed.deploymentId, { operator: 'operator-1', reason: 'spike' });
+    assert.equal(rolledBack.state, 'ROLLED_BACK');
+
+    const trailBefore = context.audit.types();
+    assert.throws(
+      () => context.writer.rollback(proposed.deploymentId, { operator: 'operator-1', reason: 'again' }),
+      /cannot be rolled back from ROLLED_BACK/
+    );
+    // A refused transition is not a transition: no audit event, no state change.
+    assert.deepEqual(context.audit.types(), trailBefore);
+    assert.equal(context.registry.latestDeployment().state, 'ROLLED_BACK');
+  } finally {
+    context.cleanup();
+  }
+});
+
 test('at least three stable versions are retained for rollback', () => {
   const context = setup();
   try {

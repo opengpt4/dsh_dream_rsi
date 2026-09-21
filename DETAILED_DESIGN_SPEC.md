@@ -579,7 +579,7 @@ Reports are generated outside candidate code. The current repository has a child
 
 ### 8.3 Isolation protocol
 
-Parent process sends one JSON request to a worker over stdin. Worker returns one JSON response over stdout and exits. Parent enforces timeout, captures abnormal exit, and never trusts worker output without schema validation. The production worker must additionally:
+Parent process sends one JSON request to a worker over stdin. Worker returns one JSON response over stdout and exits. Parent enforces timeout, captures abnormal exit, and never trusts worker output without schema validation: the result is rebuilt field by field, so an extra property or a crafted `__proto__` key does not cross back; a non-object result is refused; each metric must be a finite number, which matters because JSON has no `Infinity` literal but `1e999` parses to one; and a missing or non-numeric metric is refused by name. The production worker must additionally:
 
 - use read-only snapshot/holdout mounts;
 - deny secrets and network by default;

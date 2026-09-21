@@ -276,6 +276,38 @@ test('a deployment requires a registered, passing evaluation of that artifact', 
   );
 });
 
+test('the pointer refuses evidence and targets it cannot vouch for', () => {
+  // `promotePolicy` and `restoreCurrentPolicy` are the only places the pointer
+  // moves, so each prerequisite is checked before any mutation. Two of them had
+  // no case: an artifact nobody registered, and evidence taken over a different
+  // policy — the second is what stops one policy's report from deploying another.
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const first = policy();
+  const second = policy({ version: 'v2', parentVersion: 'v1' });
+  registry.registerPolicy(first);
+  registry.registerPolicy(second);
+  const evidenceForSecond = report(second.artifactId);
+  registry.registerEvaluation(evidenceForSecond);
+
+  assert.throws(
+    () => registry.promotePolicy('never-registered', promotion(evidenceForSecond.evaluationId)),
+    /cannot promote unregistered policy artifact never-registered/
+  );
+
+  assert.throws(
+    () => registry.promotePolicy(first.artifactId, promotion(evidenceForSecond.evaluationId)),
+    new RegExp(`evaluation ${evidenceForSecond.evaluationId} does not cover policy ${first.artifactId}`)
+  );
+
+  assert.throws(
+    () => registry.restoreCurrentPolicy('never-registered'),
+    /cannot restore unregistered policy artifact never-registered/
+  );
+
+  // Every refusal above happened before the pointer moved.
+  assert.equal(registry.currentPolicyArtifactId(), null);
+});
+
 test('a deployment requires an approval and a passing canary', () => {
   const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
   const artifact = policy();
