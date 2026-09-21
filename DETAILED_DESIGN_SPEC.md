@@ -587,6 +587,22 @@ Natural-language summaries may be retained for diagnostics but cannot become aut
 
 **Evaluate-only.** `evaluateCandidate` generates, scans, registers the artifact, and evaluates. It returns `promoted: false`, and the pointer is asserted unchanged. A candidate that trips the guard registers nothing and is never evaluated: the gate runs before registration, so a rejected candidate costs no episode.
 
+### 9.2.1 Tool synthesis
+
+`src/tools/`. A synthesized tool is a named macro over already-validated action primitives.
+
+**Mining** (`subgraph.ts`). A pattern is the same ordered sequence of actions that succeeded in more than one run. Only completed steps count, and a failure splits the run: a sequence spanning a failure is never treated as contiguous. The signature is canonical, so parameter key order does not matter. Occurrences and the distinct tasks they came from are recorded as the pattern's evidence.
+
+**Artifact** (`synthesized-tool.ts`). Every field a reviewer needs is part of the artifact and part of its id: name, version, description, input and output JSON Schema, source, tests, dependencies, permissions, origin, and the pattern signature. `createSynthesizedTool` is the single constructor, so a model-authored tool enters through the same id and verification rules as a template-generated one.
+
+**Permissions.** `ToolPermission` is `` `action:${EmbodiedActionType}` ``. Joint velocity, raw motor commands, and unwrapped hardware channels have no representation, so a tool cannot request them. A subpath does not evade a capability check: `fs/promises` inherits `fs`.
+
+**Gates** (`tool-gate.ts`). Static: AST, dependency allowlist, resource/network capability. The tool's *test source* is scanned by the same rules. Dynamic: the tests run in a child process that leads its own group, with a deadline, bounded output, and a `PATH`-only environment. A tool whose tests cannot run has not passed them.
+
+This is process isolation, not a sandbox. Filesystem and network confinement remains the open blocker.
+
+**Registry** (`tool-registry.ts`). A tool enters as `candidate` and is selectable only while `enabled`. Enabling requires an operator and a clean gate: a tool with any failed guard cannot be enabled later by presenting a different verdict, because the verdict is stored with the candidate. Disabled tools are absent from `selectable()` and resolve to nothing, not to a deprioritised entry. Rollback restores the version that was live before, so the registry never shows two enabled versions of one name.
+
 ### 9.3 Guard pipeline
 
 ```text

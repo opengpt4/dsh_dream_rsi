@@ -4,6 +4,47 @@ export { InMemoryDiscoveryStore, DISCOVERY_NODE_SCHEMA_VERSION, type DiscoveryNo
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { canonicalJson, hashJson } from './hash.js';
 export {
+  DEFAULT_MINE_OPTIONS,
+  mineSuccessfulPatterns,
+  type MinePatternsOptions,
+  type ToolPattern,
+  type ToolPatternStep
+} from './tools/subgraph.js';
+export {
+  ALLOWED_TOOL_PERMISSIONS,
+  assertPermissionsAllowed,
+  createSynthesizedTool,
+  synthesizeTool,
+  verifySynthesizedTool,
+  SYNTHESIZED_TOOL_SCHEMA_VERSION,
+  type SynthesizeToolOptions,
+  type SynthesizedTool,
+  type SynthesizedToolInput,
+  type ToolOrigin,
+  type ToolPermission
+} from './tools/synthesized-tool.js';
+export {
+  ProcessToolTestRunner,
+  runToolGates,
+  type ProcessToolTestRunnerOptions,
+  type ToolGateOptions,
+  type ToolGateResult,
+  type ToolTestResult,
+  type ToolTestRunner
+} from './tools/tool-gate.js';
+export {
+  DynamicToolRegistry,
+  type DynamicToolRegistryOptions,
+  type ToolRegistryEntry,
+  type ToolStatus
+} from './tools/tool-registry.js';
+export {
+  DEFAULT_MAX_OUTPUT_BYTES as ISOLATED_CHILD_MAX_OUTPUT_BYTES,
+  runIsolatedChild,
+  type IsolatedChildResult,
+  type RunIsolatedChildOptions
+} from './operations/isolated-child.js';
+export {
   advanceDeployment,
   createEvaluationReport,
   createPolicyArtifact,

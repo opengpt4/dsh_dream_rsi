@@ -116,7 +116,7 @@ export function checkImports(source: string, options: ImportAllowlistOptions = {
     }
 
     const bare = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier;
-    const capability = BUILTIN_CAPABILITIES[bare];
+    const capability = builtinCapability(bare);
 
     // A capability-granting built-in is never allowlistable: approving it by
     // name would make the profile meaningless.
@@ -132,7 +132,10 @@ export function checkImports(source: string, options: ImportAllowlistOptions = {
       return;
     }
 
-    if (!allowedBuiltins.has(bare)) {
+    // `assert/strict` is allowed by allowing `assert`: a subpath does not grant
+    // a capability its parent lacks, and requiring every subpath by name would
+    // make the allowlist unusable.
+    if (!allowedBuiltins.has(bare) && !allowedBuiltins.has(topLevel(bare))) {
       report(node, 'builtin-not-allowed', `built-in module "${specifier}" is not on the allowlist`, specifier);
     }
   };
@@ -188,7 +191,26 @@ function packageNameOf(specifier: string): string {
 function classify(specifier: string): ImportKind {
   if (specifier.startsWith('.') || isAbsolute(specifier)) return 'relative';
   if (specifier.startsWith('node:')) return 'builtin';
-  return specifier in BUILTIN_CAPABILITIES || HARMLESS_BUILTINS.has(specifier) ? 'builtin' : 'package';
+  return isBuiltinName(specifier) ? 'builtin' : 'package';
+}
+
+/** `assert/strict` and `path/posix` are built-ins because their parent is. */
+function topLevel(specifier: string): string {
+  return specifier.split('/')[0]!;
+}
+
+function isBuiltinName(specifier: string): boolean {
+  return (
+    specifier in BUILTIN_CAPABILITIES ||
+    HARMLESS_BUILTINS.has(specifier) ||
+    HARMLESS_BUILTINS.has(topLevel(specifier)) ||
+    topLevel(specifier) in BUILTIN_CAPABILITIES
+  );
+}
+
+/** A subpath inherits its parent's capability, so capability checks cannot be evaded by one. */
+function builtinCapability(bare: string): Capability | undefined {
+  return BUILTIN_CAPABILITIES[bare] ?? BUILTIN_CAPABILITIES[topLevel(bare)];
 }
 
 /**

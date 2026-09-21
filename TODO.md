@@ -139,11 +139,11 @@
 
 ### 11. Tool Synthesis
 
-- [ ] Detect repeated successful subgraphs in Discovery DAGs.
-- [ ] Generate tool name, version, JSON Schema, source, tests, dependencies, permissions, and artifact hash.
-- [ ] Run synthesized tools through AST, dependency, resource, and isolated test gates.
-- [ ] Add Dynamic Tool Registry with enable, disable, version, and rollback.
-- [ ] Ensure disabled tools cannot be selected by new tasks.
+- [x] Detect repeated successful subgraphs in Discovery DAGs (`src/tools/subgraph.ts`). Only completed steps count, and a failure splits the run rather than being skipped over, so a sequence spanning a failure is never offered as a tool.
+- [x] Generate tool name, version, input/output JSON Schema, source, tests, dependencies, permissions, and a content-addressed artifact hash (`src/tools/synthesized-tool.ts`). The generated module imports nothing, so the dependency allowlist is clean by construction.
+- [x] Run synthesized tools through AST, dependency, resource/network capability, and isolated test gates (`src/tools/tool-gate.ts`). The test source is scanned by the same rules, and a tool whose tests cannot run has not passed them. Process isolation only; filesystem and network confinement is still the open sandbox blocker.
+- [x] Add Dynamic Tool Registry with enable, disable, version, and rollback (`src/tools/tool-registry.ts`). Enabling requires an operator and a clean gate; a tool with any failed guard cannot be enabled by supplying a different verdict later.
+- [x] Ensure disabled tools cannot be selected by new tasks: `selectable()` omits them and `resolve(name)` returns nothing, so a caller filtering by name gets nothing rather than a deprioritised entry.
 
 ### 12. Real Simulator Adapter
 

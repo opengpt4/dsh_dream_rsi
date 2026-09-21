@@ -36,6 +36,9 @@ Implemented and tested capabilities include:
   a current-policy pointer that moves only behind an approval, a passing evaluation, and a passing canary,
   and a file store that re-verifies every record on load
 - evaluation reports persisted per run, with rejection reasons summarised by task family
+- tool synthesis from repeated successful action sequences, with content-addressed artifacts, permissions
+  limited to high-level action primitives, AST/dependency/capability gates plus process-isolated test
+  execution, and a dynamic registry where disabled tools are unselectable
 - deployment state machine under a writer lease: propose, approve, canary, activate, degrade, roll back,
   with a checksum and baseline check before activation, canary thresholds, rollback to the previous stable
   version, and an append-only audit trail
@@ -66,7 +69,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 193 passing tests. OS/container sandboxing, candidate
+The current suite contains 216 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 
