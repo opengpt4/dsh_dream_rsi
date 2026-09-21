@@ -32,6 +32,10 @@ Implemented and tested capabilities include:
   per-session mutex, rate limit, idempotency, lease, confirmation, and an emergency-stop latch that forbids retry
 - every action dispatch, from `embodied_act` and from an episode, passes through that contract
 - idempotent in-memory and SQLite Discovery stores, with a transactional whole-tree read for snapshots
+- immutable policy registry: content-addressed `PolicyArtifact`, `EvaluationReport`, and `Deployment` records,
+  a current-policy pointer that moves only behind an approval, a passing evaluation, and a passing canary,
+  and a file store that re-verifies every record on load
+- evaluation reports persisted per run, with rejection reasons summarised by task family
 - content-addressed artifact store: SHA-256 addressed blobs, kind/media type/schema/byte-length metadata,
   retention and deletion recorded out of band, checksum re-verification, and fail-closed verification
   before evaluation
@@ -53,7 +57,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 132 passing tests. OS/container sandboxing, candidate
+The current suite contains 151 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

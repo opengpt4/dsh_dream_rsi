@@ -483,6 +483,7 @@ export interface EvaluationReport {
   snapshotId: string;
   policyArtifactId: string;
   split: EvaluationRequest['split'];
+  configHash: string;
   metrics: { quality: number; cost: number; parallelEfficiency: number; missRate: number; score: number };
   caseResults: readonly CaseResult[];
   sampleCount: number;
@@ -492,6 +493,8 @@ export interface EvaluationReport {
   signature?: string;
 }
 ```
+
+`configHash` is `hashDreamRsiConfig(config)`: a score is only comparable with another taken under the same configuration. `signature` is not implemented; signing is tracked as an open blocker.
 
 Reports are generated outside candidate code. The current repository has a child-process evaluator with timeout; before untrusted candidate code is accepted, add OS/container controls for memory, CPU, filesystem, network and output size.
 
@@ -511,11 +514,11 @@ Parent process sends one JSON request to a worker over stdin. Worker returns one
 
 ```ts
 export interface PolicyArtifact {
+  /** SHA-256 over the artifact body, excluding `createdAt`. */
   artifactId: string;
   version: string;
-  parentVersion: string;
+  parentVersion: string | null;
   sourceSha256: string;
-  sourceRef: ArtifactRef;
   manifest: { entrypoint: string; dependencies: readonly string[]; schemaVersion: number };
   allowedCapabilities: readonly string[];
   createdBy: 'human' | 'evolution-agent';
@@ -524,6 +527,21 @@ export interface PolicyArtifact {
 ```
 
 Candidates are immutable artifacts. The Evolution Agent may output source, diff, manifest and build identifier, but cannot write `current` directly.
+
+`artifactId` is the hash of the artifact body, so two identical artifacts share an id and a record whose body does not match its id is rejected on registration and on load. `sourceRef` is not implemented: the registry records `sourceSha256` only, so the source blob is not yet retrievable from a record.
+
+### 9.1.1 Policy registry
+
+`src/registry/policy-registry.ts`. Policies, evaluation reports, and deployments are append-only and identified by content hash. The current-policy pointer is the only mutable state.
+
+`promotePolicy(artifactId, { evaluationId, approval, canary })` runs every check before any mutation, so a rejected promotion leaves the registry byte-identical:
+
+1. the artifact is registered;
+2. `approval.decision` is `approved`, with an operator identity;
+3. `canary.passed`;
+4. the evaluation exists, covers this artifact, and passed.
+
+Persistence goes through a `PolicyRegistryStore` port. `FilePolicyRegistryStore` writes one file atomically and re-verifies every record on load, so a tampered or truncated registry is refused at construction rather than silently trusted. Approval is always explicit, so nothing in this path deploys automatically.
 
 ### 9.2 Candidate generation
 

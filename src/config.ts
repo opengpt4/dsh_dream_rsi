@@ -1,5 +1,7 @@
 import Schema from '@deepseek-ai/schemastery';
 
+import { hashJson } from './hash.js';
+
 export interface DreamRsiConfig {
   readonly enabled: boolean;
   readonly storage: {
@@ -106,6 +108,16 @@ export function resolveDreamRsiConfig(input: DreamRsiConfigInput = {}): DreamRsi
   const config = DreamRsiConfigSchema(input) as DreamRsiConfig;
   validateDreamRsiConfig(config);
   return config;
+}
+
+/**
+ * Identity of a resolved configuration.
+ *
+ * Recorded on every evaluation report: a score is only comparable with another
+ * score taken under the same configuration.
+ */
+export function hashDreamRsiConfig(config: DreamRsiConfig): string {
+  return hashJson(JSON.parse(JSON.stringify(config)) as Parameters<typeof hashJson>[0]);
 }
 
 export function validateDreamRsiConfig(config: DreamRsiConfig): void {

@@ -4,6 +4,39 @@ export { InMemoryDiscoveryStore, DISCOVERY_NODE_SCHEMA_VERSION, type DiscoveryNo
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { canonicalJson, hashJson } from './hash.js';
 export {
+  createEvaluationReport,
+  createPolicyArtifact,
+  POLICY_ARTIFACT_SCHEMA_VERSION,
+  summarizeCanary,
+  summarizeCaseResults,
+  verifyEvaluationReport,
+  verifyPolicyArtifact,
+  type Approval,
+  type CanaryObservation,
+  type CanaryResult,
+  type CanaryThresholds,
+  type CaseOutcome,
+  type CaseResult,
+  type CreatedBy,
+  type Deployment,
+  type DeploymentState,
+  type EvaluationMetrics,
+  type EvaluationReport,
+  type FamilyRejectionSummary,
+  type GuardResult,
+  type PolicyArtifact,
+  type PolicyManifest
+} from './registry/models.js';
+export {
+  EMPTY_REGISTRY_SNAPSHOT,
+  FilePolicyRegistryStore,
+  InMemoryPolicyRegistryStore,
+  PolicyRegistry,
+  type PolicyPromotion,
+  type PolicyRegistryStore,
+  type RegistrySnapshot
+} from './registry/policy-registry.js';
+export {
   assertArtifactsVerified,
   ARTIFACT_KINDS,
   FileArtifactStore,
@@ -40,6 +73,7 @@ export {
 export { getDreamRsiStatus, createStatusTool, type DreamRsiStatus } from './status.js';
 export {
   DEFAULT_DREAM_RSI_CONFIG,
+  hashDreamRsiConfig,
   resolveDreamRsiConfig,
   validateDreamRsiConfig,
   type DreamRsiConfig,

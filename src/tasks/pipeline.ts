@@ -1,5 +1,12 @@
 import { assertArtifactsVerified, type ArtifactStore } from '../artifacts/store.js';
 import { assertCandidateAccepted, type CandidateGateOptions } from '../guardrails/candidate-gate.js';
+import {
+  createEvaluationReport,
+  type CaseResult,
+  type EvaluationReport,
+  type GuardResult
+} from '../registry/models.js';
+import type { PolicyRegistry } from '../registry/policy-registry.js';
 import type { DiscoveryNode } from '../discovery/models.js';
 import {
   evaluateReplay,
@@ -9,7 +16,7 @@ import {
 } from '../evolution/evaluator.js';
 import { evaluateReplayIsolated } from '../evolution/isolated-evaluator.js';
 import { createEvaluationSnapshot, type EvaluationSnapshot } from '../evolution/snapshot.js';
-import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from '../evolution/split.js';
+import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig, type EvaluationSplitName } from '../evolution/split.js';
 import { replayKeyInputFromNode } from '../replay/key.js';
 import { ReplaySimulator } from '../replay/simulator.js';
 import { runEpisode, type EpisodeOutcome, type RunEpisodeOptions } from './runner.js';
@@ -86,6 +93,8 @@ export interface EpisodePipelineResult {
   readonly evaluationInput: EvaluationInput;
   readonly evaluation: EvaluationResult;
   readonly gates: EpisodeGates;
+  /** Present when the caller supplied a registry to report to. */
+  readonly report?: EvaluationReport;
 }
 
 /**
@@ -185,6 +194,21 @@ export interface EpisodePipelineOptions extends RunEpisodeOptions {
   };
   /** Scanned before evaluation; a candidate that trips either guard stops the run. */
   readonly candidateSource?: CandidateGateOptions;
+  /**
+   * Persist an evaluation report for this run.
+   *
+   * The policy artifact must already be registered, because a score is only
+   * meaningful against a policy whose source is known.
+   */
+  readonly reporting?: {
+    readonly registry: PolicyRegistry;
+    readonly policyArtifactId: string;
+    readonly evaluatorVersion: string;
+    readonly sourceHash: string;
+    readonly configHash: string;
+    readonly split: EvaluationSplitName;
+    readonly taskFamily: string;
+  };
 }
 
 /**
@@ -219,17 +243,85 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
     : report.missCount / report.replayedNodeIds.length;
   const holdoutSampleCount = snapshot.splits.holdout.length;
 
+  const gates: EpisodeGates = {
+    missRate,
+    missRateWithinBudget: missRate <= settings.missRateMax,
+    holdoutSampleCount,
+    holdoutSufficient: holdoutSampleCount >= settings.minimumHoldoutSamples
+  };
+
+  const evaluationReport = options.reporting === undefined
+    ? undefined
+    : buildReport(options.reporting, outcome, snapshot, evaluation, gates, settings.missRateMax);
+
   return {
     outcome,
     snapshot,
     replay: report,
     evaluationInput,
     evaluation,
-    gates: {
-      missRate,
-      missRateWithinBudget: missRate <= settings.missRateMax,
-      holdoutSampleCount,
-      holdoutSufficient: holdoutSampleCount >= settings.minimumHoldoutSamples
-    }
+    gates,
+    ...(evaluationReport !== undefined ? { report: evaluationReport } : {})
   };
 }
+
+/**
+ * One episode is one case. The case list is a list because the benchmark
+ * (step 13) evaluates many tasks; a single-episode run reports a single sample
+ * rather than presenting one observation as a distribution.
+ */
+function buildReport(
+  reporting: NonNullable<EpisodePipelineOptions['reporting']>,
+  outcome: EpisodeOutcome,
+  snapshot: EvaluationSnapshot,
+  evaluation: EvaluationResult,
+  gates: EpisodeGates,
+  missRateMax: number
+): EvaluationReport {
+  const episode = outcome.episode;
+  const caseResults: CaseResult[] = [
+    {
+      caseId: episode.episodeId,
+      taskFamily: reporting.taskFamily,
+      split: reporting.split,
+      outcome: episode.status === 'completed' ? 'passed' : 'failed',
+      ...(episode.status === 'completed' ? {} : { reason: outcome.cause ?? episode.status })
+    }
+  ];
+
+  const guardResults: GuardResult[] = [
+    {
+      guard: 'replayMissRateBudget',
+      passed: gates.missRateWithinBudget,
+      detail: `missRate ${gates.missRate} against limit ${missRateMax}`
+    },
+    {
+      guard: 'holdoutSamples',
+      passed: gates.holdoutSufficient,
+      detail: `${gates.holdoutSampleCount} holdout nodes`
+    }
+  ];
+
+  const report = createEvaluationReport({
+    evaluatorVersion: reporting.evaluatorVersion,
+    sourceHash: reporting.sourceHash,
+    snapshotId: snapshot.snapshotId,
+    policyArtifactId: reporting.policyArtifactId,
+    split: reporting.split,
+    configHash: reporting.configHash,
+    metrics: {
+      quality: evaluation.quality,
+      cost: evaluation.cost,
+      parallelEfficiency: evaluation.parallelEfficiency,
+      missRate: evaluation.missRate,
+      score: evaluation.score
+    },
+    caseResults,
+    sampleCount: outcome.nodes.length,
+    passed: gates.missRateWithinBudget && episode.status === 'completed',
+    guardResults
+  });
+  reporting.registry.registerEvaluation(report);
+  return report;
+}
+

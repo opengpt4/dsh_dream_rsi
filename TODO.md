@@ -91,7 +91,7 @@
 - [ ] Add CPU, memory, process-count, wall-time, filesystem, and network limits. Wall-time, output bound, and process-count termination are in place; CPU, memory, filesystem, and network limits need the sandbox below.
 - [ ] Select and implement container or OS-level sandbox before running untrusted candidate code. `[!]`
 - [x] Keep host secrets and evaluator internals out of a candidate's reach: the child is spawned with `PATH` only, so inheriting `process.env` cannot hand it the host's API keys.
-- [ ] Ensure holdout and the deployment registry are inaccessible to candidates. Needs the holdout mechanism and the deployment registry (items 8 and 9).
+- [ ] Ensure holdout data is inaccessible to candidates. The deployment registry cannot leak through the gate: `CandidateGateOptions` carries only source text and allowlist options. Holdout needs the mechanism in item 9.
 
 ### 7. Guardrails
 
@@ -99,16 +99,17 @@
 - [x] Implement dependency/import allowlist (`src/guardrails/import-allowlist.ts`): relative imports must resolve inside the candidate root, packages are matched against an explicit list, and an unlisted built-in is denied rather than assumed harmless.
 - [x] Implement resource and network capability guard: built-ins are classified by the capability they grant (filesystem, network, process, secrets, code-generation, concurrency), and a capability-granting built-in cannot be allowlisted at all.
 - [x] Add prompt-injection and malicious tool-output fixtures (`test/fixtures/malicious-candidates.mjs`), each naming the rule that must catch it; `scanCandidate` composes both guards and is wired into the pipeline before the episode runs.
-- [ ] Verify every guard rejection leaves current policy and deployment registry unchanged. Scanning is deterministic and stateless, but neither registry exists yet (item 8).
+- [x] Verify every guard rejection leaves current policy and deployment registry unchanged: a rejected candidate, a rejected promotion, and a tampered registry file each leave the pointer and every record untouched (`test/registry.test.mjs`).
 
 ## P1: Evolution and Deployment
 
 ### 8. Immutable Policy and Evaluation Artifacts
 
-- [ ] Define `PolicyArtifact`, `EvaluationReport`, `Deployment`, `Approval`, and `CanaryResult` models.
-- [ ] Add source hash, parent version, evaluator version, snapshot ID, config hash, and dependency manifest.
-- [ ] Add immutable artifact registry and current-policy pointer.
-- [ ] Add report persistence and rejection reasons by case/task family.
+- [x] Define `PolicyArtifact`, `EvaluationReport`, `Deployment`, `Approval`, and `CanaryResult` models (`src/registry/models.ts`); every record's identity is the hash of its own content, so a body that does not match its id is rejected.
+- [x] Add source hash, parent version, evaluator version, snapshot ID, config hash, and dependency manifest. `hashDreamRsiConfig` records the configuration a score was taken under, so two scores are only comparable when it matches.
+- [x] Add immutable artifact registry and current-policy pointer (`src/registry/policy-registry.ts`). Records are append-only; the pointer is the only mutable state and moves only through `promotePolicy`, which requires a registered artifact, a passing evaluation covering it, an explicit operator approval, and a passing canary. Every check runs before any mutation.
+- [x] Add report persistence (`FilePolicyRegistryStore`, re-verifying every record on load so a tampered file is refused) and rejection reasons by case/task family (`summarizeCaseResults`).
+- [ ] Persist candidate source as an artifact and record its reference on the policy artifact (`sourceRef`). The registry records `sourceSha256` only, so the source itself is not yet retrievable from a record.
 
 ### 9. Candidate Generation
 
