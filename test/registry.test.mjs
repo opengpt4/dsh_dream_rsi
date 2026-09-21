@@ -136,6 +136,12 @@ test('an evaluation report id covers its metrics and case results', () => {
     verifyEvaluationReport({ ...first, metrics: { ...first.metrics, quality: 99 } }),
     false
   );
+  // The split decides whether a report is holdout evidence at all, and the gate's
+  // first check is that it says holdout. Leaving it out of the body would let a
+  // train report be relabelled and still verify.
+  assert.equal(verifyEvaluationReport({ ...first, split: 'train' }), false);
+  assert.equal(verifyEvaluationReport({ ...first, sampleCount: 99 }), false);
+  assert.equal(verifyEvaluationReport({ ...first, guardResults: [{ guard: 'x', passed: false }] }), false);
 });
 
 test('a report cannot claim another report\'s id', () => {
@@ -491,6 +497,40 @@ test('a deployment carries a content hash that is restamped on every transition'
   // The record is mutated in place by the hash, not by a field the caller set.
   assert.equal(advanceDeployment(active, 'DEGRADED', { reason: 'latency' }, AT).recordHash, degraded.recordHash);
   assert.equal(verifyDeployment({ ...degraded, reason: 'because' }), false);
+});
+
+test('the deployment record hash covers every persisted field', () => {
+  // The hash is the record's tamper evidence, and the fields it covers are
+  // whatever the body function names. Two of them — `lockOwner` and
+  // `rollbackTarget` — could be dropped from it without a single test noticing,
+  // so an edit to either went undetected.
+  const { dir, recordPath } = promotedDeploymentOnDisk();
+  try {
+    const body = JSON.parse(readFileSync(recordPath, 'utf8'));
+    assert.equal(verifyDeployment(body), true);
+
+    const edits = {
+      deploymentId: 'deploy-other',
+      policyArtifactId: 'a'.repeat(64),
+      state: 'DEGRADED',
+      history: ['ACTIVE', 'DEGRADED'],
+      evaluationId: 'b'.repeat(64),
+      approval: null,
+      canary: null,
+      holdoutGate: null,
+      rollbackTarget: 'c'.repeat(64),
+      lockOwner: 'someone-else',
+      reason: 'added after the fact',
+      activatedAt: '2020-01-01T00:00:00.000Z',
+      createdAt: '2020-01-01T00:00:00.000Z',
+      updatedAt: '2020-01-01T00:00:00.000Z'
+    };
+    for (const [field, value] of Object.entries(edits)) {
+      assert.equal(verifyDeployment({ ...body, [field]: value }), false, `${field} is not covered by the record hash`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('an edited deployment is refused at the write boundary, not only on load', () => {

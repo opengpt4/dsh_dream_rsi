@@ -83,3 +83,42 @@ test('discovery store deduplicates retries by idempotency key', () => {
   assert.equal(retry.nodeId, first.nodeId);
   assert.equal(store.listByTask('task-1').length, 1);
 });
+
+test('a replay key covers the environment version', () => {
+  // The key is the canonical encoding of five fields, and the environment is one
+  // of them: two environments that happen to agree on a state hash are still
+  // different states, so the key must not resolve across them. Dropping the
+  // field from the key survived every other test.
+  const here = { ...baseNode, nodeId: 'here', environmentVersion: 'mock-room-v1' };
+  const elsewhere = { ...baseNode, nodeId: 'elsewhere', environmentVersion: 'other-room-v1' };
+  const simulator = new ReplaySimulator([here]);
+
+  const keyOf = (node) => createReplayKey({
+    environmentVersion: node.environmentVersion,
+    stateHash: node.stateHash,
+    actionType: node.actionType,
+    normalizedActionParams: node.actionParams,
+    observationHash: node.observationHash
+  });
+
+  assert.notEqual(keyOf(here), keyOf(elsewhere));
+
+  const result = simulator.execute({
+    environmentVersion: elsewhere.environmentVersion,
+    stateHash: elsewhere.stateHash,
+    actionType: elsewhere.actionType,
+    normalizedActionParams: elsewhere.actionParams,
+    observationHash: elsewhere.observationHash
+  });
+  assert.equal(result.kind, 'boundary_miss');
+
+  // The counter-check: the same key does resolve, so the miss above is about the
+  // environment rather than about a lookup that never works.
+  assert.equal(simulator.execute({
+    environmentVersion: here.environmentVersion,
+    stateHash: here.stateHash,
+    actionType: here.actionType,
+    normalizedActionParams: here.actionParams,
+    observationHash: here.observationHash
+  }).kind, 'hit');
+});

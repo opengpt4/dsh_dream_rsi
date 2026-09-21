@@ -253,6 +253,26 @@ test('a candidate cannot relabel a regressing family out of the per-family check
   assert.match(relabelled.reasons.join(' '), /4 case\(s\) are in a different task family in each report/);
 });
 
+test('the gate reports the configuration it was asked to gate under', () => {
+  // The reported hash is the request's, not either report's. On a passing run the
+  // three are equal by construction, so only a mismatched request distinguishes
+  // them — and on a rejected run the record still has to say what was asked for.
+  const incumbent = holdoutReport(improving('base'));
+  const candidate = holdoutReport(Object.fromEntries(Object.entries(improving('base')).map(([id, q]) => [id, q + 0.1])));
+  const requested = 'f'.repeat(64);
+
+  const result = evaluateHoldoutGate({
+    incumbent,
+    candidate,
+    config: gateConfig(),
+    configurationHash: requested
+  });
+
+  assert.equal(result.passed, false);
+  assert.match(result.reasons.join(' '), /configuration being gated/);
+  assert.equal(result.configurationHash, requested);
+});
+
 test('a report without per-case metrics cannot be gated', () => {
   const incumbent = holdoutReport(improving('base'));
   const bare = createEvaluationReport({

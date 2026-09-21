@@ -302,6 +302,45 @@ test('a backend that overruns its deadline cannot escape the episode budget', as
   }
 });
 
+test('a recorded node keeps cost and time from their own sources', () => {
+  // `tokenCost` comes from the policy's decision and `execTimeMs` from the
+  // backend's result. Both are numbers, so swapping them type-checks, and the
+  // evaluation stays internally consistent because it reads whatever is there —
+  // no test compared either against the source it is supposed to come from.
+  const runtime = createDreamRsiRuntime(resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' } }));
+  try {
+    const backend = new MockEmbodiedBackend(5);
+    const adapter = new MockEnvironmentAdapter(backend);
+
+    return runEpisode({
+      task: {
+        taskId: 'task-1',
+        goal: 'never reached',
+        environmentId: MOCK_ENVIRONMENT_ID,
+        policyVersion: 'v1',
+        budget: { maxSteps: 2, wallClockMs: 30_000 },
+        metadata: {}
+      },
+      episodeId: 'episode-1',
+      sessionId: SESSION_ID,
+      adapter,
+      store: runtime.store,
+      policy: () => ({ actionType: 'move_relative', parameters: { dx: 1, dy: 0, dz: 0 } })
+    }).then((outcome) => {
+      assert.ok(outcome.nodes.length > 0);
+      for (const node of outcome.nodes) {
+        // The backend's own measurement.
+        assert.equal(node.execTimeMs, node.result.execTimeMs);
+        assert.ok(node.execTimeMs > 0, 'the mock backend measures a real duration');
+        // `planPolicy` makes no model calls, so no node carries a token cost.
+        assert.equal(node.tokenCost, 0);
+      }
+    });
+  } finally {
+    runtime.dispose();
+  }
+});
+
 test('the MVP action vocabulary has no representation for raw motor or joint control', () => {
   // The allowlist is closed: only high-level primitives exist, so there is no
   // value a candidate could name to reach joint velocity or a motor channel.
