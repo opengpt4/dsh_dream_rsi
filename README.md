@@ -36,6 +36,10 @@ Implemented and tested capabilities include:
   a current-policy pointer that moves only behind an approval, a passing evaluation, and a passing canary,
   and a file store that re-verifies every record on load
 - evaluation reports persisted per run, with rejection reasons summarised by task family
+- correlation-aware metrics and a machine-readable Q/C/P/M/S report per evaluation and task family
+- one append-only audit trail covering policy deployment and action-safety events
+- failure-injection coverage for provider outage, worker crash, stale lease, corrupted artifact,
+  timeout, cancellation, and rollback failure
 - tool synthesis from repeated successful action sequences, with content-addressed artifacts, permissions
   limited to high-level action primitives, AST/dependency/capability gates plus process-isolated test
   execution, and a dynamic registry where disabled tools are unselectable
@@ -69,7 +73,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 216 passing tests. OS/container sandboxing, candidate
+The current suite contains 233 passing tests. OS/container sandboxing, candidate
 generation, canary deployment, tool synthesis, and a real simulator adapter
 remain planned work.
 

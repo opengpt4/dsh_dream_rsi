@@ -193,7 +193,8 @@ export class DeploymentWriter {
         // rollback: an operator reading the trail must see it was detected.
         this.options.audit.record({
           type: 'policy.degraded',
-          deploymentId: current.deploymentId,
+          subject: 'deployment',
+          subjectId: current.deploymentId,
           policyArtifactId: current.policyArtifactId,
           correlationId: input.correlationId ?? current.deploymentId,
           operator: input.operator,
@@ -294,7 +295,8 @@ export class DeploymentWriter {
       if (this.options.lock.recoveredStaleLock) {
         this.options.audit.record({
           type: 'lock.recovered',
-          deploymentId: 'n/a',
+          subject: 'deployment',
+          subjectId: 'n/a',
           policyArtifactId: 'n/a',
           correlationId: correlationId ?? 'n/a',
           lockOwner: this.options.lock.owner,
@@ -305,7 +307,8 @@ export class DeploymentWriter {
       const result = operation();
       this.options.audit.record({
         type: event,
-        deploymentId: result.deployment.deploymentId,
+        subject: 'deployment',
+        subjectId: result.deployment.deploymentId,
         policyArtifactId: result.policyArtifactId,
         correlationId: correlationId ?? result.deployment.deploymentId,
         at: this.timestamp(),

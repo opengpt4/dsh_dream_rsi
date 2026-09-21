@@ -1,5 +1,6 @@
 import type { JsonObject } from '../discovery/models.js';
 import type { ActionResult, ActionStatus, EmbodiedActionType } from '../embodied/protocol.js';
+import type { AuditSink } from '../registry/audit.js';
 import { transition, terminalStateFor, type ActionState } from './action-state.js';
 import {
   checkCapability,
@@ -61,6 +62,8 @@ export interface ActionGuardOptions {
   readonly requireConfirmation: boolean;
   /** Approves a high-risk action. Absent means every high-risk action is denied. */
   readonly confirm?: (request: ConfirmationRequest) => boolean;
+  /** Receives an `action.emergency-stop` event. An operator stop must be auditable. */
+  readonly audit?: AuditSink;
   readonly now?: () => number;
 }
 
@@ -248,9 +251,19 @@ export class ActionGuard {
   emergencyStop(sessionId: string, reason: string): void {
     this.stoppedSessions.set(sessionId, reason);
     const activeId = this.activeSessions.get(sessionId);
-    if (activeId === undefined) return;
-    this.stopping.add(activeId);
-    this.controllers.get(activeId)?.abort();
+    if (activeId !== undefined) {
+      this.stopping.add(activeId);
+      this.controllers.get(activeId)?.abort();
+    }
+    // Audited whether or not an action was in flight: the stop is the fact.
+    this.options.audit?.record({
+      type: 'action.emergency-stop',
+      subject: 'session',
+      subjectId: sessionId,
+      correlationId: activeId ?? sessionId,
+      reason,
+      at: new Date(this.now()).toISOString()
+    });
   }
 
   /** Clears the stop latch. Re-arming a stopped session is an explicit operator act. */

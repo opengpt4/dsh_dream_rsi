@@ -4,6 +4,23 @@ export { InMemoryDiscoveryStore, DISCOVERY_NODE_SCHEMA_VERSION, type DiscoveryNo
 export { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 export { canonicalJson, hashJson } from './hash.js';
 export {
+  InMemoryMetrics,
+  type MetricLabels,
+  type MetricName,
+  type MetricSample,
+  type MetricSummary,
+  type MetricsReader,
+  type MetricsSink
+} from './observability/metrics.js';
+export {
+  buildObservabilityReport,
+  OBSERVABILITY_REPORT_SCHEMA_VERSION,
+  type BuildReportInput,
+  type DeploymentSummaryEntry,
+  type EvaluationSummaryEntry,
+  type ObservabilityReport
+} from './observability/report.js';
+export {
   DEFAULT_MINE_OPTIONS,
   mineSuccessfulPatterns,
   type MinePatternsOptions,
@@ -83,6 +100,7 @@ export {
   type AuditEvent,
   type AuditEventInput,
   type AuditEventType,
+  type AuditSubject,
   type AuditSink
 } from './registry/audit.js';
 export {

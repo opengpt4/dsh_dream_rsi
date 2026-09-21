@@ -7,6 +7,7 @@ import {
   type GuardResult
 } from '../registry/models.js';
 import type { PolicyRegistry } from '../registry/policy-registry.js';
+import type { MetricsSink } from '../observability/metrics.js';
 import type { DiscoveryNode } from '../discovery/models.js';
 import {
   evaluateReplay,
@@ -194,6 +195,8 @@ export interface EpisodePipelineOptions extends RunEpisodeOptions {
   };
   /** Scanned before evaluation; a candidate that trips either guard stops the run. */
   readonly candidateSource?: CandidateGateOptions;
+  /** Receives correlation-tagged samples for this run. */
+  readonly metrics?: MetricsSink;
   /**
    * Persist an evaluation report for this run.
    *
@@ -254,6 +257,8 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
     ? undefined
     : buildReport(options.reporting, outcome, snapshot, evaluation, gates, settings.missRateMax);
 
+  recordRunMetrics(options, outcome, evaluation, report, evaluationReport);
+
   return {
     outcome,
     snapshot,
@@ -263,6 +268,45 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
     gates,
     ...(evaluationReport !== undefined ? { report: evaluationReport } : {})
   };
+}
+
+/**
+ * Record what this run produced, tagged so a sample can be traced to its run.
+ *
+ * A run without a metrics sink records nothing rather than silently discarding.
+ */
+function recordRunMetrics(
+  options: EpisodePipelineOptions,
+  outcome: EpisodeOutcome,
+  evaluation: EvaluationResult,
+  replay: ReplayReport,
+  report: EvaluationReport | undefined
+): void {
+  const metrics = options.metrics;
+  if (metrics === undefined) return;
+
+  const labels = {
+    taskId: options.task.taskId,
+    episodeId: outcome.episode.episodeId,
+    policyVersion: options.task.policyVersion,
+    ...(options.reporting?.taskFamily !== undefined ? { taskFamily: options.reporting.taskFamily } : {}),
+    ...(options.correlationId !== undefined ? { correlationId: options.correlationId } : {}),
+    ...(report !== undefined ? { evaluationId: report.evaluationId } : {})
+  };
+
+  metrics.record('task.outcome', outcome.episode.status === 'completed' ? 1 : 0, {
+    ...labels,
+    outcome: outcome.episode.status
+  });
+  metrics.record('episode.stepCount', outcome.episode.step, labels);
+  metrics.record('episode.durationMs', Date.parse(outcome.episode.endedAt ?? outcome.episode.startedAt) - Date.parse(outcome.episode.startedAt), labels);
+  metrics.record('evaluation.quality', evaluation.quality, labels);
+  metrics.record('evaluation.cost', evaluation.cost, labels);
+  metrics.record('evaluation.parallelEfficiency', evaluation.parallelEfficiency, labels);
+  metrics.record('evaluation.missRate', evaluation.missRate, labels);
+  metrics.record('evaluation.score', evaluation.score, labels);
+  if (replay.hitCount > 0) metrics.record('replay.hit', replay.hitCount, labels);
+  if (replay.missCount > 0) metrics.record('replay.miss', replay.missCount, labels);
 }
 
 /**

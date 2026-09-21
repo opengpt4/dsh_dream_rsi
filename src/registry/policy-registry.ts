@@ -107,6 +107,10 @@ export class PolicyRegistry {
     return this.evaluations.get(evaluationId);
   }
 
+  listEvaluations(): readonly EvaluationReport[] {
+    return [...this.evaluations.values()];
+  }
+
   evaluationsFor(artifactId: string): readonly EvaluationReport[] {
     return [...this.evaluations.values()]
       .filter((report) => report.policyArtifactId === artifactId)

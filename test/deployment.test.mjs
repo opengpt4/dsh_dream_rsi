@@ -407,13 +407,18 @@ test('the file audit log appends one verifiable line per event', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dream-rsi-audit-'));
   try {
     const log = new FileAuditLog(join(dir, 'audit.jsonl'));
-    log.record({ type: 'policy.proposed', deploymentId: 'd1', policyArtifactId: 'p1', correlationId: 'c1', at: AT });
-    log.record({ type: 'policy.approved', deploymentId: 'd1', policyArtifactId: 'p1', correlationId: 'c1', operator: 'op', at: AT });
+    log.record({ type: 'policy.proposed', subject: 'deployment', subjectId: 'd1', policyArtifactId: 'p1', correlationId: 'c1', at: AT });
+    log.record({ type: 'policy.approved', subject: 'deployment', subjectId: 'd1', policyArtifactId: 'p1', correlationId: 'c1', operator: 'op', at: AT });
 
     const lines = readFileSync(join(dir, 'audit.jsonl'), 'utf8').trim().split('\n');
     assert.equal(lines.length, 2);
-    assert.equal(JSON.parse(lines[0]).type, 'policy.proposed');
-    assert.equal(JSON.parse(lines[1]).operator, 'op');
+    const first = JSON.parse(lines[0]);
+    const second = JSON.parse(lines[1]);
+    assert.equal(first.type, 'policy.proposed');
+    assert.equal(first.subject, 'deployment');
+    assert.equal(first.subjectId, 'd1');
+    assert.match(first.eventId, /^[0-9a-f]{64}$/);
+    assert.equal(second.operator, 'op');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

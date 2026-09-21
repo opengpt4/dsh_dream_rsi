@@ -5,6 +5,7 @@ import { MockEmbodiedBackend } from './embodied/backend.js';
 import { MockEnvironmentAdapter } from './embodied/mock-adapter.js';
 import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/split.js';
 import { SingleWriterLock } from './operations/single-writer-lock.js';
+import { InMemoryAuditLog, type AuditSink } from './registry/audit.js';
 import { ActionGuard, type ConfirmationRequest } from './safety/action-guard.js';
 import { MOCK_CAPABILITY_PROFILE } from './safety/capability.js';
 
@@ -38,6 +39,7 @@ export interface DreamRsiRuntime {
   readonly evaluationSettings: EvaluationSettings;
   /** Enforces the action safety contract for every action this runtime dispatches. */
   readonly guard: ActionGuard;
+  readonly audit: AuditSink;
   readonly evolutionLock: SingleWriterLock;
   readonly deploymentLock: SingleWriterLock;
   /** Releases every resource this runtime owns. Safe to call more than once. */
@@ -52,6 +54,8 @@ export interface DreamRsiRuntime {
  */
 export interface DreamRsiHooks {
   readonly confirm?: (request: ConfirmationRequest) => boolean;
+  /** Audit sink for operator stops. Defaults to an in-process log. */
+  readonly audit?: AuditSink;
 }
 
 /**
@@ -71,6 +75,7 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
   let sqlite: SQLiteDiscoveryStore | undefined;
   let store: DiscoveryStore | undefined;
   const backend = new MockEmbodiedBackend();
+  const audit = hooks.audit ?? new InMemoryAuditLog();
   const splitConfig: EvaluationSplitConfig = {
     trainRatio: config.evaluation.trainRatio,
     validationRatio: config.evaluation.validationRatio,
@@ -111,8 +116,10 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
       actionLeaseMs: config.embodied.actionLeaseMs,
       maxActionsPerMinute: config.embodied.maxActionsPerMinute,
       requireConfirmation: config.embodied.requireConfirmation,
+      audit,
       ...(hooks.confirm !== undefined ? { confirm: hooks.confirm } : {})
     }),
+    audit,
     evolutionLock: new SingleWriterLock(config.operations.evolutionLock, config.operations.jobLeaseMs),
     deploymentLock: new SingleWriterLock(config.operations.deploymentLock, config.operations.jobLeaseMs),
     dispose() {

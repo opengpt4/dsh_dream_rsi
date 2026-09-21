@@ -166,11 +166,11 @@
 
 ### 14. Observability and Failure Injection
 
-- [ ] Add correlation-aware metrics for task, episode, policy, evaluation, and deployment.
-- [ ] Add audit trail for approval, deployment, rollback, lock recovery, and emergency stop.
-- [ ] Add dashboards or machine-readable reports for Q/C/P/M/S.
-- [ ] Inject provider outage, worker crash, stale lease, corrupted artifact, timeout, cancellation, and rollback failures.
-- [ ] Verify online task execution continues when offline evolution fails.
+- [x] Add correlation-aware metrics for task, episode, policy, evaluation, and deployment (`src/observability/metrics.ts`). Every sample carries the identifiers tying it to its run, so a number can be traced rather than only aggregated; non-finite values are refused.
+- [x] Add audit trail for approval, deployment, rollback, lock recovery, and emergency stop. The event now names a `subject` (deployment, session, or tool), so one append-only trail covers policy and action-safety events.
+- [x] Add machine-readable Q/C/P/M/S reports (`src/observability/report.ts`), per evaluation and broken down by task family, alongside deployment history and metric summaries.
+- [x] Inject provider outage, worker crash, stale lease, corrupted artifact, timeout, cancellation, and rollback failures (`test/failure-injection.test.mjs`); each asserts which state must be left untouched, not only that an error surfaced.
+- [x] Verify online task execution continues when offline evolution fails: an episode completes, a generation attempt fails, and a second episode completes with the registry exactly as the outage left it.
 
 ### 15. Privacy and Governance
 

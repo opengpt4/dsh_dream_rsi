@@ -39,7 +39,18 @@ lines.once('line', (line) => {
     return;
   }
 
-  if (mode === 'hang') return;
+  if (mode === 'crash') {
+    // A worker that dies without producing a verdict.
+    process.stderr.write('worker crashed\n');
+    process.exit(3);
+  }
+
+  if (mode === 'hang') {
+    // Keep the event loop alive: returning here would let the process exit with
+    // no output, which tests the parser rather than the deadline.
+    setInterval(() => {}, 1_000);
+    return;
+  }
 
   process.stdout.write(JSON.stringify({ result: { quality: 1, cost: 0, parallelEfficiency: 0, missRate: 0, score: 1 } }) + '\n');
 });

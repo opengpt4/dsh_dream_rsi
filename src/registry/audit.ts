@@ -1,11 +1,10 @@
+import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { createHash } from 'node:crypto';
-
 /**
- * Append-only audit trail for approval, deployment, degradation, rollback, and
- * lock recovery.
+ * Append-only audit trail for approval, deployment, degradation, rollback, lock
+ * recovery, emergency stop, and tool activation.
  *
  * Events are never rewritten or deleted: an audit record that can be edited is
  * not an audit record. `eventId` is the hash of the event body, so a reader can
@@ -13,6 +12,9 @@ import { createHash } from 'node:crypto';
  */
 
 export const AUDIT_SCHEMA_VERSION = 1;
+
+/** What an event is about. `subjectId` is a deploymentId, sessionId, or toolId. */
+export type AuditSubject = 'deployment' | 'session' | 'tool';
 
 export type AuditEventType =
   | 'policy.proposed'
@@ -23,14 +25,19 @@ export type AuditEventType =
   | 'policy.deployed'
   | 'policy.degraded'
   | 'policy.rolled-back'
-  | 'lock.recovered';
+  | 'lock.recovered'
+  | 'action.emergency-stop'
+  | 'tool.enabled'
+  | 'tool.disabled'
+  | 'tool.rolled-back';
 
 export interface AuditEvent {
   readonly eventId: string;
   readonly type: AuditEventType;
-  readonly deploymentId: string;
-  readonly policyArtifactId: string;
+  readonly subject: AuditSubject;
+  readonly subjectId: string;
   readonly correlationId: string;
+  readonly policyArtifactId?: string;
   readonly operator?: string;
   readonly reason?: string;
   readonly lockOwner?: string;
@@ -48,10 +55,11 @@ export function createAuditEvent(input: AuditEventInput): AuditEvent {
   const body = {
     schemaVersion: AUDIT_SCHEMA_VERSION,
     type: input.type,
-    deploymentId: input.deploymentId,
-    policyArtifactId: input.policyArtifactId,
+    subject: input.subject,
+    subjectId: input.subjectId,
     correlationId: input.correlationId,
     at: input.at,
+    ...(input.policyArtifactId !== undefined ? { policyArtifactId: input.policyArtifactId } : {}),
     ...(input.operator !== undefined ? { operator: input.operator } : {}),
     ...(input.reason !== undefined ? { reason: input.reason } : {}),
     ...(input.lockOwner !== undefined ? { lockOwner: input.lockOwner } : {})

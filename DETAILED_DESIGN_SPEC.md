@@ -767,6 +767,18 @@ Every event and metric carries:
 - `correlationId`
 - timestamp and schema version
 
+#### Implemented
+
+**Metrics** (`src/observability/metrics.ts`). `InMemoryMetrics` records `(name, value, labels)` samples. Labels are compared canonically, so key order never splits a group, and undefined labels are dropped rather than forming a phantom group. A non-finite value is refused, because one NaN silently poisons every aggregate that contains it. `summary()` returns count, total, min, max, and mean per metric and label set.
+
+The episode pipeline records `task.outcome` with the terminal status as a label, `episode.stepCount`, `episode.durationMs`, the five evaluation metrics, and replay hits and misses.
+
+**Audit** (`src/registry/audit.ts`). One append-only trail, generalised from deployments to a `subject`: `deployment`, `session`, or `tool`, with `subjectId` naming the deployment, session, or tool. An operator stop is recorded as `action.emergency-stop` whether or not an action was in flight, because the stop is the fact, not the interruption.
+
+**Report** (`src/observability/report.ts`). `buildObservabilityReport` produces a JSON-serializable snapshot: Q/C/P/M/S per evaluation with a per-family breakdown, case and pass counts, deployment history including the path taken, the current policy pointer, and metric summaries. An aggregate score hides which family regressed, which is the part that can be acted on.
+
+**Failure injection** (`test/failure-injection.test.mjs`). Provider outage, worker crash, stale lease, corrupted artifact, timeout, cancellation, and rollback failure. Each case asserts which state must be left untouched — the registry, the pointer, the store, or the transition log — rather than only that an error surfaced.
+
 Required metrics:
 
 - task success, quality, retry, timeout and cancellation rates;
