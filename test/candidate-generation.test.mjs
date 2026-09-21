@@ -102,7 +102,12 @@ test('the prompt carries train and validation metrics but never holdout', async 
     holdoutResults: [{ caseId: 'secret-case', marker: 'HOLDOUT-CASE-MARKER' }],
     evaluatorInternals: { marker: 'EVALUATOR-MARKER' },
     secrets: { apiKey: 'sk-SECRET-MARKER' },
-    deploymentState: { marker: 'DEPLOYMENT-MARKER' }
+    deploymentState: { marker: 'DEPLOYMENT-MARKER' },
+    // And the same thing one level deeper. The metrics are serialized for the
+    // prompt, so anything attached inside them travelled with them: naming the
+    // five fields is what stops a holdout result reaching the model there.
+    trainMetrics: { ...input.trainMetrics, holdoutQuality: 0.99, marker: 'NESTED-TRAIN-MARKER' },
+    validationMetrics: { ...input.validationMetrics, holdout: { marker: 'NESTED-VALIDATION-MARKER' } }
   };
 
   const llm = fakeLlm(reply());
@@ -111,10 +116,24 @@ test('the prompt carries train and validation metrics but never holdout', async 
   const [request] = llm.sent;
   assert.match(request.prompt, /train metrics: /);
   assert.match(request.prompt, /validation metrics: /);
-  for (const marker of ['HOLDOUT-MARKER', 'HOLDOUT-CASE-MARKER', 'EVALUATOR-MARKER', 'SECRET-MARKER', 'DEPLOYMENT-MARKER']) {
+  for (const marker of [
+    'HOLDOUT-MARKER',
+    'HOLDOUT-CASE-MARKER',
+    'EVALUATOR-MARKER',
+    'SECRET-MARKER',
+    'DEPLOYMENT-MARKER',
+    'NESTED-TRAIN-MARKER',
+    'NESTED-VALIDATION-MARKER'
+  ]) {
     assert.ok(!request.prompt.includes(marker), `${marker} leaked into the prompt`);
     assert.ok(!JSON.stringify(request).includes(marker), `${marker} leaked into the request`);
   }
+  // The metrics that belong there still are, field for field.
+  assert.match(
+    request.prompt,
+    /^train metrics: \{"quality":1,"cost":0\.1,"parallelEfficiency":1,"missRate":0,"score":1\}$/m
+  );
+  assert.match(request.prompt, /^validation metrics: \{"quality":0\.8,/m);
 });
 
 test('the prompt names the seed, the parent version, and the permitted classes', () => {

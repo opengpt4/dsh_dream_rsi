@@ -637,7 +637,7 @@ Natural-language summaries may be retained for diagnostics but cannot become aut
 
 `generateCandidate(llm, input)` takes a `HarnessLlm` and nothing wider — no provider SDK, no credentials, no registry — so the generation path has no route to the current-policy pointer.
 
-**Input projection.** The prompt is built from named fields, never by serializing the input. A caller that attaches holdout results, evaluator internals, secrets, or deployment state cannot leak them into the prompt by doing so, and a test asserts marker strings appear nowhere in the request.
+**Input projection.** The prompt is built from named fields, never by serializing the input. A caller that attaches holdout results, evaluator internals, secrets, or deployment state cannot leak them into the prompt by doing so, and a test asserts marker strings appear nowhere in the request. The metrics are named field by field as well, because they are the one part of the prompt that is serialized: stringifying the caller's object emitted anything else attached inside it, so a holdout result nested in `trainMetrics` reached the model appended to the train line. Attaching is prevented at every depth, not only at the top.
 
 **Mutation boundary.** A proposal naming a class outside `MUTATION_CLASSES` is rejected during parsing, before its source reaches any other guard. The artifact's `allowedCapabilities` are then derived from the approved classes, so a candidate cannot declare its own capabilities.
 

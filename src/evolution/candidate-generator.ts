@@ -97,7 +97,10 @@ const SYSTEM_INSTRUCTION = [
  *
  * Built from named fields rather than by serializing the input, so a caller
  * that attaches holdout results or deployment state cannot leak them into the
- * prompt by doing so.
+ * prompt by doing so. The metrics are named field by field for the same reason:
+ * stringifying the caller's object emitted anything else attached to it, so a
+ * holdout result nested inside `trainMetrics` reached the prompt appended to
+ * the train line.
  */
 export function buildPrompt(input: GenerateCandidateInput): string {
   return [
@@ -108,9 +111,20 @@ export function buildPrompt(input: GenerateCandidateInput): string {
     'parent source:',
     input.parentSource,
     '',
-    `train metrics: ${JSON.stringify(input.trainMetrics)}`,
-    `validation metrics: ${JSON.stringify(input.validationMetrics)}`
+    `train metrics: ${metricsForPrompt(input.trainMetrics)}`,
+    `validation metrics: ${metricsForPrompt(input.validationMetrics)}`
   ].join('\n');
+}
+
+/** The five metric fields, named. Nothing else the caller attached is emitted. */
+function metricsForPrompt(metrics: EvaluationMetrics): string {
+  return JSON.stringify({
+    quality: metrics.quality,
+    cost: metrics.cost,
+    parallelEfficiency: metrics.parallelEfficiency,
+    missRate: metrics.missRate,
+    score: metrics.score
+  });
 }
 
 export interface ParseCandidateContext {
