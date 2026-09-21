@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -102,4 +102,44 @@ test('the design spec quotes the interval widening the t table produces', () => 
     !/at four samples the interval is roughly/i.test(spec),
     'the spec still attributes the widening to four samples'
   );
+});
+
+test('every stated test count is the count the suite has', () => {
+  // Five documents stated the suite size as 24, 38, or 359 tests while it had
+  // 433, so a reader assessing the evidence was misled by up to a factor of
+  // eighteen. Per-file counts in the TODO had drifted too. Counted from the
+  // definitions rather than asserted as a constant, so the next stale number
+  // fails here instead of shipping.
+  const testDir = `${ROOT}test/`;
+  const files = readdirSync(testDir).filter((name) => name.endsWith('.test.mjs'));
+  const counted = (name) => (readFileSync(`${testDir}${name}`, 'utf8').match(/^test\(/gm) ?? []).length;
+  const suiteTotal = files.reduce((total, name) => total + counted(name), 0);
+  assert.ok(suiteTotal > 0, 'no tests were counted, so this check is not measuring anything');
+
+  const documents = readdirSync(ROOT).filter((name) => name.endsWith('.md'));
+  const suiteClaims = [];
+  const fileClaims = [];
+  for (const document of documents) {
+    const text = readFileSync(`${ROOT}${document}`, 'utf8');
+    for (const [, claimed] of text.matchAll(/(\d+)\s+(?:passing\s+(?:automated\s+)?tests|tests\s+passing)/g)) {
+      suiteClaims.push({ document, claimed: Number(claimed) });
+    }
+    for (const [, file, claimed] of text.matchAll(/test\/([\w-]+)\.test\.mjs`?,\s*(\d+)\s+tests?/g)) {
+      fileClaims.push({ document, file, claimed: Number(claimed) });
+    }
+  }
+
+  assert.ok(suiteClaims.length >= 5, `expected the suite size to be stated in several documents, found ${suiteClaims.length}`);
+
+  // Every mismatch at once: a stale count is a one-line fix, and reporting them
+  // one run at a time makes maintaining five documents needlessly slow.
+  const mismatches = [
+    ...suiteClaims
+      .filter(({ claimed }) => claimed !== suiteTotal)
+      .map(({ document, claimed }) => `${document} claims ${claimed} passing tests; the suite defines ${suiteTotal}`),
+    ...fileClaims
+      .filter(({ file, claimed }) => claimed !== counted(`${file}.test.mjs`))
+      .map(({ document, file, claimed }) => `${document} claims ${claimed} tests in ${file}.test.mjs; it defines ${counted(`${file}.test.mjs`)}`)
+  ];
+  assert.deepEqual(mismatches, [], `stale test counts:\n  ${mismatches.join('\n  ')}`);
 });

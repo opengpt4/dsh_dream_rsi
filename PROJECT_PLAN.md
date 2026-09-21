@@ -80,7 +80,7 @@ MVP 完成必須同時滿足：
 | Real profile/patch adapter | Not started | Depends on selected DSH profile contract |
 | Candidate generation, dependency allowlist, deployment registry | Not started | Next implementation track |
 
-Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 38 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
+Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 434 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
 
 ## 4. Delivery Strategy
 

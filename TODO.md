@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：359 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：434 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -61,7 +61,7 @@
 - [x] Execute one complete mock task through perceive -> policy/tool action -> result -> Discovery node (`src/tasks/runner.ts`); one node per step, including failed, timed-out, and cancelled attempts.
 - [x] Link task, episode, session, policy version, correlation ID, and action ID in every trace (`episodeId` added to `DiscoveryNode` and persisted in the SQLite store).
 - [x] Run the same episode through snapshot -> Replay -> evaluator (`src/tasks/pipeline.ts`). Documented as a determinism check, not generalization evidence.
-- [x] Add success, failure, timeout, cancellation, and emergency-stop fixtures, plus budget, environment-binding, idempotency, and boundary-miss cases (`test/end-to-end.test.mjs`, 77 tests total).
+- [x] Add success, failure, timeout, cancellation, and emergency-stop fixtures, plus budget, environment-binding, idempotency, and boundary-miss cases (`test/end-to-end.test.mjs`, 21 tests).
 
 ## P1: Safety and Evaluation Readiness
 
@@ -71,7 +71,7 @@
 - [x] Implement action state machine `REQUESTED -> AUTHORIZED -> EXECUTING -> terminal` (`src/safety/action-state.ts`); the spec diagram is the transition table and terminal states absorb.
 - [x] Add action lease, session mutex, idempotency, rate limit, timeout, cancellation, and emergency stop (`src/safety/action-guard.ts`), dispatched by the episode runner through `RunEpisodeOptions.guard`.
 - [x] Prohibit automatic retry after emergency stop: the latch is checked before the idempotency lookup, so a previously recorded result cannot be replayed as a retry.
-- [x] Add authorization and high-risk confirmation tests (`test/action-safety.test.mjs`, 17 tests). Confirmation is denied by default when no host approval hook is configured.
+- [x] Add authorization and high-risk confirmation tests (`test/action-safety.test.mjs`, 35 tests). Confirmation is denied by default when no host approval hook is configured.
 - [x] Dispatch `embodied_act` through the action guard so the tool path obeys the same capability, confirmation, and state-machine contract as the episode path. The tool observes first, so an action is authorised in the frame of the state it was decided from.
 
 ### 5. Artifact and Snapshot Integrity
@@ -189,7 +189,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
 - [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested; runtime filesystem writes and process spawning are denied by Node's permission model, and the child's heap is capped by `--max-old-space-size`. Runtime CPU-time and network limits do not, so this stays open.
 - [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
-- [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, 15 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
+- [x] Approval, canary, atomic deployment, and rollback (`src/registry/deployment-writer.ts`, covered by `test/deployment.test.mjs`, 20 tests). Signature verification is still missing and is tracked under the signed-artifacts blocker below.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).
 - [x] Audit, retention, deletion, and secret-redaction controls. Audit is append-only with content-hash event ids (`src/registry/audit.ts`); retention is per artifact kind and cannot be shortened by a caller, with deletion metadata and an operator-triggered prune (`src/governance/retention.ts`, `src/artifacts/store.ts`); redaction covers provider keys, bearer tokens, JWTs, credential assignments, and URL credentials, applied to audit reasons before storage (`src/governance/redaction.ts`).
 - [ ] Multi-task benchmark evidence; no performance claim based only on replay fixtures.
