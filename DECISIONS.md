@@ -174,9 +174,15 @@ propose them once §3 is answered.
 
 **Claims** `TODO: Implement one real EnvironmentAdapter`.
 
-**Blocked on §3.** No decision of its own; it is the implementation of that
-answer against the boundary in §3. The adapter must satisfy the schema freeze in
-§4 and produce the randomness and payloads the seed item in §3 needs.
+**Answered by §3; no decision of its own.** What exists: `sim/robosuite_bridge.py`
+(the child process, covered by `test/robosuite-bridge.test.mjs`) and
+`src/embodied/robosuite-mapping.ts` (its state mapped to the plugin's model,
+validated field by field because it crosses a process boundary). What does not:
+the adapter that spawns the bridge and implements the seven `EnvironmentAdapter`
+methods. Three things a next attempt must do are recorded in the `TODO.md` item —
+drain the child's stderr, keep adapter-level outcomes out of the bridge's status
+mapper, and make a released adapter reject rather than respawn. The adapter must
+also satisfy the schema freeze in §4.
 
 ---
 
@@ -208,7 +214,7 @@ profile now or waits for the real adapter.
 
 | Answer | Unblocks |
 |---|---|
-| Simulator (§3) — answered | RoboSuite + MuJoCo, chosen and verified; the bridge, adapter, families, and evidence remain |
+| Simulator (§3) — answered | RoboSuite + MuJoCo chosen and checked; the Python bridge and its mapping exist and are tested, while the adapter, the task families, and the evidence remain |
 | Schema freeze (§4) | the freeze item, and the comparability of every score after it |
 | Signing (§1) — answered | kept as the record; the remaining report and snapshot signing is in §8 |
 | Sandbox (§2) — answered | the seam and its tests; exercising a named runtime is the host's, so the item, the CPU/network limits, and the release blocker stay open |

@@ -112,9 +112,14 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The current suite contains 521 passing tests. OS/container sandboxing and a real
-simulator adapter remain planned work; the seven decisions those and the other
-outstanding items depend on are set out with their options in `DECISIONS.md`.
+The suite defines 521 tests; 514 pass with 7 skipped unless
+`DREAM_RSI_SIM_PYTHON` names an interpreter with robosuite installed, which also
+runs the simulator cases. The evaluator child can be wrapped in a runtime the
+host names, and the RoboSuite bridge and its mapping are implemented and tested —
+but the adapter that wires them into the plugin, OS/container isolation for
+untrusted candidates, and the real-environment evidence do not exist yet. The
+four decisions those and the other outstanding items depend on are set out with
+their options in `DECISIONS.md`.
 
 Replaying an episode's own recorded decisions is a determinism check, not
 generalization evidence: every replayed decision was recorded from the state it

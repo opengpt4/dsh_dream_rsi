@@ -65,12 +65,17 @@ test('no capability status table calls an implemented capability planned', () =>
   // integration, candidate generation, tool synthesis, canary deployment, and
   // the guard pipeline as "Planned" long after each shipped, and a reader
   // planning adoption reads that table rather than the prose.
-  const table = readFileSync(`${ROOT}USER_GUIDE_AND_FEATURES.md`, 'utf8')
+  const rows = readFileSync(`${ROOT}USER_GUIDE_AND_FEATURES.md`, 'utf8')
     .split('\n')
+    .filter((line) => /^\|\s*[^|]+\|/.test(line));
+  // The table is what is measured, so a missing or reformatted table must fail
+  // here. Requiring a *planned* row would have been the wrong anti-vacuity check:
+  // the honest state is that nothing is left marked planned, and the check has to
+  // pass then without going blind to a table that is no longer being parsed.
+  assert.ok(rows.length >= 8, `expected the capability table, parsed ${rows.length} rows`);
+  const table = rows
     .filter((line) => /^\|\s*[^|]+\|\s*(Planned|Not implemented|Not available)\s*\|/i.test(line))
     .join('\n');
-
-  assert.ok(table.length > 0, 'no planned rows were found, so this check is not measuring anything');
   for (const capability of CAPABILITIES) {
     if (!existsSync(`${ROOT}${capability.evidence}`)) continue;
     assert.ok(

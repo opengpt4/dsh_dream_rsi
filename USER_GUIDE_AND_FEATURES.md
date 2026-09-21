@@ -48,7 +48,7 @@ The central usage principle is simple: use real execution to collect evidence, u
 | AST/resource/network guard | Static guards available; CPU and network limits come from a host-named runtime | `evaluation.sandboxCommand` / `sandboxArgs`; see `dream_status` |
 | Canary deployment and rollback | Available; activation requires a signature verifier | `DeploymentWriter` state machine |
 | Tool synthesis | Available, process isolation only | Synthesize, gate, and register via the Dynamic Tool Registry |
-| Real simulator adapter | Planned | Mock backend only at present |
+| Real simulator adapter | Simulator chosen, bridge and mapping in place, adapter pending | RoboSuite 1.5.2 bridge in `sim/`; the plugin still runs on the mock backend |
 
 ## 3. Installation and Verification
 
