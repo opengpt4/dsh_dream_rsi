@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { ROBOSUITE_FRAME_ID } from '../dist/embodied/robosuite-mapping.js';
+
 /**
  * The RoboSuite bridge, exercised as a process.
  *
@@ -49,6 +51,15 @@ test('the bridge reports what it can build, and on which frame', { skip }, () =>
   // rather than silently defaulting to one.
   assert.deepEqual(responses[0].environments, ['Lift', 'Stack']);
   assert.equal(responses[0].frame, 'mujoco-world');
+});
+
+test('the frame the bridge reports is the one the mapping declares', { skip }, () => {
+  // Two halves of one fact, in two languages: the bridge names its frame in
+  // `capability`, and the mapping stamps that name onto every observation it
+  // builds. Nothing coupled them, so a rename on either side would label
+  // observations with a frame the environment does not use.
+  const { responses } = bridge([{ command: 'capability' }, { command: 'shutdown' }]);
+  assert.equal(responses[0].frame, ROBOSUITE_FRAME_ID);
 });
 
 test('a move reaches the axes it was asked for and reports itself complete', { skip }, () => {
