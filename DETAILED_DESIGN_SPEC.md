@@ -824,7 +824,7 @@ Every governed transition on the deployment writer checks the acting principal b
 
 **Retention** (`src/governance/retention.ts`). Decided per artifact kind at write time; a caller cannot shorten it, so a tool cannot arrange for its own evidence to expire. The write path rebuilds the store input field by field rather than spreading the caller's object, because the parameter type omitting `retentionMs` is a compile-time guard only: an untyped caller can pass one, and for a kind retained indefinitely that value would otherwise become the retention and make the audit trail immediately prunable. Policy, tool, and evaluation artifacts are retained indefinitely because they are the audit trail. `pruneExpired` and `expiredArtifacts` never remove anything on their own.
 
-**Production policy** (`PRODUCTION_POLICY.md`). States the safety defaults as a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code in either direction. While any release blocker remains open, `evolution.autoDeploy` stays `false`.
+**Production policy** (`PRODUCTION_POLICY.md`). States the safety defaults as a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code in either direction. `evolution.autoDeploy` is not consumed by anything: no configuration promotes a policy on its own, and implementing automatic deployment is a deliberate act rather than a configuration change, which is why it stays `false` while any release blocker remains open.
 
 #### Candidate gate
 

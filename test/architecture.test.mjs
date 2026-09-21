@@ -201,3 +201,32 @@ test('every Cordis service the adapter uses is declared in inject', () => {
   assert.deepEqual([...used].sort(), [...declared].sort());
   assert.deepEqual(declared, ['tools']);
 });
+
+test('nothing consumes the automatic-deployment flag', () => {
+  // `evolution.autoDeploy` is a declaration, not a switch: the schema accepts it,
+  // the resolver requires `evolution.enabled` alongside it, and the status tool
+  // reports it — and nothing else reads it, so no configuration promotes a policy
+  // on its own. Implementing automatic deployment is a decision the release
+  // blockers forbid until isolation and signing land, so it has to be deliberate.
+  // This fails the moment a third module names the flag. It matches raw text, so
+  // a mention in a comment counts: the point is that the flag stays in two
+  // places, and a note about it elsewhere belongs in a document, not in a module.
+  const allowed = new Set(['config.ts', 'status.ts']);
+  const consumers = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts')) continue;
+      if (!readFileSync(absolute, 'utf8').includes('autoDeploy')) continue;
+      if (allowed.has(entry.name)) continue;
+      consumers.push(relative(SRC, absolute));
+    }
+  };
+  walk(SRC);
+
+  assert.deepEqual(consumers, [], 'a module now names evolution.autoDeploy');
+});

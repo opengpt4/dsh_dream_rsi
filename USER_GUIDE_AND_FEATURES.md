@@ -59,7 +59,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 435 passing tests. The suite validates implementation invariants; it does not prove cross-task benchmark improvement or physical robot safety.
+The current suite contains 437 passing tests. The suite validates implementation invariants; it does not prove cross-task benchmark improvement or physical robot safety.
 
 ## 4. Loading the Plugin
 

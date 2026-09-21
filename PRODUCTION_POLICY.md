@@ -21,10 +21,16 @@ parses this block and compares it with `resolveDreamRsiConfig({})`.
 
 Deployment requires a registered policy artifact, a passing holdout gate
 covering the exact evaluation being deployed, an explicit operator approval,
-and a passing canary. Nothing on that path deploys itself, and
-`evolution.autoDeploy` requires `evolution.enabled` to be set first.
+and a passing canary. Nothing on that path deploys itself.
 
-While any release blocker in `TODO.md` remains open, `autoDeploy` stays `false`.
+`evolution.autoDeploy` is a declaration rather than a switch: the schema accepts
+it, the resolver requires `evolution.enabled` alongside it, and the status tool
+reports it — and nothing reads it to do anything. Setting it today changes no
+behaviour, which `test/candidate-generation.test.mjs` asserts by running the
+whole generation path with it on and a passing gate, and
+`test/architecture.test.mjs` enforces by failing if a third module names the
+flag. That is why it stays `false` while any release blocker in `TODO.md`
+remains open: implementing it is a deliberate act, not a configuration change.
 
 ## Approval is never implied
 

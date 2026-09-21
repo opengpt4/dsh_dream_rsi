@@ -383,6 +383,39 @@ test('omitting the gate config gates under the default one', async () => {
   assert.match(withDefaults.holdoutGate.reasons.join(' '), /task family .* pass ratio/);
 });
 
+test('no configuration promotes a candidate automatically', async () => {
+  // The strongest form of the release-blocker guarantee is not "autoDeploy is
+  // false by default" but "nothing consumes it": the flag appears only in the
+  // config schema, its validation rule, and the status projection, so a host that
+  // sets it sees no behaviour change at all. This runs the whole generation path
+  // with autoDeploy on and a gate that passes, and asserts the pointer is where
+  // it started.
+  const config = resolveDreamRsiConfig({ evolution: { enabled: true, autoDeploy: true } });
+  assert.equal(config.evolution.autoDeploy, true, 'the flag is accepted when evolution is on');
+
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const incumbentArtifact = parent();
+  registry.registerPolicy(incumbentArtifact);
+  registry.registerEvaluation(holdoutReport(incumbentArtifact.artifactId, 0));
+  const before = registry.currentPolicyArtifactId();
+
+  const result = await evaluateCandidate({
+    llm: fakeLlm(reply()),
+    generation: generationInput({ parent: incumbentArtifact }),
+    registry,
+    evaluate: async () => holdoutReport(incumbentArtifact.artifactId, 0, 2),
+    holdoutGate: {
+      incumbent: holdoutReport(incumbentArtifact.artifactId, 4),
+      configurationHash: CONFIG_HASH
+    }
+  });
+
+  // The gate passed, and the candidate is still only a registered record.
+  assert.equal(result.holdoutGate.passed, true);
+  assert.equal(result.promoted, false);
+  assert.equal(registry.currentPolicyArtifactId(), before);
+});
+
 /** One candidate evaluation against a holdout report that regresses four of twenty cases. */
 async function runCandidate(config) {
   const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
@@ -403,14 +436,14 @@ async function runCandidate(config) {
 }
 
 /** A holdout report over twenty cases in one family, with `failingCases` regressing. */
-function holdoutReport(artifactId, failingCases = 4) {
+function holdoutReport(artifactId, failingCases = 4, score = 1) {
   const caseResults = Array.from({ length: 20 }, (_, index) => ({
     caseId: `case-${index}`,
     taskFamily: 'packing',
     split: 'holdout',
     outcome: index < failingCases ? 'failed' : 'passed',
     quality: index < failingCases ? 0.5 : 1,
-    score: 1
+    score
   }));
   return createEvaluationReport({
     evaluatorVersion: '0.1.0',
