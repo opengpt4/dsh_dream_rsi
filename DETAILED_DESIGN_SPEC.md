@@ -659,6 +659,8 @@ Natural-language summaries may be retained for diagnostics but cannot become aut
 
 **Gates** (`tool-gate.ts`). Static: AST, dependency allowlist, resource/network capability. The tool's *test source* is scanned by the same rules. Dynamic: the tests run in a child process that leads its own group, with a deadline, bounded output, and a `PATH`-only environment. A tool whose tests cannot run has not passed them.
 
+Static runs first and the tests run only if it passed. A tool the static guards reject is never handed to a runner: the runner executes the test file, so running a rejected one would execute the very code the guards refused and then read that file's own output back as the dynamic verdict. The dynamic guard is recorded as failed with the reason it was not run, rather than omitted.
+
 This is process isolation, not a sandbox. Filesystem and network confinement remains the open blocker.
 
 **Registry** (`tool-registry.ts`). A tool enters as `candidate` and is selectable only while `enabled`. Enabling requires an operator and a clean gate: a tool with any failed guard cannot be enabled later by presenting a different verdict, because the verdict is stored with the candidate. Disabled tools are absent from `selectable()` and resolve to nothing, not to a deprioritised entry.

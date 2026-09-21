@@ -242,9 +242,14 @@ test('a tool that reaches for the filesystem fails the dependency and capability
   assert.equal(result.passed, false);
   assert.deepEqual(result.capabilities, ['filesystem']);
   // Three independent guards catch it: the AST guard's own forbidden-module
-  // list, the dependency allowlist, and the capability classification.
+  // list, the dependency allowlist, and the capability classification. The
+  // dynamic guard fails too, because a rejected tool's tests never run.
   const failed = result.guardResults.filter((guard) => !guard.passed).map((guard) => guard.guard);
-  assert.deepEqual(failed.sort(), ['astGuard', 'capabilityGuard', 'dependencyAllowlist']);
+  assert.deepEqual(failed.sort(), ['astGuard', 'capabilityGuard', 'dependencyAllowlist', 'isolatedTests']);
+  assert.match(
+    result.guardResults.find((guard) => guard.guard === 'isolatedTests').detail,
+    /never executed/
+  );
 });
 
 test('a tool using eval fails the AST gate', async () => {
@@ -254,6 +259,60 @@ test('a tool using eval fails the AST gate', async () => {
 
   assert.equal(result.passed, false);
   assert.equal(result.guardResults.find((guard) => guard.guard === 'astGuard').passed, false);
+});
+
+/** A runner that records whether it was asked to execute anything. */
+function spyRunner() {
+  const calls = [];
+  return {
+    calls,
+    async run(tool) {
+      calls.push(tool.name);
+      return { passed: true, detail: 'reported passed=true' };
+    }
+  };
+}
+
+test('a tool the static guards reject never reaches the test runner', async () => {
+  // The guards exist so that rejected source never reaches a runner. Running the
+  // tests anyway executed the file they had just refused, and read that file's
+  // own verdict back as the dynamic result.
+  const tool = customTool({ source: 'export const run = (payload) => eval(payload);' });
+  const runner = spyRunner();
+
+  const result = await runToolGates(tool, { runner });
+
+  assert.deepEqual(runner.calls, []);
+  const tests = result.guardResults.find((guard) => guard.guard === 'isolatedTests');
+  assert.equal(tests.passed, false);
+  assert.match(tests.detail, /never executed/);
+  assert.equal(result.passed, false);
+});
+
+test('a test file the static guards reject is never executed', async () => {
+  // The runner executes the test file, so a rejected test file is rejected code
+  // that would otherwise run — and report its own pass.
+  const tool = customTool({
+    tests: "import { readFileSync } from 'node:fs';\nconsole.log(JSON.stringify({ passed: readFileSync('/etc/hosts', 'utf8').length > 0 }));\n"
+  });
+  const runner = spyRunner();
+
+  const result = await runToolGates(tool, { runner });
+
+  assert.deepEqual(runner.calls, []);
+  assert.equal(result.guardResults.find((guard) => guard.guard === 'testSourceGuards').passed, false);
+  assert.match(result.guardResults.find((guard) => guard.guard === 'isolatedTests').detail, /never executed/);
+  assert.equal(result.passed, false);
+});
+
+test('a tool whose static guards pass still has its tests run', async () => {
+  const tool = customTool();
+  const runner = spyRunner();
+
+  const result = await runToolGates(tool, { runner });
+
+  assert.deepEqual(runner.calls, ['custom_macro']);
+  assert.equal(result.passed, true);
 });
 
 test('a tool whose tests fail is not enabled by a passing static scan', async () => {

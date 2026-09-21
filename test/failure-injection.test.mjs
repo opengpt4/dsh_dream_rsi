@@ -157,8 +157,10 @@ test('a crashed tool test runner fails the isolated test gate', async () => {
     inputSchema: { type: 'object' },
     outputSchema: { type: 'object' },
     source: 'export const noop = () => 1;',
-    // The test process is killed rather than reporting a verdict.
-    tests: "process.kill(process.pid, 'SIGKILL');\n",
+    // The test process dies rather than reporting a verdict. It has to die
+    // without forbidden syntax: a test file the static guards reject never
+    // reaches the runner at all, which is what the gate asserts elsewhere.
+    tests: "throw new Error('the test process died before a verdict');\n",
     dependencies: [],
     permissions: ['action:move_relative'],
     origin: 'host-template',

@@ -138,16 +138,28 @@ export async function runToolGates(
     }
   ];
 
-  // A tool whose tests cannot run has not passed them.
-  try {
-    const tested = await options.runner.run(tool, options.signal);
-    guardResults.push({ guard: 'isolatedTests', passed: tested.passed, detail: tested.detail });
-  } catch (error) {
+  // Static first, and the tests run only if it passed. The guards exist so that
+  // obviously unsafe source never reaches a runner, and running the tests of a
+  // tool they just rejected executed the very file they refused — whose own
+  // output was then read back as the dynamic verdict.
+  if (guardResults.some((result) => !result.passed)) {
     guardResults.push({
       guard: 'isolatedTests',
       passed: false,
-      detail: `tests did not run: ${error instanceof Error ? error.message : String(error)}`
+      detail: 'not run: a static guard rejected the tool or its tests, so they were never executed'
     });
+  } else {
+    // A tool whose tests cannot run has not passed them.
+    try {
+      const tested = await options.runner.run(tool, options.signal);
+      guardResults.push({ guard: 'isolatedTests', passed: tested.passed, detail: tested.detail });
+    } catch (error) {
+      guardResults.push({
+        guard: 'isolatedTests',
+        passed: false,
+        detail: `tests did not run: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
   }
 
   const reasons = guardResults.filter((result) => !result.passed).map((result) => `${result.guard}: ${result.detail}`);
