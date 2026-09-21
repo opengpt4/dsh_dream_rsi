@@ -2,13 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  ACTION_STEPS,
   ROBOSUITE_FRAME_ID,
   toActionStatus,
   toActionResult,
   toBridgeRequest,
   toObservation
 } from '../dist/embodied/robosuite-mapping.js';
-import { OBSERVATION_SCHEMA_VERSION, assertObservationSchema } from '../dist/embodied/protocol.js';
+import {
+  EMBODIED_ACTION_TYPES,
+  OBSERVATION_SCHEMA_VERSION,
+  assertObservationSchema
+} from '../dist/embodied/protocol.js';
 
 const IDENTITY = {
   sessionId: 'session-1',
@@ -70,6 +75,13 @@ test('every action the plugin exposes has a step budget, and nothing else does',
   // Refused here, at the boundary the caller controls, rather than sent on a
   // typo and refused there.
   assert.throws(() => toBridgeRequest('teleport', {}), /unsupported action teleport; this adapter implements/);
+
+  // The mapping's vocabulary and the plugin's must be the same set: a budget for
+  // an action the plugin does not declare is dead weight, and an action the
+  // plugin declares with no budget is one this adapter cannot run. Neither is
+  // visible without asking both sides.
+  const implemented = Object.keys(ACTION_STEPS).sort();
+  assert.deepEqual(implemented, [...EMBODIED_ACTION_TYPES].sort());
 });
 
 test('an outcome the bridge is not allowed to invent is refused', () => {

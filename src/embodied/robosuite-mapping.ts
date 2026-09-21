@@ -90,7 +90,7 @@ export function toObservation(
 }
 
 /** The control steps an action is allowed, by the vocabulary the plugin exposes. */
-const ACTION_STEPS: Readonly<Record<EmbodiedActionType, number>> = {
+export const ACTION_STEPS: Readonly<Record<EmbodiedActionType, number>> = {
   move_relative: 20,
   goto: 25,
   // A grasp and a release need the fingers to travel, so they hold longer.

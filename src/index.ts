@@ -397,6 +397,7 @@ export const inject: string[] = ['tools'];
 export { apply };
 
 export {
+  ACTION_STEPS,
   ROBOSUITE_FRAME_ID,
   toActionStatus,
   toActionResult,
