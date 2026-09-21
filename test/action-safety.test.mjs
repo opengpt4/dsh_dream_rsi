@@ -6,6 +6,7 @@ import {
   ALLOWED_TOOL_PERMISSIONS,
   EMBODIED_ACTION_TYPES,
   MOCK_CAPABILITY_PROFILE,
+  narrowCapabilityProfile,
   MOCK_ENVIRONMENT_ID,
   MockEmbodiedBackend,
   MockEnvironmentAdapter,
@@ -19,7 +20,8 @@ import {
   runEpisode,
   runEpisodePipeline,
   terminalStateFor,
-  transition
+  transition,
+  verifyReadiness
 } from '../dist/index.js';
 
 const SESSION_ID = 'session-1';
@@ -478,6 +480,91 @@ test('an episode ending in an emergency stop latches the guard for the session',
       async () => actionResult()
     );
     assert.equal(refused.rejection.code, 'session_stopped');
+  } finally {
+    runtime.dispose();
+  }
+});
+
+// ------------------------------------------------- narrowing by configuration
+
+test('configuration can narrow the action set but never widen it', () => {
+  const narrowed = narrowCapabilityProfile(MOCK_CAPABILITY_PROFILE, ['move_relative', 'goto']);
+
+  assert.deepEqual(Object.keys(narrowed.actions).sort(), ['goto', 'move_relative']);
+  // Everything else about the declaration is untouched.
+  assert.equal(narrowed.profileId, MOCK_CAPABILITY_PROFILE.profileId);
+  assert.deepEqual(narrowed.sensors, MOCK_CAPABILITY_PROFILE.sensors);
+
+  // An action the backend never declared cannot be granted by configuration.
+  assert.throws(
+    () => narrowCapabilityProfile(MOCK_CAPABILITY_PROFILE, ['teleport']),
+    /cannot allow action\(s\) the profile does not declare: teleport/
+  );
+  // Narrowing to nothing would leave a backend that cannot act.
+  assert.throws(
+    () => narrowCapabilityProfile(MOCK_CAPABILITY_PROFILE, []),
+    /would leave the backend unable to act/
+  );
+});
+
+test('the runtime narrows to what configuration allows', async () => {
+  const runtime = createDreamRsiRuntime(
+    resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' }, embodied: { allowActions: ['move_relative'] } })
+  );
+  try {
+    assert.deepEqual(Object.keys(runtime.capabilityProfile.actions), ['move_relative']);
+    // The adapter still declares the full profile; the runtime holds the effective one.
+    assert.deepEqual(Object.keys(runtime.adapter.capability().actions).sort(), ['goto', 'move_relative', 'open', 'pick', 'place']);
+
+    const allowed = await runtime.guard.execute(
+      guardRequest({ actionId: 'a1', actionType: 'move_relative', parameters: { dx: 1, dy: 0, dz: 0 } }),
+      async () => actionResult()
+    );
+    assert.equal(allowed.state, 'COMPLETED');
+
+    // A declared action that configuration removed is denied, and the denial
+    // names the profile rather than the vocabulary.
+    const refused = await runtime.guard.execute(
+      guardRequest({ actionId: 'a2', actionType: 'pick', parameters: { objectId: 'red-mug' }, confirmationToken: 't' }),
+      async () => actionResult()
+    );
+    assert.equal(refused.state, 'FAILED');
+    assert.equal(refused.rejection.code, 'action_not_declared');
+    assert.match(refused.rejection.reason, /is not declared by/);
+  } finally {
+    runtime.dispose();
+  }
+});
+
+test('configuration that names an unknown action is refused at load', () => {
+  assert.throws(
+    () => resolveDreamRsiConfig({ embodied: { allowActions: ['move_relative', 'teleport'] } }),
+    /allowActions names teleport, which is not part of the MVP action vocabulary/
+  );
+  assert.throws(
+    () => resolveDreamRsiConfig({ embodied: { allowActions: [] } }),
+    /allowActions must not be empty; disable embodied instead/
+  );
+  // The default is the whole declared set.
+  assert.deepEqual(resolveDreamRsiConfig({}).embodied.allowActions, [
+    'move_relative',
+    'goto',
+    'pick',
+    'place',
+    'open'
+  ]);
+});
+
+test('readiness reports the effective profile rather than the declared one', () => {
+  const runtime = createDreamRsiRuntime(
+    resolveDreamRsiConfig({ storage: { sqlitePath: ':memory:' }, embodied: { allowActions: ['goto'] } })
+  );
+  try {
+    const report = verifyReadiness({ runtime });
+    const check = report.checks.find((entry) => entry.name === 'capabilityProfile');
+    assert.equal(check.state, 'ready');
+    // One action, so the narrowing is visible in the report.
+    assert.match(check.detail, /^1 actions across 1 frame\(s\)/);
   } finally {
     runtime.dispose();
   }

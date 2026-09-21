@@ -81,7 +81,8 @@ function storageCheck(input: ReadinessInput): ReadinessCheck {
  * be silently unusable; readiness catches it before an episode does.
  */
 function capabilityProfileCheck(runtime: DreamRsiRuntime): ReadinessCheck {
-  const profile = runtime.adapter.capability();
+  // The effective profile, not the declared one: config may have narrowed it.
+  const profile = runtime.capabilityProfile;
   const actions = Object.keys(profile.actions);
   if (actions.length === 0) {
     return { name: 'capabilityProfile', state: 'not-ready', detail: 'the profile declares no actions' };
@@ -98,7 +99,7 @@ function capabilityProfileCheck(runtime: DreamRsiRuntime): ReadinessCheck {
   }
   // Without a frame, an observation's pose cannot be interpreted, and the
   // perceive tool would have nothing to report.
-  const frame = runtime.adapter.capability().coordinateFrames[0];
+  const frame = profile.coordinateFrames[0];
   if (frame === undefined) {
     return { name: 'capabilityProfile', state: 'not-ready', detail: 'the profile declares no coordinate frame' };
   }

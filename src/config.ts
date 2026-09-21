@@ -1,5 +1,7 @@
 import Schema from '@deepseek-ai/schemastery';
 
+import { EMBODIED_ACTION_TYPES } from './embodied/protocol.js';
+
 import { hashJson } from './hash.js';
 
 export interface DreamRsiConfig {
@@ -42,6 +44,8 @@ export interface DreamRsiConfig {
     readonly requireConfirmation: boolean;
     readonly actionLeaseMs: number;
     readonly maxActionsPerMinute: number;
+    /** Subset of the declared actions this deployment may use. `string[]` matches the schema's array shape. */
+    readonly allowActions: string[];
   };
 }
 
@@ -101,7 +105,9 @@ export const DreamRsiConfigSchema = Schema.object({
     enabled: Schema.boolean().default(false),
     requireConfirmation: Schema.boolean().default(true),
     actionLeaseMs: Schema.number().default(30_000),
-    maxActionsPerMinute: Schema.number().default(30)
+    maxActionsPerMinute: Schema.number().default(30),
+    allowActions: Schema.array(Schema.string()).default([...EMBODIED_ACTION_TYPES])
+      .description('Narrows the declared action set. It can never add an action the backend does not declare.')
   })
 });
 
@@ -136,6 +142,16 @@ export function validateDreamRsiConfig(config: DreamRsiConfig): void {
   assertPositive(config.operations.jobLeaseMs, 'operations.jobLeaseMs');
   assertPositive(config.embodied.actionLeaseMs, 'embodied.actionLeaseMs');
   assertPositiveInteger(config.embodied.maxActionsPerMinute, 'embodied.maxActionsPerMinute');
+  if (config.embodied.allowActions.length === 0) {
+    throw new Error('embodied.allowActions must not be empty; disable embodied instead');
+  }
+  for (const action of config.embodied.allowActions) {
+    if (!(EMBODIED_ACTION_TYPES as readonly string[]).includes(action)) {
+      throw new Error(
+        `embodied.allowActions names ${action}, which is not part of the MVP action vocabulary (${EMBODIED_ACTION_TYPES.join(', ')})`
+      );
+    }
+  }
   assertRatio(config.replay.missRateMax, 'replay.missRateMax');
   assertRatio(config.evaluation.trainRatio, 'evaluation.trainRatio');
   assertRatio(config.evaluation.validationRatio, 'evaluation.validationRatio');

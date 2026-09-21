@@ -74,3 +74,30 @@ export const MOCK_CAPABILITY_PROFILE: CapabilityProfile = {
     }
   }
 };
+
+/**
+ * Restrict a declared profile to an allowed subset of actions.
+ *
+ * Narrowing only: an action the profile never declared cannot be added by
+ * configuration, so config can tighten a deployment but never widen it. An
+ * empty result is refused rather than producing a backend that can do nothing.
+ */
+export function narrowCapabilityProfile(
+  profile: CapabilityProfile,
+  allowedActions: readonly string[]
+): CapabilityProfile {
+  const undeclared = allowedActions.filter((action) => profile.actions[action as keyof CapabilityProfile['actions']] === undefined);
+  if (undeclared.length > 0) {
+    throw new Error(
+      `cannot allow action(s) the profile does not declare: ${undeclared.join(', ')}; declared actions are ${Object.keys(profile.actions).join(', ')}`
+    );
+  }
+  const actions: Record<string, ActionCapability> = {};
+  for (const action of allowedActions) {
+    actions[action] = profile.actions[action as keyof CapabilityProfile['actions']]!;
+  }
+  if (Object.keys(actions).length === 0) {
+    throw new Error('narrowing to no actions would leave the backend unable to act; disable embodied instead');
+  }
+  return { ...profile, actions: actions as CapabilityProfile['actions'] };
+}

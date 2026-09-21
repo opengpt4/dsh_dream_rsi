@@ -280,6 +280,7 @@ export {
   type ReplaySettings
 } from './runtime.js';
 
+export { narrowCapabilityProfile } from './embodied/capability.js';
 export {
   checkCapability,
   MOCK_CAPABILITY_PROFILE,

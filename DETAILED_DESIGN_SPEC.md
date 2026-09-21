@@ -176,6 +176,8 @@ export interface DreamRsiConfig {
 
 Defaults: `enabled=true`, `evolution.enabled=false`, `evolution.autoDeploy=false`, `embodied.enabled=false`, evaluator isolation required. Ratio validation requires `train + validation + holdout = 1` and each ratio > 0.
 
+`embodied.allowActions` narrows the declared action set. Narrowing only: an action the backend's profile does not declare cannot be granted by configuration, so config can tighten a deployment but never widen it. The effective profile is exposed as `runtime.capabilityProfile`, and readiness reports that rather than the declared one, because once configuration narrows them they differ.
+
 ## 5. Online Execution Design
 
 ### 5.1 Task and episode

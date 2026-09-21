@@ -1,4 +1,5 @@
 import { validateDreamRsiConfig, type DreamRsiConfig } from './config.js';
+import type { CapabilityProfile } from './embodied/capability.js';
 import { InMemoryDiscoveryStore, type DiscoveryStore } from './discovery/models.js';
 import { SQLiteDiscoveryStore } from './discovery/sqlite-store.js';
 import { MockEmbodiedBackend } from './embodied/backend.js';
@@ -8,6 +9,7 @@ import { DEFAULT_SPLIT_CONFIG, type EvaluationSplitConfig } from './evolution/sp
 import { SingleWriterLock } from './operations/single-writer-lock.js';
 import { InMemoryAuditLog, type AuditSink } from './registry/audit.js';
 import { ActionGuard, type ConfirmationRequest } from './safety/action-guard.js';
+import { narrowCapabilityProfile } from './embodied/capability.js';
 import { MOCK_CAPABILITY_PROFILE } from './safety/capability.js';
 
 /** Replay ceilings derived from config, consumed by the episode pipeline. */
@@ -45,6 +47,13 @@ export interface DreamRsiRuntime {
   readonly splitConfig: EvaluationSplitConfig;
   readonly replaySettings: ReplaySettings;
   readonly evaluationSettings: EvaluationSettings;
+  /**
+   * The capability profile actually in force, after `embodied.allowActions`.
+   *
+   * Exposed because the declared profile and the effective one differ once
+   * configuration narrows it, and a reader needs the effective one.
+   */
+  readonly capabilityProfile: CapabilityProfile;
   /** Enforces the action safety contract for every action this runtime dispatches. */
   readonly guard: ActionGuard;
   readonly audit: AuditSink;
@@ -85,8 +94,10 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
   const backend = new MockEmbodiedBackend();
   const adapter = new MockEnvironmentAdapter(backend);
   const audit = hooks.audit ?? new InMemoryAuditLog();
+  // Config tightens the declared profile and can never widen it.
+  const capabilityProfile = narrowCapabilityProfile(MOCK_CAPABILITY_PROFILE, config.embodied.allowActions);
   const guard = new ActionGuard({
-    profile: MOCK_CAPABILITY_PROFILE,
+    profile: capabilityProfile,
     actionLeaseMs: config.embodied.actionLeaseMs,
     maxActionsPerMinute: config.embodied.maxActionsPerMinute,
     requireConfirmation: config.embodied.requireConfirmation,
@@ -135,6 +146,7 @@ export function createDreamRsiRuntime(config: DreamRsiConfig, hooks: DreamRsiHoo
         maxMissRate: config.replay.missRateMax
       }
     },
+    capabilityProfile,
     guard,
     audit,
     evolutionLock: new SingleWriterLock(config.operations.evolutionLock, config.operations.jobLeaseMs),

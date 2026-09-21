@@ -79,6 +79,8 @@ Implemented and tested capabilities include:
 - lease-based single-writer lock with heartbeat and stale-lock recovery
 - validated configuration with evolution and auto-deployment disabled by default, including the holdout
   gate's non-regression ratio and minimum improvement
+- `embodied.allowActions` narrows the declared action set; configuration can tighten a deployment but
+  never widen it
 - read-only `dream_status` tool for enabled capabilities, safety-relevant config, and readiness checks that
   never open storage as a side effect
 - disposal releases adapter sessions and guard latches, so an environment is not left holding a pose
@@ -93,7 +95,7 @@ npm run typecheck
 npm test
 ```
 
-The current suite contains 322 passing tests. OS/container sandboxing and a real
+The current suite contains 326 passing tests. OS/container sandboxing and a real
 simulator adapter remain planned work.
 
 Replaying an episode's own recorded decisions is a determinism check, not
