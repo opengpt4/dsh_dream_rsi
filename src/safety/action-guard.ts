@@ -16,8 +16,9 @@ export interface GuardedActionRequest {
   /** Repeated attempts at one logical action share this key. */
   readonly idempotencyKey: string;
   readonly sessionId: string;
-  readonly taskId: string;
-  readonly episodeId: string;
+  /** Absent for an interactive action taken through a tool rather than an episode. */
+  readonly taskId?: string;
+  readonly episodeId?: string;
   readonly correlationId: string;
   readonly actionType: EmbodiedActionType;
   readonly parameters: JsonObject;
@@ -40,6 +41,10 @@ export interface ActionRecord {
   readonly actionId: string;
   readonly idempotencyKey: string;
   readonly sessionId: string;
+  readonly taskId?: string;
+  readonly episodeId?: string;
+  /** Ties this record to the episode or tool call that requested it. */
+  readonly correlationId: string;
   readonly actionType: EmbodiedActionType;
   readonly state: ActionState;
   /** Every state this action passed through, in order, starting at `REQUESTED`. */
@@ -63,6 +68,9 @@ interface MutableRecord {
   readonly actionId: string;
   readonly idempotencyKey: string;
   readonly sessionId: string;
+  readonly taskId?: string;
+  readonly episodeId?: string;
+  readonly correlationId: string;
   readonly actionType: EmbodiedActionType;
   state: ActionState;
   readonly history: ActionState[];
@@ -163,7 +171,10 @@ export class ActionGuard {
       actionId: request.actionId,
       idempotencyKey: request.idempotencyKey,
       sessionId: request.sessionId,
+      correlationId: request.correlationId,
       actionType: request.actionType,
+      ...(request.taskId !== undefined ? { taskId: request.taskId } : {}),
+      ...(request.episodeId !== undefined ? { episodeId: request.episodeId } : {}),
       state: 'REQUESTED',
       history: ['REQUESTED']
     };
@@ -275,10 +286,13 @@ export class ActionGuard {
       actionId: request.actionId,
       idempotencyKey: request.idempotencyKey,
       sessionId: request.sessionId,
+      correlationId: request.correlationId,
       actionType: request.actionType,
       state: 'FAILED',
       history: ['REQUESTED', 'FAILED'],
-      rejection: { code, reason }
+      rejection: { code, reason },
+      ...(request.taskId !== undefined ? { taskId: request.taskId } : {}),
+      ...(request.episodeId !== undefined ? { episodeId: request.episodeId } : {})
     };
   }
 
@@ -287,9 +301,12 @@ export class ActionGuard {
       actionId: record.actionId,
       idempotencyKey: record.idempotencyKey,
       sessionId: record.sessionId,
+      correlationId: record.correlationId,
       actionType: record.actionType,
       state: record.state,
       history: [...record.history],
+      ...(record.taskId !== undefined ? { taskId: record.taskId } : {}),
+      ...(record.episodeId !== undefined ? { episodeId: record.episodeId } : {}),
       ...(record.result !== undefined ? { result: record.result } : {}),
       ...(record.rejection !== undefined ? { rejection: record.rejection } : {})
     };

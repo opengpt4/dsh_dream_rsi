@@ -1,4 +1,4 @@
-import type { EmbodiedActionType, MockActionResult } from './backend.js';
+import type { ActionResult, EmbodiedActionType } from './protocol.js';
 
 export interface EmbodiedActionStarted {
   readonly actionId: string;
@@ -9,7 +9,7 @@ export interface EmbodiedActionStarted {
 export interface EmbodiedActionCompleted {
   readonly actionId: string;
   readonly sessionId: string;
-  readonly result: MockActionResult;
+  readonly result: ActionResult;
 }
 
 export interface EmbodiedFrame {

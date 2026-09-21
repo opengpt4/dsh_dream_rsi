@@ -228,8 +228,8 @@ async function dispatch(
       // resolves to the result already recorded for it.
       idempotencyKey: request.actionId,
       sessionId: request.sessionId,
-      taskId: request.taskId,
-      episodeId: request.episodeId,
+      ...(request.taskId !== undefined ? { taskId: request.taskId } : {}),
+      ...(request.episodeId !== undefined ? { episodeId: request.episodeId } : {}),
       correlationId: request.correlationId,
       actionType: request.actionType,
       parameters: request.parameters,

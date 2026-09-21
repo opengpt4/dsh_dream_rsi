@@ -67,8 +67,9 @@ export interface ActionRequest {
   /** Stable for the life of this attempt, so every terminal record carries it. */
   readonly actionId: string;
   readonly sessionId: string;
-  readonly taskId: string;
-  readonly episodeId: string;
+  /** Absent for an interactive action taken through a tool rather than an episode. */
+  readonly taskId?: string;
+  readonly episodeId?: string;
   readonly correlationId: string;
   readonly actionType: EmbodiedActionType;
   readonly parameters: JsonObject;

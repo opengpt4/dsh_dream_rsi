@@ -265,16 +265,15 @@ Input: `session_id`, `action_type`, `parameters`, optional `timeout_ms`, `confir
 
 Processing:
 
-1. Validate session and capability profile.
-2. Validate action schema, risk class, parameters and rate limit.
-3. Require confirmation for high-risk action.
-4. Acquire session action mutex and idempotency key.
-5. Emit `embodied/action-started`.
-6. Execute through `EnvironmentAdapter` with timeout and abort signal.
-7. Persist result and state reference.
-8. Emit completed, failed, cancelled, timeout or emergency-stop event.
+1. Observe, to learn the coordinate frame the action will be expressed in.
+2. Hand the action to `ActionGuard`, which validates the capability profile, confirmation, session mutex, idempotency key and rate limit, then holds the action lease (§5.6).
+3. Emit `embodied/action-started`.
+4. Execute through `EnvironmentAdapter` with the guard's deadline and abort signal.
+5. Emit completed, failed, cancelled, timeout or emergency-stop event.
 
-Output always contains `success`, `actionId`, terminal `status`, result/error and latest state reference.
+A rejected action never reaches the adapter and returns `success: false` with a `rejection_code`.
+
+Output contains `success`, `action_id`, the state-machine `state`, the terminal `status`, and either `result` or `error`. `state` and `status` are distinct: `state` is where the action ended in the state machine, `status` is the backend outcome.
 
 #### `embodied_query_state`
 
