@@ -42,8 +42,21 @@ export const EMPTY_REGISTRY_SNAPSHOT: RegistrySnapshot = {
   currentPolicyArtifactId: null
 };
 
+/**
+ * Holdout verdict the promotion rests on.
+ *
+ * Structural rather than imported, and checked against `evaluationId`, so a
+ * gate verdict taken over some other evaluation cannot be used to justify this
+ * promotion.
+ */
+export interface HoldoutGateVerdict {
+  readonly passed: boolean;
+  readonly candidateEvaluationId: string;
+}
+
 export interface PolicyPromotion {
   readonly evaluationId: string;
+  readonly holdoutGate: HoldoutGateVerdict;
   readonly approval: Approval;
   readonly canary: CanaryResult;
 }
@@ -135,6 +148,14 @@ export class PolicyRegistry {
     const artifact = this.policies.get(artifactId);
     if (artifact === undefined) throw new Error(`cannot promote unregistered policy artifact ${artifactId}`);
 
+    if (promotion.holdoutGate.candidateEvaluationId !== promotion.evaluationId) {
+      throw new Error(
+        `holdout gate ${promotion.holdoutGate.candidateEvaluationId} does not cover evaluation ${promotion.evaluationId}`
+      );
+    }
+    if (!promotion.holdoutGate.passed) {
+      throw new Error(`deployment for ${artifactId} failed the holdout gate`);
+    }
     if (promotion.approval.decision !== 'approved') {
       throw new Error(`deployment for ${artifactId} was not approved`);
     }

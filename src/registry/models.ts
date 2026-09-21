@@ -42,6 +42,10 @@ export interface CaseResult {
   readonly taskFamily: string;
   readonly split: EvaluationSplitName;
   readonly outcome: CaseOutcome;
+  /** Per-case quality, required by the holdout gate to compare two runs. */
+  readonly quality?: number;
+  /** Per-case score, required by the holdout gate to measure improvement. */
+  readonly score?: number;
   /** Why a non-passing case failed. Absent when the case passed. */
   readonly reason?: string;
 }
@@ -219,6 +223,8 @@ function evaluationReportBody(report: EvaluationReport | EvaluationReportInput):
       taskFamily: result.taskFamily,
       split: result.split,
       outcome: result.outcome,
+      ...(result.quality !== undefined ? { quality: result.quality } : {}),
+      ...(result.score !== undefined ? { score: result.score } : {}),
       ...(result.reason !== undefined ? { reason: result.reason } : {})
     })),
     sampleCount: report.sampleCount,

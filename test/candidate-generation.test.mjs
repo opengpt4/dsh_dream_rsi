@@ -262,7 +262,7 @@ test('a generated candidate is scanned, registered, and evaluated without being 
     });
 
     assert.equal(result.promoted, false);
-    assert.equal(result.gate.passed, true);
+    assert.equal(result.staticGate.passed, true);
     assert.equal(evaluatedArtifact.artifactId, result.artifact.artifactId);
     assert.equal(result.artifact.createdBy, 'evolution-agent');
     // Declared capabilities come from the approved mutation classes, nothing else.

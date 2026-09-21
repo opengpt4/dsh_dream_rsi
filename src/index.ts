@@ -32,6 +32,7 @@ export {
   FilePolicyRegistryStore,
   InMemoryPolicyRegistryStore,
   PolicyRegistry,
+  type HoldoutGateVerdict,
   type PolicyPromotion,
   type PolicyRegistryStore,
   type RegistrySnapshot
@@ -76,7 +77,15 @@ export {
 export { evaluateReplay, DEFAULT_EVALUATOR_CONFIG } from './evolution/evaluator.js';
 export { evaluateReplayIsolated, DEFAULT_MAX_OUTPUT_BYTES, type IsolatedEvaluatorOptions } from './evolution/isolated-evaluator.js';
 export { splitDiscoveryNodes, DEFAULT_SPLIT_CONFIG } from './evolution/split.js';
-export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG } from './evolution/monotonic-gate.js';
+export { evaluateMonotonicGate, DEFAULT_MONOTONIC_GATE_CONFIG, type MonotonicGateConfig, type MonotonicGateResult, type PolicyCaseEvaluation } from './evolution/monotonic-gate.js';
+export {
+  evaluateHoldoutGate,
+  DEFAULT_HOLDOUT_GATE_CONFIG,
+  type HoldoutFamilyVerdict,
+  type HoldoutGateConfig,
+  type HoldoutGateInput,
+  type HoldoutGateResult
+} from './evolution/holdout-gate.js';
 export { createEvaluationSnapshot, type EvaluationSnapshot } from './evolution/snapshot.js';
 export { SingleWriterLock } from './operations/single-writer-lock.js';
 export { runAstGuard, type AstGuardResult, type AstGuardViolation } from './guardrails/ast-guard.js';

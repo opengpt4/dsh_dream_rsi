@@ -78,6 +78,17 @@ const CANARY = summarizeCanary(
   AT
 );
 
+/** A promotion rests on gate evidence covering the exact evaluation it deploys. */
+function promotion(evaluationId, overrides = {}) {
+  return {
+    evaluationId,
+    holdoutGate: { passed: true, candidateEvaluationId: evaluationId },
+    approval: APPROVAL,
+    canary: CANARY,
+    ...overrides
+  };
+}
+
 function registryState(registry) {
   return {
     policies: registry.policyCount(),
@@ -199,14 +210,14 @@ test('a deployment requires a registered, passing evaluation of that artifact', 
   registry.registerPolicy(artifact);
 
   assert.throws(
-    () => registry.promotePolicy(artifact.artifactId, { evaluationId: 'nope', approval: APPROVAL, canary: CANARY }),
+    () => registry.promotePolicy(artifact.artifactId, promotion('nope')),
     /unknown evaluation/
   );
 
   const failing = report(artifact.artifactId, { passed: false });
   registry.registerEvaluation(failing);
   assert.throws(
-    () => registry.promotePolicy(artifact.artifactId, { evaluationId: failing.evaluationId, approval: APPROVAL, canary: CANARY }),
+    () => registry.promotePolicy(artifact.artifactId, promotion(failing.evaluationId)),
     /did not pass/
   );
 });
@@ -220,24 +231,38 @@ test('a deployment requires an approval and a passing canary', () => {
 
   assert.throws(
     () =>
-      registry.promotePolicy(artifact.artifactId, {
-        evaluationId: passing.evaluationId,
-        approval: { ...APPROVAL, decision: 'rejected' },
-        canary: CANARY
-      }),
+      registry.promotePolicy(
+        artifact.artifactId,
+        promotion(passing.evaluationId, { approval: { ...APPROVAL, decision: 'rejected' } })
+      ),
     /was not approved/
   );
 
   const failedCanary = summarizeCanary({ quality: 0, errorRate: 0, latencyMs: 0, cost: 0, missRate: 0 }, THRESHOLDS, AT);
   assert.throws(
     () =>
-      registry.promotePolicy(artifact.artifactId, {
-        evaluationId: passing.evaluationId,
-        approval: APPROVAL,
-        canary: failedCanary
-      }),
+      registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { canary: failedCanary })),
     /failed canary: quality/
   );
+});
+
+test('a promotion requires a passing holdout gate over the evaluation it deploys', () => {
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const artifact = policy();
+  registry.registerPolicy(artifact);
+  const passing = report(artifact.artifactId);
+  registry.registerEvaluation(passing);
+
+  assert.throws(
+    () => registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { holdoutGate: { passed: false, candidateEvaluationId: passing.evaluationId } })),
+    /failed the holdout gate/
+  );
+  // A gate verdict taken over some other evaluation cannot justify this one.
+  assert.throws(
+    () => registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { holdoutGate: { passed: true, candidateEvaluationId: 'other' } })),
+    /does not cover evaluation/
+  );
+  assert.equal(registry.currentPolicyArtifactId(), null);
 });
 
 test('every rejected promotion leaves the registry exactly as it was', () => {
@@ -250,11 +275,14 @@ test('every rejected promotion leaves the registry exactly as it was', () => {
   registry.registerEvaluation(passing);
   const before = registryState(registry);
 
+  const failedCanary = summarizeCanary({ quality: 0, errorRate: 0, latencyMs: 0, cost: 0, missRate: 0 }, THRESHOLDS, AT);
   const attempts = [
-    () => registry.promotePolicy('f'.repeat(64), { evaluationId: passing.evaluationId, approval: APPROVAL, canary: CANARY }),
-    () => registry.promotePolicy(artifact.artifactId, { evaluationId: 'missing', approval: APPROVAL, canary: CANARY }),
-    () => registry.promotePolicy(artifact.artifactId, { evaluationId: passing.evaluationId, approval: { ...APPROVAL, decision: 'rejected' }, canary: CANARY }),
-    () => registry.promotePolicy(artifact.artifactId, { evaluationId: passing.evaluationId, approval: APPROVAL, canary: summarizeCanary({ quality: 0, errorRate: 0, latencyMs: 0, cost: 0, missRate: 0 }, THRESHOLDS, AT) })
+    () => registry.promotePolicy('f'.repeat(64), promotion(passing.evaluationId)),
+    () => registry.promotePolicy(artifact.artifactId, promotion('missing')),
+    () => registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { holdoutGate: { passed: false, candidateEvaluationId: passing.evaluationId } })),
+    () => registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { holdoutGate: { passed: true, candidateEvaluationId: 'other-evaluation' } })),
+    () => registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { approval: { ...APPROVAL, decision: 'rejected' } })),
+    () => registry.promotePolicy(artifact.artifactId, promotion(passing.evaluationId, { canary: failedCanary }))
   ];
 
   for (const attempt of attempts) {
@@ -270,11 +298,10 @@ test('a successful promotion records a deployment and moves the pointer', () => 
   registry.registerEvaluation(report(artifact.artifactId));
 
   assert.equal(registry.currentPolicyArtifactId(), null);
-  const deployment = registry.promotePolicy(artifact.artifactId, {
-    evaluationId: registry.evaluationsFor(artifact.artifactId)[0].evaluationId,
-    approval: APPROVAL,
-    canary: CANARY
-  });
+  const deployment = registry.promotePolicy(
+    artifact.artifactId,
+    promotion(registry.evaluationsFor(artifact.artifactId)[0].evaluationId)
+  );
 
   assert.equal(deployment.state, 'ACTIVE');
   assert.equal(deployment.rollbackTarget, null);
@@ -292,16 +319,13 @@ test('a second promotion points its rollback target at the version it replaced',
     registry.registerEvaluation(report(artifact.artifactId));
   }
 
-  registry.promotePolicy(first.artifactId, {
-    evaluationId: registry.evaluationsFor(first.artifactId)[0].evaluationId,
-    approval: APPROVAL,
-    canary: CANARY
-  });
-  const second2 = registry.promotePolicy(second.artifactId, {
-    evaluationId: registry.evaluationsFor(second.artifactId)[0].evaluationId,
-    approval: { ...APPROVAL, approvalId: 'approval-2' },
-    canary: CANARY
-  });
+  registry.promotePolicy(first.artifactId, promotion(registry.evaluationsFor(first.artifactId)[0].evaluationId));
+  const second2 = registry.promotePolicy(
+    second.artifactId,
+    promotion(registry.evaluationsFor(second.artifactId)[0].evaluationId, {
+      approval: { ...APPROVAL, approvalId: 'approval-2' }
+    })
+  );
 
   assert.equal(second2.rollbackTarget, first.artifactId);
   assert.equal(registry.currentPolicyArtifactId(), second.artifactId);
@@ -318,11 +342,7 @@ test('the registry round-trips through a file, pointer included', () => {
     const artifact = policy();
     first.registerPolicy(artifact);
     first.registerEvaluation(report(artifact.artifactId));
-    first.promotePolicy(artifact.artifactId, {
-      evaluationId: first.evaluationsFor(artifact.artifactId)[0].evaluationId,
-      approval: APPROVAL,
-      canary: CANARY
-    });
+    first.promotePolicy(artifact.artifactId, promotion(first.evaluationsFor(artifact.artifactId)[0].evaluationId));
 
     const reopened = new PolicyRegistry(new FilePolicyRegistryStore(filePath));
     assert.equal(reopened.policyCount(), 1);
@@ -417,7 +437,16 @@ test('a completed episode is persisted as an evaluation report', async () => {
     assert.equal(result.report.configHash, hashDreamRsiConfig(runtime.config));
     assert.equal(result.report.sampleCount, 1);
     assert.deepEqual(result.report.caseResults, [
-      { caseId: 'episode-1', taskFamily: 'mock-room', split: 'validation', outcome: 'passed' }
+      {
+        caseId: 'episode-1',
+        taskFamily: 'mock-room',
+        split: 'validation',
+        outcome: 'passed',
+        // Carried so the report can be gated: a case without per-case metrics
+        // cannot support a monotonic comparison.
+        quality: result.evaluation.quality,
+        score: result.evaluation.score
+      }
     ]);
     // The report is registered, so the promotion gate can find it.
     assert.equal(registry.evaluation(result.report.evaluationId).passed, true);

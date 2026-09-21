@@ -620,6 +620,28 @@ Candidate and current policy must evaluate the identical case ID set. Required c
 
 The gate result is immutable and records every rejection reason, case-level difference and configuration hash.
 
+#### Implemented (`src/evolution/holdout-gate.ts`)
+
+`evaluateHoldoutGate` consumes two `EvaluationReport`s rather than bare case lists, and checks each requirement separately:
+
+| Check | Rejection |
+|---|---|
+| Both sides on the holdout split | comparing a holdout candidate against a train incumbent would report a gain no unseen task supports |
+| Both sides share `configHash` | scores taken under different configurations are not comparable |
+| Pass ratio and score improvement | delegated to `evaluateMonotonicGate`, which also requires identical case-id sets |
+| `minimumHoldoutSamples` | overfitting on a small sample |
+| `maxMissRate`, `minQuality`, `maxCost`, `minParallelEfficiency` | each checked alone, so a cost win cannot offset a quality regression |
+| Candidate `guardResults` | a failed AST, dependency, resource, or signature guard |
+| Per-task-family pass ratio | one family regressing while the aggregate holds |
+
+The result is deep-frozen and carries the configuration hash, both evaluation ids, the failed case ids, and a per-family verdict with that family's rejection reasons.
+
+`CaseResult` carries per-case `quality` and `score`. The gate needs them to compare two runs case by case, so a report without them is rejected rather than treated as equal.
+
+**Promotion requires the verdict.** `PolicyRegistry.promotePolicy` demands a passing `holdoutGate` whose `candidateEvaluationId` equals the evaluation being deployed, so a verdict taken over some other evaluation cannot justify a promotion.
+
+Not implemented: the confidence requirement, and signature failure (signing is an open blocker).
+
 ## 11. Deployment, Canary and Rollback
 
 ### 11.1 Deployment state

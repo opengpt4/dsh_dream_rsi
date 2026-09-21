@@ -285,6 +285,9 @@ function buildReport(
       taskFamily: reporting.taskFamily,
       split: reporting.split,
       outcome: episode.status === 'completed' ? 'passed' : 'failed',
+      // One episode is one case, so the case metrics are the episode's metrics.
+      quality: evaluation.quality,
+      score: evaluation.score,
       ...(episode.status === 'completed' ? {} : { reason: outcome.cause ?? episode.status })
     }
   ];

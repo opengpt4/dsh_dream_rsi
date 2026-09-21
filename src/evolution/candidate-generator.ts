@@ -11,6 +11,12 @@ import {
 } from '../registry/models.js';
 import type { PolicyRegistry } from '../registry/policy-registry.js';
 import { assertMutationClassesAllowed, MUTATION_CLASSES, type HarnessLlm, type MutationClass } from './harness.js';
+import {
+  evaluateHoldoutGate,
+  DEFAULT_HOLDOUT_GATE_CONFIG,
+  type HoldoutGateConfig,
+  type HoldoutGateResult
+} from './holdout-gate.js';
 
 /**
  * Evaluate-only candidate generation.
@@ -205,14 +211,26 @@ export interface CandidateEvaluationInput {
   readonly entrypoint?: string;
   /** Runs one evaluation of the generated source and returns its report. */
   readonly evaluate: (artifact: PolicyArtifact) => Promise<EvaluationReport>;
+  /**
+   * Holdout evidence to gate the candidate against. Omitted means the candidate
+   * is evaluated but no verdict is produced, which can never justify a promotion.
+   */
+  readonly holdoutGate?: {
+    readonly incumbent: EvaluationReport;
+    readonly configurationHash: string;
+    readonly config?: HoldoutGateConfig;
+  };
   readonly signal?: AbortSignal;
 }
 
 export interface CandidateEvaluationResult {
   readonly proposal: CandidateProposal;
   readonly artifact: PolicyArtifact;
-  readonly gate: CandidateGateResult;
+  /** Static scan verdict: AST and import allowlist. */
+  readonly staticGate: CandidateGateResult;
   readonly report: EvaluationReport;
+  /** Holdout verdict, when an incumbent was supplied to compare against. */
+  readonly holdoutGate?: HoldoutGateResult;
   /** Always `false`. Generation evaluates; it never promotes. */
   readonly promoted: false;
 }
@@ -257,7 +275,24 @@ export async function evaluateCandidate(input: CandidateEvaluationInput): Promis
   input.registry.registerPolicy(artifact);
 
   const report = await input.evaluate(artifact);
-  return { proposal, artifact, gate, report, promoted: false };
+
+  const holdoutGate = input.holdoutGate === undefined
+    ? undefined
+    : evaluateHoldoutGate({
+        incumbent: input.holdoutGate.incumbent,
+        candidate: report,
+        config: input.holdoutGate.config ?? DEFAULT_HOLDOUT_GATE_CONFIG,
+        configurationHash: input.holdoutGate.configurationHash
+      });
+
+  return {
+    proposal,
+    artifact,
+    staticGate: gate,
+    report,
+    promoted: false,
+    ...(holdoutGate !== undefined ? { holdoutGate } : {})
+  };
 }
 
 function isStringArray(value: unknown): value is string[] {

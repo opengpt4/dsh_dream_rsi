@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
-**更新日期**：2026-09-21  
-**目前 baseline**：57 tests passing，`main` 已推送至 GitHub  
+**更新日期**：2026-09-22  
+**目前 baseline**：178 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -110,6 +110,10 @@
 - [x] Add immutable artifact registry and current-policy pointer (`src/registry/policy-registry.ts`). Records are append-only; the pointer is the only mutable state and moves only through `promotePolicy`, which requires a registered artifact, a passing evaluation covering it, an explicit operator approval, and a passing canary. Every check runs before any mutation.
 - [x] Add report persistence (`FilePolicyRegistryStore`, re-verifying every record on load so a tampered file is refused) and rejection reasons by case/task family (`summarizeCaseResults`).
 - [ ] Persist candidate source as an artifact and record its reference on the policy artifact (`sourceRef`). The registry records `sourceSha256` only, so the source itself is not yet retrievable from a record.
+- [x] Extend the gate to holdout evaluation reports (`src/evolution/holdout-gate.ts`): both sides must be holdout and share a `configHash`, and quality, cost, parallel efficiency, miss rate, sample sufficiency, and candidate guard failures are each checked independently so a cost win cannot offset a quality regression.
+- [x] Report per-task-family verdicts and reject when any single family falls below the pass ratio, with that family's rejection reasons summarised.
+- [x] Require a passing holdout gate verdict for promotion, structurally checked against the evaluation being deployed so a verdict over some other evaluation cannot justify it.
+- [x] Carry per-case `quality` and `score` on `CaseResult`; a report without them is rejected by the gate rather than treated as equal.
 
 ### 9. Candidate Generation
 
@@ -183,7 +187,7 @@ The project is not ready for production pilot until all of these have evidence:
 - [ ] Strong OS/container isolation for untrusted candidate code.
 - [ ] Immutable signed policy/evaluation/snapshot artifacts.
 - [ ] AST, dependency, resource, and network guards. Static guards for all four exist and are tested, but runtime CPU/memory/filesystem/network limits do not, so this stays open.
-- [ ] Holdout gate with sufficient samples and per-task-family report.
+- [ ] Holdout gate with sufficient samples and per-task-family report. The gate, the sample floor, and the per-family verdict all exist and are tested, but the only evidence is a synthetic mock family; real evidence needs the simulator (item 12).
 - [ ] Approval, canary, atomic deployment, and rollback.
 - [x] Action state machine with emergency-stop and no retry after stop (`src/safety/action-state.ts`, `src/safety/action-guard.ts`).
 - [ ] Audit, retention, deletion, and secret-redaction controls.
