@@ -186,7 +186,11 @@ def _step_towards(session, target, gripper, steps, tolerance=0.01):
         delta = target - current
         distance = float(np.linalg.norm(delta))
         if distance < tolerance:
-            # Hold position for the remaining steps, so a grasp has time to form.
+            if gripper <= 0:
+                # Arrived, and there is no grasp to form: stop here rather than
+                # stepping the rest of the budget holding position.
+                break
+            # A grasp still needs the remaining steps for the fingers to close.
             delta = np.zeros(3)
         # Orientation is held, not commanded: passing the measured orientation as
         # the rotation *delta* asked for a large rotation, which is why a
@@ -195,8 +199,6 @@ def _step_towards(session, target, gripper, steps, tolerance=0.01):
         action = np.concatenate([_normalized(delta), np.zeros(3), [gripper]])
         session.env.step(action)
         session.step += 1
-        if distance < tolerance and gripper > 0:
-            break
     # Returns nothing: the caller re-reads state, which is the only thing that
     # can say what actually happened.
 
