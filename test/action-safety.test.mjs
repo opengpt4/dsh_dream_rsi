@@ -954,3 +954,18 @@ test('readiness reports the effective profile rather than the declared one', () 
     runtime.dispose();
   }
 });
+
+test('narrowing a profile to no actions is refused rather than leaving a backend that cannot act', () => {
+  // Configuration refuses an empty `embodied.allowActions` before this point, so
+  // the guard here is for the exported function: a profile with no actions would
+  // be a backend that can only refuse.
+  assert.throws(
+    () => narrowCapabilityProfile(MOCK_CAPABILITY_PROFILE, []),
+    /narrowing to no actions would leave the backend unable to act/
+  );
+  // The declared profile itself is untouched, and narrowing to one action keeps
+  // only that one.
+  const narrowed = narrowCapabilityProfile(MOCK_CAPABILITY_PROFILE, ['move_relative']);
+  assert.deepEqual(Object.keys(narrowed.actions), ['move_relative']);
+  assert.equal(Object.keys(MOCK_CAPABILITY_PROFILE.actions).length > 1, true);
+});

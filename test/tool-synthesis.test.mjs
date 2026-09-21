@@ -185,6 +185,18 @@ test('the tool id covers the source, tests, permissions, and version', () => {
   assert.equal(verifySynthesizedTool({ ...base, permissions: ['action:pick'] }), false);
 });
 
+test('a pattern with no steps is refused rather than becoming an empty tool', () => {
+  // The miner produces patterns, but `synthesizeTool` is exported: a tool with no
+  // steps would be a permissionless no-op that the registry would still enable.
+  const empty = {
+    signature: 'nothing()',
+    steps: [],
+    supportingNodeIds: ['a-0', 'b-0'],
+    tasks: ['task-1']
+  };
+  assert.throws(() => synthesizeTool(empty), /cannot synthesize a tool from an empty pattern/);
+});
+
 test('only high-level action permissions are expressible', () => {
   assert.deepEqual(assertPermissionsAllowed(['action:move_relative']), ['action:move_relative']);
   assert.equal(ALLOWED_TOOL_PERMISSIONS.length, 5);

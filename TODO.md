@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：506 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：508 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -72,7 +72,7 @@
 - [x] Implement action state machine `REQUESTED -> AUTHORIZED -> EXECUTING -> terminal` (`src/safety/action-state.ts`); the spec diagram is the transition table and terminal states absorb.
 - [x] Add action lease, session mutex, idempotency, rate limit, timeout, cancellation, and emergency stop (`src/safety/action-guard.ts`), dispatched by the episode runner through `RunEpisodeOptions.guard`.
 - [x] Prohibit automatic retry after emergency stop: the latch is checked before the idempotency lookup, so a previously recorded result cannot be replayed as a retry.
-- [x] Add authorization and high-risk confirmation tests (`test/action-safety.test.mjs`, 35 tests). Confirmation is denied by default when no host approval hook is configured.
+- [x] Add authorization and high-risk confirmation tests (`test/action-safety.test.mjs`, 36 tests). Confirmation is denied by default when no host approval hook is configured.
 - [x] Dispatch `embodied_act` through the action guard so the tool path obeys the same capability, confirmation, and state-machine contract as the episode path. The tool observes first, so an action is authorised in the frame of the state it was decided from.
 
 ### 5. Artifact and Snapshot Integrity
