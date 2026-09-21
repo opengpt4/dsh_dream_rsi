@@ -255,7 +255,7 @@ export async function runEpisodePipeline(options: EpisodePipelineOptions): Promi
 
   const evaluationReport = options.reporting === undefined
     ? undefined
-    : buildReport(options.reporting, outcome, snapshot, evaluation, gates, settings.missRateMax);
+    : buildReport(options.reporting, outcome, snapshot, evaluation, report, gates, settings.missRateMax);
 
   recordRunMetrics(options, outcome, evaluation, report, evaluationReport);
 
@@ -319,6 +319,7 @@ function buildReport(
   outcome: EpisodeOutcome,
   snapshot: EvaluationSnapshot,
   evaluation: EvaluationResult,
+  replay: ReplayReport,
   gates: EpisodeGates,
   missRateMax: number
 ): EvaluationReport {
@@ -332,6 +333,9 @@ function buildReport(
       // One episode is one case, so the case metrics are the episode's metrics.
       quality: evaluation.quality,
       score: evaluation.score,
+      cost: evaluation.cost,
+      latencyMs: Date.parse(episode.endedAt ?? episode.startedAt) - Date.parse(episode.startedAt),
+      missed: replay.missCount > 0,
       ...(episode.status === 'completed' ? {} : { reason: outcome.cause ?? episode.status })
     }
   ];

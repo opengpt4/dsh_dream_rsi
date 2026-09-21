@@ -57,6 +57,30 @@ export type ArtifactVerification =
       readonly detail: string;
     };
 
+/**
+ * A pointer to stored bytes.
+ *
+ * Deliberately a subset of {@link ArtifactMetadata}: a record that references an
+ * artifact needs the identity and the shape, not the retention bookkeeping.
+ */
+export interface ArtifactRef {
+  readonly artifactId: string;
+  readonly kind: ArtifactKind;
+  readonly mediaType: string;
+  readonly byteLength: number;
+  readonly schemaVersion: number;
+}
+
+export function toArtifactRef(metadata: ArtifactMetadata): ArtifactRef {
+  return {
+    artifactId: metadata.artifactId,
+    kind: metadata.kind,
+    mediaType: metadata.mediaType,
+    byteLength: metadata.byteLength,
+    schemaVersion: metadata.schemaVersion
+  };
+}
+
 export interface PutArtifactInput {
   readonly bytes: Buffer;
   readonly kind: ArtifactKind;

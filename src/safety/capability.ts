@@ -1,5 +1,5 @@
 import type { JsonObject } from '../discovery/models.js';
-import type { EmbodiedActionType } from '../embodied/protocol.js';
+import { EMBODIED_ACTION_TYPES, type EmbodiedActionType } from '../embodied/protocol.js';
 
 /**
  * What an embodied backend declares it can do.
@@ -67,6 +67,13 @@ export interface CapabilityQuery {
 }
 
 export function checkCapability(profile: CapabilityProfile, query: CapabilityQuery): CapabilityCheck {
+  // The allowlist is closed against the declared vocabulary, so a forged profile
+  // cannot widen it by naming an action the MVP does not have — raw motor and
+  // joint control in particular.
+  if (!(EMBODIED_ACTION_TYPES as readonly string[]).includes(query.actionType)) {
+    return deny('action_not_declared', `action ${query.actionType} is not part of the MVP action vocabulary`);
+  }
+
   const capability = profile.actions[query.actionType];
   if (capability === undefined) {
     return deny('action_not_declared', `action ${query.actionType} is not declared by ${profile.profileId}`);

@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   ActionGuard,
+  ALLOWED_TOOL_PERMISSIONS,
+  EMBODIED_ACTION_TYPES,
   MOCK_CAPABILITY_PROFILE,
   MOCK_ENVIRONMENT_ID,
   MockEmbodiedBackend,
@@ -70,6 +72,80 @@ const untilAborted = (status) => (signal) =>
   new Promise((resolve) => {
     signal.addEventListener('abort', () => resolve(actionResult({ status })), { once: true });
   });
+
+test('the MVP action vocabulary has no representation for raw motor or joint control', () => {
+  // The allowlist is closed: only high-level primitives exist, so there is no
+  // value a candidate could name to reach joint velocity or a motor channel.
+  assert.deepEqual(EMBODIED_ACTION_TYPES, ['move_relative', 'goto', 'pick', 'place', 'open']);
+  for (const forbidden of ['joint_velocity', 'set_joint', 'raw_motor', 'torque', 'motor_command']) {
+    assert.ok(!EMBODIED_ACTION_TYPES.includes(forbidden), forbidden);
+  }
+  // Tool permissions are derived from the same list, so they cannot exceed it.
+  assert.deepEqual(
+    [...ALLOWED_TOOL_PERMISSIONS],
+    EMBODIED_ACTION_TYPES.map((action) => `action:${action}`)
+  );
+  for (const action of Object.keys(MOCK_CAPABILITY_PROFILE.actions)) {
+    assert.ok(EMBODIED_ACTION_TYPES.includes(action), action);
+  }
+});
+
+test('a forged capability profile cannot widen the action vocabulary', () => {
+  const forged = {
+    profileId: 'forged',
+    sensors: [],
+    coordinateFrames: [FRAME_ID],
+    actions: {
+      joint_velocity: {
+        actionType: 'joint_velocity',
+        risk: 'high',
+        requiresConfirmation: false,
+        limits: { allowedParameters: ['radians'], maxNumericMagnitude: 100, maxDurationMs: 1_000 }
+      }
+    }
+  };
+
+  const result = checkCapability(forged, {
+    actionType: 'joint_velocity',
+    frameId: FRAME_ID,
+    parameters: { radians: 1 },
+    timeoutMs: 100
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.rejection.code, 'action_not_declared');
+  assert.match(result.rejection.reason, /not part of the MVP action vocabulary/);
+});
+
+test('the guard refuses an action outside the vocabulary even when a profile declares it', async () => {
+  const forged = {
+    profileId: 'forged',
+    sensors: [],
+    coordinateFrames: [FRAME_ID],
+    actions: {
+      raw_motor: {
+        actionType: 'raw_motor',
+        risk: 'high',
+        requiresConfirmation: false,
+        limits: { allowedParameters: ['power'], maxNumericMagnitude: 100, maxDurationMs: 1_000 }
+      }
+    }
+  };
+  const guard = new ActionGuard({
+    profile: forged,
+    actionLeaseMs: 30_000,
+    maxActionsPerMinute: 30,
+    requireConfirmation: false
+  });
+
+  const record = await guard.execute(
+    guardRequest({ actionType: 'raw_motor', parameters: { power: 1 } }),
+    async () => actionResult()
+  );
+
+  assert.equal(record.state, 'FAILED');
+  assert.equal(record.rejection.code, 'action_not_declared');
+});
 
 test('the state machine permits exactly the transitions in the design spec', () => {
   assert.equal(transition('REQUESTED', 'AUTHORIZED'), 'AUTHORIZED');

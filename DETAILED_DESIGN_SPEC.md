@@ -408,6 +408,8 @@ export interface ArtifactMetadata {
 
 Database rows contain references, not large binary payloads.
 
+`PolicyArtifact.sourceRef` is an `ArtifactRef` pointing at the stored source. It is deliberately **not** part of the artifact id: the id covers what the artifact is, and `sourceSha256` already binds the content. A reference is a location, and two records of the same policy must share one identity regardless of where the bytes live. `verifyPolicyArtifactSource` therefore checks separately that the referenced bytes hash to `sourceSha256`.
+
 Because storage is content-addressed, `artifactId` **is** the SHA-256 of the bytes: a separate `contentSha256` field would be the same value twice, and a stored `uri` is derivable from the id. `verify(artifactId)` re-hashes the blob on disk rather than trusting the index, and distinguishes `unknown`, `deleted`, `missing_blob`, and `checksum_mismatch`. `assertArtifactsVerified` fails closed before evaluation; deployment must call it rather than re-implement the check.
 
 Retention and deletion are recorded in metadata, never by rewriting or truncating a blob. `pruneExpired` deletes artifacts past `retentionUntil` and only ever runs when called: a retention policy that fires on its own is an audit-trail hazard.
@@ -790,6 +792,12 @@ The episode pipeline records `task.outcome` with the terminal status as a label,
 **Audit** (`src/registry/audit.ts`). One append-only trail, generalised from deployments to a `subject`: `deployment`, `session`, or `tool`, with `subjectId` naming the deployment, session, or tool. An operator stop is recorded as `action.emergency-stop` whether or not an action was in flight, because the stop is the fact, not the interruption.
 
 **Report** (`src/observability/report.ts`). `buildObservabilityReport` produces a JSON-serializable snapshot: Q/C/P/M/S per evaluation with a per-family breakdown, case and pass counts, deployment history including the path taken, the current policy pointer, and metric summaries. An aggregate score hides which family regressed, which is the part that can be acted on.
+
+Each family carries quality, cost, latency, and miss rate as aggregates with sample counts and a 95% confidence interval (`src/observability/statistics.ts`). Small samples use a Student-t critical value rather than 1.96: at four samples the interval is roughly 1.4x wider, which is the difference between "no regression" and "cannot tell yet". A single sample reports `lower` and `upper` as `null` rather than a zero-width interval, because one observation cannot support a precision claim. A non-finite sample is refused.
+
+**Action vocabulary.** `checkCapability` denies any action absent from `EMBODIED_ACTION_TYPES`, so a forged capability profile cannot widen the allowlist. Raw motor and joint control have no representation in the type, and the check closes the same gap at runtime.
+
+**Replay purity** (`test/provenance.test.mjs`). The replay modules are asserted to import no model client, tool, sandbox, or network capability, and a replay is asserted to leave the source store byte-identical and the snapshot frozen. Replay reads a snapshot and nothing else.
 
 **Failure injection** (`test/failure-injection.test.mjs`). Provider outage, worker crash, stale lease, corrupted artifact, timeout, cancellation, and rollback failure. Each case asserts which state must be left untouched — the registry, the pointer, the store, or the transition log — rather than only that an error surfaced.
 

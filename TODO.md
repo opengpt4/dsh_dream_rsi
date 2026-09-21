@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-22  
-**目前 baseline**：252 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**目前 baseline**：267 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -81,7 +81,7 @@
 - [x] Materialize ReplaySnapshot from a consistent SQLite read transaction: `DiscoveryStore.readAll()` serves the tree under one deferred transaction, and `EpisodePipelineOptions.snapshotSource: 'store'` snapshots the persisted tree rather than the run in memory.
 - [x] Decided: snapshot identity includes `createdAt` (content hash covers `schemaVersion` + `createdAt` + `splits`; see `src/evolution/snapshot.ts`).
 - [x] Add artifact checksum verification before evaluation (`assertArtifactsVerified` runs before the evaluator and fails the run). Deployment does not exist yet; it must call the same function rather than re-implement the check.
-- [ ] Add signature provider, verification, key rotation, and failure tests. `[!]`
+- [ ] Select and implement a signing scheme: provider, verification, key rotation, and failure tests. `[!]` Covers both the artifact signature in item 5 and the deployment-time signature check in item 10.
 
 ### 6. Strong Evaluator Isolation
 
@@ -109,7 +109,7 @@
 - [x] Add source hash, parent version, evaluator version, snapshot ID, config hash, and dependency manifest. `hashDreamRsiConfig` records the configuration a score was taken under, so two scores are only comparable when it matches.
 - [x] Add immutable artifact registry and current-policy pointer (`src/registry/policy-registry.ts`). Records are append-only; the pointer is the only mutable state and moves only through `promotePolicy`, which requires a registered artifact, a passing evaluation covering it, an explicit operator approval, and a passing canary. Every check runs before any mutation.
 - [x] Add report persistence (`FilePolicyRegistryStore`, re-verifying every record on load so a tampered file is refused) and rejection reasons by case/task family (`summarizeCaseResults`).
-- [ ] Persist candidate source as an artifact and record its reference on the policy artifact (`sourceRef`). The registry records `sourceSha256` only, so the source itself is not yet retrievable from a record.
+- [x] Persist candidate source as an artifact and record its reference on the policy artifact (`sourceRef`, `createPolicyArtifactWithSource`). The reference is not part of the artifact id, because a location must not change what the artifact is; `verifyPolicyArtifactSource` checks that the referenced bytes hash to `sourceSha256`.
 - [x] Extend the gate to holdout evaluation reports (`src/evolution/holdout-gate.ts`): both sides must be holdout and share a `configHash`, and quality, cost, parallel efficiency, miss rate, sample sufficiency, and candidate guard failures are each checked independently so a cost win cannot offset a quality regression.
 - [x] Report per-task-family verdicts and reject when any single family falls below the pass ratio, with that family's rejection reasons summarised.
 - [x] Require a passing holdout gate verdict for promotion, structurally checked against the evaluation being deployed so a verdict over some other evaluation cannot justify it.
@@ -129,7 +129,6 @@
 - [x] Serialize evolution/deployment transitions with the writer lease. Every transition holds the deployment `SingleWriterLock`, and taking over an expired lease emits a `lock.recovered` audit event rather than passing silently.
 - [x] Verify the artifact checksum and the current baseline before deployment: the artifact's id is recomputed from its body, and activation is refused if the current policy no longer matches the baseline the gate evidence was taken against.
 - [x] Add a `SignatureVerifier` seam that fails closed: with no verifier configured, activation is refused rather than permitted.
-- [ ] Select and implement a signing scheme (provider, key rotation, failure tests). `[!]`
 - [x] Implement canary health checks for quality, error rate, latency, cost, and miss rate (`summarizeCanary`, applied by `DeploymentWriter.completeCanary`); breached thresholds are named, and a breach rolls the deployment back.
 - [x] Atomically update the current policy pointer only after canary success. The pointer moves only inside `PolicyRegistry.promotePolicy`, which re-validates the gate, approval, and canary before mutating; a failure before that leaves it untouched.
 - [x] Retain at least three stable versions (`stableVersions`) and implement rollback to the previous stable artifact, restoring the pointer only to a registered one.
@@ -151,7 +150,7 @@
 - [ ] Freeze observation schema, coordinate system, action capability profile, and scoring function. `[!]`
 - [ ] Implement one `EnvironmentAdapter` without leaking simulator SDK types into core.
 - [ ] Add simulator reset, deterministic seed, artifact capture, and failure fixtures.
-- [ ] Keep raw motor/joint control outside the MVP action allowlist.
+- [x] Keep raw motor/joint control outside the MVP action allowlist. The vocabulary is closed: `checkCapability` denies any action absent from `EMBODIED_ACTION_TYPES`, so a forged capability profile cannot widen it. A future simulator adapter must preserve this.
 
 ## P2: Scientific Evaluation and Operations
 
@@ -160,7 +159,7 @@
 - [ ] Define at least two task families with distinct search-space topology. `[!]`
 - [ ] Compare fixed baseline, hand-designed policy, evolved policy, and holdout performance.
 - [ ] Add ablations for boundary penalty, task-level split, cost term, and parallel-efficiency term.
-- [ ] Report per-task-family quality, cost, latency, miss rate, sample count, and confidence intervals.
+- [x] Report per-task-family quality, cost, latency, miss rate, sample count, and 95% confidence intervals (`src/observability/report.ts`, `src/observability/statistics.ts`). Small samples use a Student-t critical value, and a single sample reports no interval rather than a zero-width one. Real multi-family evidence still needs the benchmark below.
 - [ ] Test cross-task transfer and quantify transfer degradation.
 - [ ] Replace provisional paper references with verified bibliographic citations. `[!]`
 

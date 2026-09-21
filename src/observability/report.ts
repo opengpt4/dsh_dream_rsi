@@ -1,4 +1,5 @@
-import { summarizeCaseResults, type EvaluationMetrics, type FamilyRejectionSummary } from '../registry/models.js';
+import { summarizeCaseResults, type CaseResult, type EvaluationMetrics, type FamilyRejectionSummary } from '../registry/models.js';
+import { aggregate, rate, type Aggregate } from './statistics.js';
 import type { PolicyRegistry } from '../registry/policy-registry.js';
 import type { EvaluationSplitName } from '../evolution/split.js';
 import type { MetricSummary, MetricsReader } from './metrics.js';
@@ -12,6 +13,23 @@ import type { MetricSummary, MetricsReader } from './metrics.js';
 
 export const OBSERVABILITY_REPORT_SCHEMA_VERSION = 1;
 
+/**
+ * Per-family metrics.
+ *
+ * An aggregate score hides which family regressed, and a mean without an
+ * interval hides whether the sample can support the claim at all.
+ */
+export interface FamilyMetrics {
+  readonly taskFamily: string;
+  readonly caseCount: number;
+  readonly passedCount: number;
+  readonly quality: Aggregate;
+  readonly cost: Aggregate;
+  readonly latencyMs: Aggregate;
+  readonly missRate: Aggregate;
+  readonly rejectionSummary: readonly FamilyRejectionSummary[];
+}
+
 export interface EvaluationSummaryEntry {
   readonly evaluationId: string;
   readonly policyArtifactId: string;
@@ -22,7 +40,7 @@ export interface EvaluationSummaryEntry {
   readonly metrics: EvaluationMetrics;
   readonly caseCount: number;
   readonly passedCaseCount: number;
-  readonly families: readonly FamilyRejectionSummary[];
+  readonly families: readonly FamilyMetrics[];
 }
 
 export interface DeploymentSummaryEntry {
@@ -62,7 +80,7 @@ export function buildObservabilityReport(input: BuildReportInput): Observability
       metrics: { ...report.metrics },
       caseCount: report.caseResults.length,
       passedCaseCount: report.caseResults.filter((result) => result.outcome === 'passed').length,
-      families: summarizeCaseResults(report.caseResults)
+      families: summarizeFamilies(report.caseResults)
     }));
 
   const deployments = input.registry.listDeployments().map((deployment) => ({
@@ -83,4 +101,35 @@ export function buildObservabilityReport(input: BuildReportInput): Observability
     deployments,
     metrics: input.metrics?.summary() ?? []
   };
+}
+
+/** Quality, cost, latency, and miss rate per family, with sample counts and intervals. */
+function summarizeFamilies(caseResults: readonly CaseResult[]): readonly FamilyMetrics[] {
+  const byFamily = new Map<string, CaseResult[]>();
+  for (const result of caseResults) {
+    byFamily.set(result.taskFamily, [...(byFamily.get(result.taskFamily) ?? []), result]);
+  }
+
+  return [...byFamily.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([taskFamily, cases]) => {
+      const failed = cases.filter((result) => result.outcome !== 'passed');
+      return {
+        taskFamily,
+        caseCount: cases.length,
+        passedCount: cases.length - failed.length,
+        quality: aggregate(valuesOf(cases, 'quality')),
+        cost: aggregate(valuesOf(cases, 'cost')),
+        latencyMs: aggregate(valuesOf(cases, 'latencyMs')),
+        missRate: rate(cases.map((result) => result.missed === true)),
+        rejectionSummary: summarizeCaseResults(failed)
+      };
+    });
+}
+
+/** A case that did not record a quantity is absent from that quantity's aggregate. */
+function valuesOf(cases: readonly CaseResult[], field: 'quality' | 'cost' | 'latencyMs'): number[] {
+  return cases
+    .map((result) => result[field])
+    .filter((value): value is number => typeof value === 'number');
 }

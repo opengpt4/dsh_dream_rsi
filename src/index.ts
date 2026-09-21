@@ -40,11 +40,19 @@ export {
   type MetricsSink
 } from './observability/metrics.js';
 export {
+  aggregate,
+  rate,
+  tCritical95,
+  EMPTY_AGGREGATE,
+  type Aggregate
+} from './observability/statistics.js';
+export {
   buildObservabilityReport,
   OBSERVABILITY_REPORT_SCHEMA_VERSION,
   type BuildReportInput,
   type DeploymentSummaryEntry,
   type EvaluationSummaryEntry,
+  type FamilyMetrics,
   type ObservabilityReport
 } from './observability/report.js';
 export {
@@ -92,6 +100,8 @@ export {
   advanceDeployment,
   createEvaluationReport,
   createPolicyArtifact,
+  createPolicyArtifactWithSource,
+  verifyPolicyArtifactSource,
   POLICY_ARTIFACT_SCHEMA_VERSION,
   summarizeCanary,
   summarizeCaseResults,
@@ -150,8 +160,10 @@ export {
   assertArtifactsVerified,
   ARTIFACT_KINDS,
   FileArtifactStore,
+  toArtifactRef,
   type ArtifactKind,
   type ArtifactMetadata,
+  type ArtifactRef,
   type ArtifactStore,
   type ArtifactVerification,
   type ArtifactVerificationFailure,

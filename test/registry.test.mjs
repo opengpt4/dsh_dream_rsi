@@ -442,12 +442,16 @@ test('a completed episode is persisted as an evaluation report', async () => {
         taskFamily: 'mock-room',
         split: 'validation',
         outcome: 'passed',
-        // Carried so the report can be gated: a case without per-case metrics
-        // cannot support a monotonic comparison.
+        // Carried so the report can be gated and summarised per family: a case
+        // without per-case metrics cannot support either.
         quality: result.evaluation.quality,
-        score: result.evaluation.score
+        score: result.evaluation.score,
+        cost: result.evaluation.cost,
+        latencyMs: result.report.caseResults[0].latencyMs,
+        missed: false
       }
     ]);
+    assert.ok(result.report.caseResults[0].latencyMs >= 0);
     // The report is registered, so the promotion gate can find it.
     assert.equal(registry.evaluation(result.report.evaluationId).passed, true);
   } finally {

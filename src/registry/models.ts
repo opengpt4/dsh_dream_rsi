@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { hashJson } from '../hash.js';
+import { toArtifactRef, type ArtifactRef, type ArtifactStore } from '../artifacts/store.js';
 import type { JsonValue } from '../discovery/models.js';
 import type { EvaluationSplitName } from '../evolution/split.js';
 
@@ -29,6 +30,14 @@ export interface PolicyArtifact {
   /** Version this supersedes, or `null` for the initial policy. */
   readonly parentVersion: string | null;
   readonly sourceSha256: string;
+  /**
+   * Where the source bytes live. Absent means the source was never stored, so
+   * the artifact's identity is verifiable but its content is not retrievable.
+   *
+   * Not part of the artifact id: the id covers what the artifact is, and
+   * `sourceSha256` already binds the content. A reference is a location.
+   */
+  readonly sourceRef?: ArtifactRef;
   readonly manifest: PolicyManifest;
   readonly allowedCapabilities: readonly string[];
   readonly createdBy: CreatedBy;
@@ -46,6 +55,11 @@ export interface CaseResult {
   readonly quality?: number;
   /** Per-case score, required by the holdout gate to measure improvement. */
   readonly score?: number;
+  /** Per-case cost and wall-clock latency, aggregated per task family. */
+  readonly cost?: number;
+  readonly latencyMs?: number;
+  /** Whether this case's replay missed, which is the per-family miss rate. */
+  readonly missed?: boolean;
   /** Why a non-passing case failed. Absent when the case passed. */
   readonly reason?: string;
 }
@@ -215,7 +229,7 @@ function policyArtifactBody(body: PolicyArtifactBody): JsonValue {
   };
 }
 
-export function createPolicyArtifact(input: PolicyArtifactInput): PolicyArtifact {
+export function createPolicyArtifact(input: PolicyArtifactInput, sourceRef?: ArtifactRef): PolicyArtifact {
   validatePolicyArtifactInput(input);
   const sourceSha256 = sha256(input.source);
   return {
@@ -225,6 +239,7 @@ export function createPolicyArtifact(input: PolicyArtifactInput): PolicyArtifact
     version: input.version,
     parentVersion: input.parentVersion,
     sourceSha256,
+    ...(sourceRef !== undefined ? { sourceRef } : {}),
     manifest: {
       entrypoint: input.manifest.entrypoint,
       dependencies: [...input.manifest.dependencies],
@@ -239,6 +254,36 @@ export function createPolicyArtifact(input: PolicyArtifactInput): PolicyArtifact
 /** Recompute the id from the body; a mismatch means the record was altered. */
 export function verifyPolicyArtifact(artifact: PolicyArtifact): boolean {
   return artifact.artifactId === hashJson(policyArtifactBody(artifact));
+}
+
+/**
+ * Store a policy artifact's source and return the artifact with its reference.
+ *
+ * Recording a reference without the bytes would leave an artifact whose source
+ * is unretrievable, which is what `sourceRef` exists to prevent.
+ */
+export function createPolicyArtifactWithSource(store: ArtifactStore, input: PolicyArtifactInput): PolicyArtifact {
+  const metadata = store.put({
+    bytes: Buffer.from(input.source, 'utf8'),
+    kind: 'policy',
+    mediaType: 'text/plain',
+    schemaVersion: input.manifest.schemaVersion
+  });
+  return createPolicyArtifact(input, toArtifactRef(metadata));
+}
+
+/**
+ * Check that the referenced bytes are the source this artifact was built from.
+ *
+ * A reference whose content does not hash to `sourceSha256` points at something
+ * other than the reviewed source.
+ */
+export function verifyPolicyArtifactSource(artifact: PolicyArtifact, store: ArtifactStore): boolean {
+  if (artifact.sourceRef === undefined) return false;
+  if (!store.verify(artifact.sourceRef.artifactId).ok) return false;
+  const bytes = store.get(artifact.sourceRef.artifactId);
+  if (bytes === undefined) return false;
+  return sha256(bytes.toString('utf8')) === artifact.sourceSha256;
 }
 
 export type EvaluationReportInput = Omit<EvaluationReport, 'evaluationId' | 'createdAt'> & {
@@ -268,6 +313,9 @@ function evaluationReportBody(report: EvaluationReport | EvaluationReportInput):
       outcome: result.outcome,
       ...(result.quality !== undefined ? { quality: result.quality } : {}),
       ...(result.score !== undefined ? { score: result.score } : {}),
+      ...(result.cost !== undefined ? { cost: result.cost } : {}),
+      ...(result.latencyMs !== undefined ? { latencyMs: result.latencyMs } : {}),
+      ...(result.missed !== undefined ? { missed: result.missed } : {}),
       ...(result.reason !== undefined ? { reason: result.reason } : {})
     })),
     sampleCount: report.sampleCount,

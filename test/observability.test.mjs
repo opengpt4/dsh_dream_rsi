@@ -3,6 +3,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  aggregate,
+  rate,
+  tCritical95,
   DeploymentWriter,
   InMemoryAuditLog,
   InMemoryMetrics,
@@ -161,7 +164,7 @@ test('the report carries Q/C/P/M/S per evaluation with a per-family breakdown', 
   const { runtime, registry, metrics } = harness();
   try {
     const artifact = artifactFor(registry);
-    await runEpisodePipeline(options(runtime, registry, metrics, artifact));
+    const result = await runEpisodePipeline(options(runtime, registry, metrics, artifact));
 
     const report = buildObservabilityReport({ registry, metrics, generatedAt: AT });
 
@@ -177,7 +180,22 @@ test('the report carries Q/C/P/M/S per evaluation with a per-family breakdown', 
     assert.equal(entry.split, 'validation');
     assert.equal(entry.caseCount, 1);
     assert.equal(entry.passedCaseCount, 1);
-    assert.deepEqual(entry.families, [{ taskFamily: 'mock-room', caseCount: 1, passedCount: 1, reasons: {} }]);
+    // Per-family Q, C, latency, and miss rate, each with its sample count. One
+    // sample has a mean but no interval, which is reported as null rather than
+    // as a zero-width claim.
+    assert.deepEqual(entry.families, [
+      {
+        taskFamily: 'mock-room',
+        caseCount: 1,
+        passedCount: 1,
+        quality: { sampleCount: 1, mean: result.evaluation.quality, min: result.evaluation.quality, max: result.evaluation.quality, lower: null, upper: null },
+        cost: { sampleCount: 1, mean: result.evaluation.cost, min: result.evaluation.cost, max: result.evaluation.cost, lower: null, upper: null },
+        latencyMs: entry.families[0].latencyMs,
+        missRate: { sampleCount: 1, mean: 0, min: 0, max: 0, lower: null, upper: null },
+        rejectionSummary: []
+      }
+    ]);
+    assert.equal(entry.families[0].latencyMs.sampleCount, 1);
     assert.ok(report.metrics.length > 0);
 
     // Machine-readable: a consumer can serialize and reparse it unchanged.
@@ -296,4 +314,53 @@ test('online task execution continues when offline evolution fails', async () =>
   } finally {
     runtime.dispose();
   }
+});
+
+// -------------------------------------------------------------- statistics
+
+test('a single sample reports a mean but no confidence interval', () => {
+  const one = aggregate([0.8]);
+  assert.deepEqual(one, { sampleCount: 1, mean: 0.8, min: 0.8, max: 0.8, lower: null, upper: null });
+
+  // Claiming a zero-width interval would assert a precision one sample cannot support.
+  assert.equal(aggregate([]).sampleCount, 0);
+  assert.equal(aggregate([]).lower, null);
+});
+
+test('a multi-sample aggregate carries a confidence interval around the mean', () => {
+  const result = aggregate([0.8, 0.9, 1, 0.7, 0.6]);
+
+  assert.equal(result.sampleCount, 5);
+  assert.equal(result.mean, 0.8);
+  assert.equal(result.min, 0.6);
+  assert.equal(result.max, 1);
+  assert.ok(result.lower < 0.8 && result.upper > 0.8);
+  // A wider spread must widen the interval, or it is not measuring uncertainty.
+  const tight = aggregate([0.8, 0.8, 0.8, 0.8, 0.8]);
+  assert.equal(tight.upper - tight.lower, 0);
+});
+
+test('small samples use a t critical value rather than 1.96', () => {
+  assert.equal(tCritical95(1), 12.706);
+  assert.equal(tCritical95(4), 2.776);
+  assert.equal(tCritical95(30), 2.042);
+  assert.equal(tCritical95(100), 1.96);
+  assert.throws(() => tCritical95(0), /positive integer/);
+
+  // With four samples the interval is roughly 1.4x wider than a z-interval,
+  // which is the difference between "no regression" and "cannot tell yet".
+  const four = aggregate([1, 1, 1, 0]);
+  const spread = four.upper - four.lower;
+  assert.ok(spread > 0);
+});
+
+test('a non-finite sample is refused rather than widening every interval silently', () => {
+  assert.throws(() => aggregate([1, Number.NaN]), /non-finite/);
+  assert.throws(() => aggregate([Number.POSITIVE_INFINITY]), /non-finite/);
+});
+
+test('a rate is the mean of a boolean series', () => {
+  const result = rate([true, false, false, false]);
+  assert.equal(result.mean, 0.25);
+  assert.equal(result.sampleCount, 4);
 });
