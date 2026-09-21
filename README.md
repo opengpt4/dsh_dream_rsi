@@ -105,7 +105,8 @@ npm test
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
 The current suite contains 434 passing tests. OS/container sandboxing and a real
-simulator adapter remain planned work.
+simulator adapter remain planned work; the seven decisions those and the other
+outstanding items depend on are set out with their options in `DECISIONS.md`.
 
 Replaying an episode's own recorded decisions is a determinism check, not
 generalization evidence: every replayed decision was recorded from the state it

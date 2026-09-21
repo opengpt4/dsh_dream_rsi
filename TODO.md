@@ -8,7 +8,7 @@
 
 - `[x]` 已完成並有測試或文件證據
 - `[ ]` 尚未完成
-- `[!]` release blocker 或需要外部決策
+- `[!]` release blocker 或需要外部決策；每個 `[!]` 的選項、取捨與所需答覆見 `DECISIONS.md`
 
 ## Completed Baseline
 
