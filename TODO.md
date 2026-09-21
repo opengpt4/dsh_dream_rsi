@@ -72,6 +72,7 @@
 - [x] Add action lease, session mutex, idempotency, rate limit, timeout, cancellation, and emergency stop (`src/safety/action-guard.ts`), dispatched by the episode runner through `RunEpisodeOptions.guard`.
 - [x] Prohibit automatic retry after emergency stop: the latch is checked before the idempotency lookup, so a previously recorded result cannot be replayed as a retry.
 - [x] Add authorization and high-risk confirmation tests (`test/action-safety.test.mjs`, 17 tests). Confirmation is denied by default when no host approval hook is configured.
+- [ ] Dispatch `embodied_act` through the action guard so the tool path obeys the same capability, confirmation, and state-machine contract as the episode path. `embodied_act` calls the backend directly today.
 
 ### 5. Artifact and Snapshot Integrity
 
