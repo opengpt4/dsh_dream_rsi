@@ -166,10 +166,20 @@ def _action_vector(session, action_type, parameters):
     return target, gripper
 
 
+#: OSC_POSE's position output limit, read from the controller rather than assumed:
+#: the action it takes is normalised to this, so a delta in metres has to be
+#: divided by it. Sending metres directly asked for 0.02 of a 0.05 m range — about
+#: a millimetre of travel per step, which is why an action never converged.
+POSITION_LIMIT_M = 0.05
+
+
+def _normalized(delta):
+    """The control input that moves `delta` metres this step, clipped to range."""
+    return np.clip(delta / POSITION_LIMIT_M, -1.0, 1.0)
+
+
 def _step_towards(session, target, gripper, steps, tolerance=0.01):
     """Drive the end effector toward `target` for at most `steps` control steps."""
-    from robosuite.utils.transform_utils import quat2axisangle
-
     for _ in range(steps):
         state = session.env._get_observations()
         current = np.asarray(state["robot0_eef_pos"], dtype=float)
@@ -178,8 +188,11 @@ def _step_towards(session, target, gripper, steps, tolerance=0.01):
         if distance < tolerance:
             # Hold position for the remaining steps, so a grasp has time to form.
             delta = np.zeros(3)
-        rotation = quat2axisangle(np.asarray(state["robot0_eef_quat"], dtype=float))
-        action = np.concatenate([delta * 10.0, rotation, [gripper]])
+        # Orientation is held, not commanded: passing the measured orientation as
+        # the rotation *delta* asked for a large rotation, which is why a
+        # `move_relative` with dy 0 still moved y — the position delta was then
+        # applied in a frame that had turned. Holding it keeps the requested axes.
+        action = np.concatenate([_normalized(delta), np.zeros(3), [gripper]])
         session.env.step(action)
         session.step += 1
         if distance < tolerance and gripper > 0:
