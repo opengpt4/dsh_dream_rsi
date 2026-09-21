@@ -192,3 +192,19 @@ test('replay leaves the source store and its nodes untouched', () => {
   }, TypeError);
   assert.equal(JSON.stringify(store.readAll()), before, 'replay mutated the source store');
 });
+
+test('a snapshot taken without a timestamp uses the real clock, not the epoch', () => {
+  // `createdAt` is an optional argument whose default is now. Every other test
+  // passes it explicitly, so defaulting it to a constant timestamp — the epoch —
+  // survived: the id is unaffected, which is the point of excluding it, but the
+  // recorded time would be wrong for every snapshot taken without one.
+  const implicit = createEvaluationSnapshot([]);
+  const explicit = createEvaluationSnapshot([], undefined, '2026-01-01T00:00:00.000Z');
+
+  const stampedAt = Date.parse(implicit.createdAt);
+  assert.ok(Number.isFinite(stampedAt), `snapshot timestamp is ${implicit.createdAt}`);
+  assert.ok(Math.abs(Date.now() - stampedAt) < 60_000, `snapshot timestamp is ${implicit.createdAt}, not now`);
+
+  // And the timestamp is still excluded from the id, so the two agree.
+  assert.equal(implicit.snapshotId, explicit.snapshotId);
+});

@@ -570,6 +570,43 @@ test('a high-risk action without confirmation is denied, and approval admits it'
   assert.equal(admitted.state, 'COMPLETED');
 });
 
+test('a confirmation token is not approval when no host hook is configured', async () => {
+  // The three neighbouring cases cover no token, a hook returning false, and a
+  // hook approving. The one that matters most was missing: a token supplied with
+  // no hook at all. `confirm` is optional and its absence means every high-risk
+  // action is denied — approval is opt-in — so a token from the caller must not
+  // stand in for a host decision. Replacing the absent hook with an approving one
+  // survived the whole suite.
+  let ran = false;
+  const guard = makeGuard();
+  const refused = await guard.execute(
+    guardRequest({ actionType: 'pick', parameters: { objectId: 'red-mug' }, confirmationToken: 'token-1' }),
+    async () => {
+      ran = true;
+      return actionResult();
+    }
+  );
+
+  assert.equal(refused.rejection.code, 'confirmation_denied');
+  assert.equal(ran, false, 'a denied action reached the backend');
+});
+
+test('a guard built without a clock uses the real one', async () => {
+  // `now` is injectable for tests, and its default is every timestamp the guard
+  // writes plus the window the rate limit is measured over. Defaulting it to a
+  // constant survived the suite: the injected clock in most tests hid it, and a
+  // frozen clock makes the sliding window never advance, so a session is
+  // rate-limited forever on the strength of actions it took long ago.
+  const audit = new InMemoryAuditLog();
+  const guard = makeGuard({ audit });
+  guard.emergencyStop(SESSION_ID, 'operator pressed stop');
+
+  const [event] = audit.list();
+  const stampedAt = Date.parse(event.at);
+  assert.ok(Number.isFinite(stampedAt), `audit timestamp is ${event.at}`);
+  assert.ok(Math.abs(Date.now() - stampedAt) < 60_000, `audit timestamp is ${event.at}, not now`);
+});
+
 test('confirmation is not demanded when the host does not require it', async () => {
   const guard = makeGuard({ requireConfirmation: false });
   const record = await guard.execute(

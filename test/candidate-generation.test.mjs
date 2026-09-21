@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEFAULT_HOLDOUT_GATE_CONFIG,
   CANDIDATE_SCHEMA_VERSION,
   InMemoryPolicyRegistryStore,
   MOCK_ENVIRONMENT_ID,
   MUTATION_CLASSES,
   PolicyRegistry,
+  createEvaluationReport,
   assertMutationClassesAllowed,
   buildIdentifier,
   buildPrompt,
@@ -22,6 +24,8 @@ import {
   runEpisodePipeline,
   verifyPolicyArtifact
 } from '../dist/index.js';
+
+const CONFIG_HASH = 'c'.repeat(64);
 
 const BENIGN_SOURCE = `export function decide(observation) {
   return observation.step + 1;
@@ -142,6 +146,23 @@ test('the prompt names the seed, the parent version, and the permitted classes',
   assert.match(prompt, /^seed: seed-1$/m);
   assert.match(prompt, /^parent version: v0$/m);
   assert.match(prompt, /parent source:/);
+});
+
+test('a proposal that names no dependencies declares none', async () => {
+  // The artifact's manifest is the dependency list a reviewer and the allowlist
+  // read. Defaulting an absent field to a package nobody asked for puts a
+  // dependency into the artifact, and nothing asserted the empty case.
+  const proposal = parseCandidateProposal(JSON.stringify(reply()), {
+    parent: parent(),
+    seed: 'seed-1',
+    usage: { inputTokens: 1, outputTokens: 1 }
+  });
+
+  assert.deepEqual(proposal.manifest.dependencies, []);
+  // And it is part of the artifact's identity, so the empty list is what the
+  // build id was computed over.
+  assert.equal(proposal.manifest.entrypoint, 'src/policy.ts');
+  assert.equal(proposal.manifest.schemaVersion, 1);
 });
 
 test('the system instruction states the mutation boundary', async () => {
@@ -348,3 +369,61 @@ test('generation cannot reach the registry on its own', async () => {
     'usage'
   ]);
 });
+
+test('omitting the gate config gates under the default one', async () => {
+  // `holdoutGate.config` is optional, so a caller that omits it gets the module
+  // default. Nothing asserted that equivalence, and weakening the fallback — a
+  // zero pass ratio, say — survived the suite, because every other gate test
+  // supplies its own config.
+  const withDefaults = await runCandidate(undefined);
+  const explicitly = await runCandidate(DEFAULT_HOLDOUT_GATE_CONFIG);
+
+  assert.equal(withDefaults.holdoutGate.passed, explicitly.holdoutGate.passed);
+  assert.equal(withDefaults.holdoutGate.passed, false);
+  assert.match(withDefaults.holdoutGate.reasons.join(' '), /task family .* pass ratio/);
+});
+
+/** One candidate evaluation against a holdout report that regresses four of twenty cases. */
+async function runCandidate(config) {
+  const registry = new PolicyRegistry(new InMemoryPolicyRegistryStore());
+  const incumbentArtifact = parent();
+  registry.registerPolicy(incumbentArtifact);
+
+  return evaluateCandidate({
+    llm: fakeLlm(reply()),
+    generation: generationInput({ parent: incumbentArtifact }),
+    registry,
+    evaluate: async () => holdoutReport(incumbentArtifact.artifactId),
+    holdoutGate: {
+      incumbent: holdoutReport(incumbentArtifact.artifactId, 0),
+      configurationHash: CONFIG_HASH,
+      ...(config !== undefined ? { config } : {})
+    }
+  });
+}
+
+/** A holdout report over twenty cases in one family, with `failingCases` regressing. */
+function holdoutReport(artifactId, failingCases = 4) {
+  const caseResults = Array.from({ length: 20 }, (_, index) => ({
+    caseId: `case-${index}`,
+    taskFamily: 'packing',
+    split: 'holdout',
+    outcome: index < failingCases ? 'failed' : 'passed',
+    quality: index < failingCases ? 0.5 : 1,
+    score: 1
+  }));
+  return createEvaluationReport({
+    evaluatorVersion: '0.1.0',
+    sourceHash: 'a'.repeat(64),
+    snapshotId: 'b'.repeat(64),
+    policyArtifactId: artifactId,
+    split: 'holdout',
+    configHash: CONFIG_HASH,
+    metrics: { quality: 1, cost: 0.1, parallelEfficiency: 1, missRate: 0, score: 1 },
+    caseResults,
+    sampleCount: 20,
+    passed: true,
+    guardResults: [],
+    createdAt: '2026-01-01T00:00:00.000Z'
+  });
+}
