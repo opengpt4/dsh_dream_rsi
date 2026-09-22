@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
-**更新日期**：2026-09-22  
-**目前 baseline**：521 tests passing。`main` 僅存在於本機，尚未推送至 GitHub。  
+**更新日期**：2026-09-23  
+**目前 baseline**：521 passing tests，其中 7 項在未設 `DREAM_RSI_SIM_PYTHON` 時 skip；typecheck clean。`main` 已推送至 `opengpt4/dsh_dream_rsi`，與 `origin/main` 同步。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
