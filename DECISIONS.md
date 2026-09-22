@@ -2,7 +2,8 @@
 
 4 items in `TODO.md` are marked `[!]`: they cannot be settled from inside this
 repository because they choose a provider, a runtime, a benchmark, or a person.
-All 13 open items wait on one of these four (§8 is empty). Sections whose decision has been made are kept as the record of what
+Of the 14 open items, 13 wait on one of these four; the remaining 1 is in-tree
+work (§8). Sections whose decision has been made are kept as the record of what
 was chosen.
 
 Each section states what already exists, the decision, the options with the
@@ -206,7 +207,8 @@ profile now or waits for the real adapter.
 
 ## 8. Open items that do not wait on these
 
-- None. Every open item waits on one of the four decisions above.
+- `TODO: Re-land the CI fix that was dropped from history to make the first push possible`
+  — waits on a credential with the `workflow` scope, not on one of the four decisions.
 
 ---
 
