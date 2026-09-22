@@ -1,7 +1,7 @@
 # Dream-RSI Harness TODO
 
 **更新日期**：2026-09-23  
-**目前 baseline**：521 passing tests，其中 7 項在未設 `DREAM_RSI_SIM_PYTHON` 時 skip；typecheck clean。`main` 已推送至 `opengpt4/dsh_dream_rsi`，與 `origin/main` 同步。  
+**目前 baseline**：523 passing tests，其中 7 項在未設 `DREAM_RSI_SIM_PYTHON` 時 skip；typecheck clean。`main` 已推送至 `opengpt4/dsh_dream_rsi`，與 `origin/main` 同步。  
 **原則**：先完成可驗證的安全邊界，再開啟 candidate generation 或自動部署。
 
 ## Status Legend
@@ -180,7 +180,9 @@
 - [ ] Review high-risk embodied actions with a human safety owner. `[!]` Needs a named person; the capability profile and confirmation gate are ready for that review.
 - [x] Document the production approval policy (`PRODUCTION_POLICY.md`) and keep auto-deploy disabled unless explicitly approved. The policy's safety defaults are a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code.
 
-- [ ] Re-land the CI fix that was dropped from history to make the first push possible: the step `Verify clean generated output` ended in `|| true`, so it printed its failure message and exited 0 — the check could never fail a build. The replacement runs an explicit `if [ -n "$(git status --porcelain dist)" ]` and exits 1. It was removed from `f5e8a0f` (and that commit's message says so) because editing `.github/workflows/ci.yml` requires a credential with the `workflow` scope, which the pushing token does not have.
+## Repository and CI
+
+- [ ] Re-land the CI fix that was dropped from history to make the first push possible: the step `Verify clean generated output` ended in `|| true`, so it printed its failure message and exited 0 — the check could never fail a build. The replacement tests `git status --porcelain dist` and exits 1. Editing `.github/workflows/ci.yml` requires a credential with the `workflow` scope, which the pushing token does not have. The fixed file survives on the local branch `backup-before-push`, which is not pushed: `git checkout backup-before-push -- .github/workflows/ci.yml` restores it without a rewrite.
 
 ## Release Blockers
 

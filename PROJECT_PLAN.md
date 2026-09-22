@@ -77,10 +77,15 @@ MVP 完成必須同時滿足：
 | Configuration defaults and validation | Done | `src/config.ts`, config tests |
 | Read-only `dream_status` tool | Done | `src/status.ts`, status test |
 | Minimal AST guard (blocklist on TypeScript AST) | Done | `src/guardrails/ast-guard.ts`, ast-guard test |
-| Real profile/patch adapter | Not started | Depends on selected DSH profile contract |
-| Candidate generation, dependency allowlist, deployment registry | Not started | Next implementation track |
+| Real profile/patch adapter | Done | `cordis.patch.yml`, `dsh.bundle.patch`, `test/mounting-contract.test.mjs` |
+| Candidate generation, dependency allowlist, deployment registry | Done | `src/evolution/candidate-generator.ts`, `src/guardrails/import-allowlist.ts`, `src/registry/` |
+| Artifact store, signing, and holdout gate | Done | `src/artifacts/store.ts`, `src/registry/signing.ts`, `src/evolution/holdout-gate.ts` |
+| Canary deployment, rollback, audit, observability, governance | Done | `src/registry/deployment-writer.ts`, `src/registry/audit.ts`, `src/observability/`, `src/governance/` |
+| Tool synthesis and dynamic tool registry | Done | `src/tools/`, `src/tools/tool-registry.ts` |
+| Simulator bridge and observation mapping | Done; adapter pending | `sim/robosuite_bridge.py`, `src/embodied/robosuite-mapping.ts` |
+| OS/container isolation and multi-task benchmark | Not started | Needs a host-named runtime and the real adapter |
 
-Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 521 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
+Current verified suite: `npm run typecheck` and `npm test`; latest implementation suite has 523 passing tests. The process evaluator is a process boundary, not yet a complete filesystem/network/resource sandbox. The AST guard is a syntax-level blocklist, not a substitute for OS/container isolation of untrusted candidate code.
 
 ## 4. Delivery Strategy
 

@@ -112,7 +112,7 @@ npm test
 
 `tsconfig.json` enables `noUnusedLocals` and `noUnusedParameters`, so a value that is accepted and never read fails the build rather than shipping.
 
-The suite defines 521 tests; 514 pass with 7 skipped unless
+The suite defines 523 tests; 516 pass with 7 skipped unless
 `DREAM_RSI_SIM_PYTHON` names an interpreter with robosuite installed, which also
 runs the simulator cases. The evaluator child can be wrapped in a runtime the
 host names, and the RoboSuite bridge and its mapping are implemented and tested —

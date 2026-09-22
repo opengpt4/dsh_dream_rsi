@@ -24,7 +24,8 @@ const CAPABILITIES = [
   { name: 'ablation study', planned: /ablation/i, evidence: 'src/evolution/ablation.ts' },
   { name: 'access control', planned: /access control/i, evidence: 'src/governance/access-control.ts' },
   { name: 'secret redaction', planned: /redaction/i, evidence: 'src/governance/redaction.ts' },
-  { name: 'artifact signing', planned: /signing/i, evidence: 'src/registry/signing.ts' }
+  { name: 'artifact signing', planned: /signing/i, evidence: 'src/registry/signing.ts' },
+  { name: 'profile/patch integration', planned: /profile\/patch/i, evidence: 'src/adapter/cordis.ts' }
 ];
 
 /**
@@ -85,6 +86,24 @@ test('no capability status table calls an implemented capability planned', () =>
   }
 });
 
+test('no capability status table calls an implemented capability not started', () => {
+  // The plan's own baseline table listed the profile/patch adapter and candidate
+  // generation as "Not started" after both had shipped, tested, and been
+  // documented as available elsewhere. A reader scoping the remaining work reads
+  // this column, so it is checked like the user guide's table above.
+  const rows = readFileSync(`${ROOT}PROJECT_PLAN.md`, 'utf8')
+    .split('\n')
+    .filter((line) => /^\|\s*[^|]+\|\s*Not started\s*\|/i.test(line))
+    .join('\n');
+  for (const capability of CAPABILITIES) {
+    if (!existsSync(`${ROOT}${capability.evidence}`)) continue;
+    assert.ok(
+      !capability.planned.test(rows),
+      `PROJECT_PLAN.md calls "${capability.name}" not started, but ${capability.evidence} exists`
+    );
+  }
+});
+
 test('the planned work that is named really is absent', () => {
   const planned = plannedWorkLines('README.md');
 
@@ -99,21 +118,39 @@ test('the planned work that is named really is absent', () => {
 });
 
 test('the design spec does not deny a capability the code provides', () => {
-  const spec = readFileSync(`${ROOT}DETAILED_DESIGN_SPEC.md`, 'utf8');
+  // Each sentence was true when written and became false as the code landed, so
+  // each is pinned to the document it appears in. The signature sentence names
+  // "Signature" rather than "signing", which is why the planned-work markers
+  // above cannot see it and it needs a literal pattern.
+  const denials = [
+    {
+      document: 'DETAILED_DESIGN_SPEC.md',
+      pattern: /`sourceRef` is not implemented/,
+      says: 'sourceRef is unimplemented'
+    },
+    {
+      document: 'DETAILED_DESIGN_SPEC.md',
+      pattern: /createdAt.*part of (the )?(content hash|snapshot identity)/i,
+      says: 'the snapshot id covers creation time'
+    },
+    {
+      document: 'DETAILED_DESIGN_SPEC.md',
+      pattern: /CPU, memory, filesystem, and network limits require OS-level confinement and are not yet implemented/,
+      says: 'no filesystem limit exists'
+    },
+    {
+      document: 'TECHNICAL_PAPER.md',
+      pattern: /Signature support is specified but not yet implemented/i,
+      says: 'signatures are unimplemented'
+    }
+  ];
 
-  // These sentences were true when written and became false as the code landed.
-  assert.ok(
-    !/`sourceRef` is not implemented/.test(spec),
-    'the spec still says sourceRef is unimplemented'
-  );
-  assert.ok(
-    !/createdAt.*part of (the )?(content hash|snapshot identity)/i.test(spec),
-    'the spec still says the snapshot id covers creation time'
-  );
-  assert.ok(
-    !/CPU, memory, filesystem, and network limits require OS-level confinement and are not yet implemented/.test(spec),
-    'the spec still says no filesystem limit exists'
-  );
+  for (const { document, pattern, says } of denials) {
+    assert.ok(
+      !pattern.test(readFileSync(`${ROOT}${document}`, 'utf8')),
+      `${document} still says ${says}`
+    );
+  }
 });
 
 test('the decision brief accounts for every open item exactly once', () => {
@@ -187,6 +224,20 @@ test('the decision brief accounts for every open item exactly once', () => {
   assert.equal(Number(statedOpen), open.length, 'the brief miscounts the open items');
   assert.equal(Number(statedGating), gatingClaims.size, 'the brief miscounts the items waiting on a decision');
   assert.equal(Number(statedInTree), inTreeClaims.size, 'the brief miscounts the items that wait on no decision');
+});
+
+test('no document refers to a TODO item by line number', () => {
+  // DECISIONS.md addressed items by line number and inserting one line above them
+  // silently repointed every reference; BASELINE.md then did the same. Items are
+  // addressed by leading text, which survives insertion anywhere above them.
+  for (const document of readdirSync(ROOT).filter((name) => name.endsWith('.md'))) {
+    const reference = /TODO(?:\.md)?\s+(?:item|line)\s*#?\d+/i.exec(readFileSync(`${ROOT}${document}`, 'utf8'));
+    assert.equal(
+      reference,
+      null,
+      `${document} refers to a TODO item by line number: "${reference?.[0]}"`
+    );
+  }
 });
 
 test('the design spec quotes the interval widening the t table produces', () => {
