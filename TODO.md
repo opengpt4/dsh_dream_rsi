@@ -180,6 +180,8 @@
 - [ ] Review high-risk embodied actions with a human safety owner. `[!]` Needs a named person; the capability profile and confirmation gate are ready for that review.
 - [x] Document the production approval policy (`PRODUCTION_POLICY.md`) and keep auto-deploy disabled unless explicitly approved. The policy's safety defaults are a machine-readable block that a test compares against `resolveDreamRsiConfig({})`, so the document cannot drift from the code.
 
+- [ ] Re-land the CI fix that was dropped from history to make the first push possible: the step `Verify clean generated output` ended in `|| true`, so it printed its failure message and exited 0 — the check could never fail a build. The replacement runs an explicit `if [ -n "$(git status --porcelain dist)" ]` and exits 1. It was removed from `f5e8a0f` (and that commit's message says so) because editing `.github/workflows/ci.yml` requires a credential with the `workflow` scope, which the pushing token does not have.
+
 ## Release Blockers
 
 The project is not ready for production pilot until all of these have evidence:
